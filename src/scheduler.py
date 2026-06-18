@@ -58,7 +58,7 @@ class Scheduler:
     定时任务调度器
 
     基于 schedule 库实现，支持：
-    - 每日定时执行
+    - 每日定时执行（单任务或多任务）
     - 启动时立即执行
     - 优雅退出
     """
@@ -72,10 +72,11 @@ class Scheduler:
         初始化调度器
 
         Args:
-            schedule_time: 每日执行时间，格式 "HH:MM"
+            schedule_time: 每日执行时间，格式 "HH:MM"（单任务模式兼容）
         """
         try:
             import schedule
+
             self.schedule = schedule
         except ImportError:
             logger.error("schedule 库未安装，请执行: pip install schedule")
@@ -86,6 +87,10 @@ class Scheduler:
         self.shutdown_handler = GracefulShutdown()
         self._task_callback: Optional[Callable] = None
         self._daily_job: Optional[Any] = None
+        self._daily_jobs: Dict[str, Any] = {}  # 多任务调度：name -> job
+        self._daily_task_callbacks: Dict[
+            str, Callable
+        ] = {}  # 多任务调度：name -> callback
         self._background_tasks: List[Dict[str, Any]] = []
         self._running = False
 
@@ -140,7 +145,9 @@ class Scheduler:
 
         previous_time = self.schedule_time
         self._cancel_daily_job()
-        self._daily_job = self.schedule.every().day.at(candidate).do(self._safe_run_task)
+        self._daily_job = (
+            self.schedule.every().day.at(candidate).do(self._safe_run_task)
+        )
         self.schedule_time = candidate
 
         if previous_time == candidate:
@@ -161,7 +168,9 @@ class Scheduler:
         try:
             latest_schedule_time = (self._schedule_time_provider() or "").strip()
         except Exception as exc:  # pragma: no cover - defensive branch
-            logger.warning("读取最新 SCHEDULE_TIME 失败，继续沿用 %s: %s", self.schedule_time, exc)
+            logger.warning(
+                "读取最新 SCHEDULE_TIME 失败，继续沿用 %s: %s", self.schedule_time, exc
+            )
             return
 
         if not latest_schedule_time or latest_schedule_time == self.schedule_time:
@@ -177,15 +186,102 @@ class Scheduler:
 
         try:
             logger.info("=" * 50)
-            logger.info(f"定时任务开始执行 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                f"定时任务开始执行 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
             logger.info("=" * 50)
 
             self._task_callback()
 
-            logger.info(f"定时任务执行完成 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(
+                f"定时任务执行完成 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
 
         except Exception as e:
             logger.exception(f"定时任务执行失败: {e}")
+
+    def add_daily_task(
+        self,
+        name: str,
+        task: Callable,
+        schedule_time: str,
+        run_immediately: bool = False,
+    ) -> bool:
+        """
+        添加一个每日定时任务（多任务调度模式）
+
+        Args:
+            name: 任务名称（唯一标识）
+            task: 要执行的任务函数（无参数）
+            schedule_time: 执行时间，格式 "HH:MM"
+            run_immediately: 是否在设置后立即执行一次
+
+        Returns:
+            是否成功添加
+        """
+        if not self._is_valid_schedule_time(schedule_time):
+            logger.warning("无效的定时执行时间: %r", schedule_time)
+            return False
+
+        # 取消同名任务（如果存在）
+        if name in self._daily_jobs:
+            self._cancel_named_daily_job(name)
+
+        self._daily_task_callbacks[name] = task
+        job = (
+            self.schedule.every()
+            .day.at(schedule_time)
+            .do(self._safe_run_named_task, name)
+        )
+        self._daily_jobs[name] = job
+        logger.info("已添加每日定时任务 [%s]，执行时间: %s", name, schedule_time)
+
+        if run_immediately:
+            logger.info("立即执行一次任务 [%s]...", name)
+            self._safe_run_named_task(name)
+
+        return True
+
+    def _cancel_named_daily_job(self, name: str) -> None:
+        """取消指定名称的每日任务"""
+        job = self._daily_jobs.pop(name, None)
+        if job is None:
+            return
+
+        if hasattr(self.schedule, "cancel_job"):
+            self.schedule.cancel_job(job)
+        else:  # pragma: no cover - compatibility fallback
+            jobs = getattr(self.schedule, "jobs", None)
+            if isinstance(jobs, list) and job in jobs:
+                jobs.remove(job)
+
+        self._daily_task_callbacks.pop(name, None)
+        logger.info("已取消每日定时任务 [%s]", name)
+
+    def _safe_run_named_task(self, name: str):
+        """安全执行指定名称的任务（带异常捕获）"""
+        callback = self._daily_task_callbacks.get(name)
+        if callback is None:
+            return
+
+        try:
+            logger.info("=" * 50)
+            logger.info(
+                "定时任务 [%s] 开始执行 - %s",
+                name,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            logger.info("=" * 50)
+
+            callback()
+
+            logger.info(
+                "定时任务 [%s] 执行完成 - %s",
+                name,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        except Exception as e:
+            logger.exception("定时任务 [%s] 执行失败: %s", name, e)
 
     def add_background_task(
         self,
@@ -297,7 +393,7 @@ class Scheduler:
         jobs = self.schedule.get_jobs()
         if jobs:
             next_run = min(job.next_run for job in jobs)
-            return next_run.strftime('%Y-%m-%d %H:%M:%S')
+            return next_run.strftime("%Y-%m-%d %H:%M:%S")
         return "未设置"
 
     def stop(self):
@@ -306,24 +402,30 @@ class Scheduler:
 
 
 def run_with_schedule(
-    task: Callable,
+    task: Optional[Callable] = None,
     schedule_time: str = "18:00",
     run_immediately: bool = True,
     background_tasks: Optional[List[Dict[str, Any]]] = None,
     schedule_time_provider: Optional[Callable[[], str]] = None,
+    daily_tasks: Optional[List[Dict[str, Any]]] = None,
 ):
     """
     便捷函数：使用定时调度运行任务
 
     Args:
-        task: 要执行的任务函数
-        schedule_time: 每日执行时间
-        run_immediately: 是否立即执行一次
+        task: 要执行的任务函数（单任务模式，向后兼容）
+        schedule_time: 每日执行时间（单任务模式）
+        run_immediately: 是否立即执行一次（单任务模式）
         background_tasks: 可选的后台任务定义列表。每项为一个字典，
             需包含 `task` 与 `interval_seconds`，可选包含 `name`
             和 `run_immediately`。`interval_seconds` 单位为秒。
         schedule_time_provider: 可选的时间提供器；调度器每轮检查前会读取，
             当返回值变化时自动重建 daily job。
+        daily_tasks: 多任务调度列表。每项为一个字典，需包含：
+            - name: 任务名称（唯一标识）
+            - task: 要执行的任务函数
+            - schedule_time: 执行时间（HH:MM 格式）
+            - run_immediately: 是否立即执行一次（可选，默认 False）
     """
     scheduler = Scheduler(
         schedule_time=schedule_time,
@@ -336,7 +438,20 @@ def run_with_schedule(
             run_immediately=entry.get("run_immediately", False),
             name=entry.get("name"),
         )
-    scheduler.set_daily_task(task, run_immediately=run_immediately)
+
+    # 多任务调度模式
+    if daily_tasks:
+        for entry in daily_tasks:
+            scheduler.add_daily_task(
+                name=entry["name"],
+                task=entry["task"],
+                schedule_time=entry["schedule_time"],
+                run_immediately=entry.get("run_immediately", False),
+            )
+    # 单任务模式（向后兼容）
+    elif task is not None:
+        scheduler.set_daily_task(task, run_immediately=run_immediately)
+
     scheduler.run()
 
 
@@ -344,7 +459,7 @@ if __name__ == "__main__":
     # 测试定时调度
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s',
+        format="%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s",
     )
 
     def test_task():
