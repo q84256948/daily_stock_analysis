@@ -1016,13 +1016,30 @@ const settingsHelpZhCN: SettingsHelpMap = {
   'settings.system.market_review': {
     title: '大盘分析',
     summary: '控制大盘分析功能的开关、覆盖市场和配色方案。',
-    usage: 'MARKET_REVIEW_ENABLED 开启大盘分析；MARKET_REVIEW_REGION 选择市场（cn/hk/us/both）；MARKET_REVIEW_COLOR_SCHEME 选择配色。',
+    usage: 'MARKET_REVIEW_ENABLED 开启大盘分析；DAILY_MARKET_CONTEXT_ENABLED 默认开启，会把当日大盘摘要用于个股分析 Prompt 与保守护栏；MARKET_REVIEW_REGION 选择市场（cn/hk/us/both）；MARKET_REVIEW_COLOR_SCHEME 选择配色。',
     valueNotes: [
       'cn 覆盖 A 股，hk 覆盖港股，us 覆盖美股，both 覆盖全部。',
+      '默认开启 DAILY_MARKET_CONTEXT_ENABLED；设为 false 后仍可生成大盘复盘报告，但个股分析不会读取大盘摘要或软化买入/加仓建议。',
       '配色方案影响大盘报告中指数涨跌的颜色显示：green_up 为绿涨红跌，red_up 为红涨绿跌。',
     ],
     impact: ['影响分析报告中大盘概览部分的内容和视觉呈现。'],
     notes: ['大盘分析依赖对应市场的指数数据源可用性。'],
+  },
+  'settings.system.WATCHLIST_ANALYSIS_TIME': {
+    title: '自选股分析时间',
+    summary: '设置自选股分析的独立定时执行时间。',
+    usage: 'HH:MM 格式，例如 09:00。为空则不启用独立定时，使用默认组合调度。',
+    valueNotes: ['需与 MARKET_REVIEW_TIME 配合使用，两者可独立调度。'],
+    impact: ['影响自选股分析的每日执行时间点。'],
+    notes: ['设为空值则回退到 SCHEDULE_TIME 的单任务模式。'],
+  },
+  'settings.system.MARKET_REVIEW_TIME': {
+    title: '大盘复盘时间',
+    summary: '设置大盘复盘分析的独立定时执行时间。',
+    usage: 'HH:MM 格式，例如 21:00。为空则不启用独立定时。',
+    valueNotes: ['需与 WATCHLIST_ANALYSIS_TIME 配合使用。'],
+    impact: ['影响大盘复盘分析的每日执行时间点。'],
+    notes: ['设为空值则回退到 SCHEDULE_TIME 的单任务模式。'],
   },
 };
 
@@ -1981,13 +1998,30 @@ const settingsHelpEnUS: SettingsHelpMap = {
   'settings.system.market_review': {
     title: 'Market Review',
     summary: 'Controls the market review feature: on/off, coverage region, and color scheme.',
-    usage: 'MARKET_REVIEW_ENABLED toggles market review; MARKET_REVIEW_REGION selects markets (cn/hk/us/both); MARKET_REVIEW_COLOR_SCHEME selects colors.',
+    usage: 'MARKET_REVIEW_ENABLED toggles market review; DAILY_MARKET_CONTEXT_ENABLED is on by default and controls whether the daily market summary is injected into stock-analysis prompts and conservative guardrails; MARKET_REVIEW_REGION selects markets (cn/hk/us/both); MARKET_REVIEW_COLOR_SCHEME selects colors.',
     valueNotes: [
       'cn covers A-shares, hk covers Hong Kong, us covers US stocks, both covers all.',
+      'DAILY_MARKET_CONTEXT_ENABLED is enabled by default; set it to false to keep market review reports running without injecting the summary into stock analysis or softening buy/add advice.',
       'Color scheme affects how index changes are displayed: green_up = green for gains/red for losses; red_up = red for gains/green for losses.',
     ],
     impact: ['Affects the market overview section in analysis reports.'],
     notes: ['Market review depends on the availability of index data sources for the selected markets.'],
+  },
+  'settings.system.WATCHLIST_ANALYSIS_TIME': {
+    title: 'Watchlist Analysis Time',
+    summary: 'Sets the independent scheduled time for watchlist stock analysis.',
+    usage: 'HH:MM format, e.g. 09:00. Leave empty to fall back to combined scheduling.',
+    valueNotes: ['Works together with MARKET_REVIEW_TIME for independent scheduling.'],
+    impact: ['Affects the daily execution time of watchlist analysis.'],
+    notes: ['When empty, falls back to SCHEDULE_TIME single-task mode.'],
+  },
+  'settings.system.MARKET_REVIEW_TIME': {
+    title: 'Market Review Time',
+    summary: 'Sets the independent scheduled time for market review analysis.',
+    usage: 'HH:MM format, e.g. 21:00. Leave empty to fall back to combined scheduling.',
+    valueNotes: ['Works together with WATCHLIST_ANALYSIS_TIME for independent scheduling.'],
+    impact: ['Affects the daily execution time of market review analysis.'],
+    notes: ['When empty, falls back to SCHEDULE_TIME single-task mode.'],
   },
 };
 

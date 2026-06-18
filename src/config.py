@@ -39,7 +39,7 @@ from src.llm import generation_params as llm_generation_params
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ALPHASIFT_INSTALL_SPEC = "git+https://github.com/ZhuLinsen/alphasift.git@1a0ed8c99b3615c0cb1076e6029827ffc6de2344"
+DEFAULT_ALPHASIFT_INSTALL_SPEC = "git+https://github.com/ZhuLinsen/alphasift.git@14e74fc0819267f7c04c3117a0dd0fe3f9b19404"
 
 
 @dataclass
@@ -995,6 +995,9 @@ class Config:
     schedule_run_immediately: bool = True  # 启动时是否立即执行一次
     run_immediately: bool = True  # 启动时是否立即执行一次（非定时模式）
     market_review_enabled: bool = True  # 是否启用大盘复盘
+    daily_market_context_enabled: bool = (
+        True  # 是否将大盘环境摘要用于个股分析 Prompt 与保守护栏
+    )
     # 多任务调度：自选股分析和大盘复盘分别配置时间
     watchlist_analysis_time: str = ""  # 自选股分析时间（HH:MM 格式，为空则不启用）
     market_review_time: str = ""  # 大盘复盘时间（HH:MM 格式，为空则不启用）
@@ -1959,6 +1962,10 @@ class Config:
             schedule_run_immediately=schedule_run_immediately,
             run_immediately=legacy_run_immediately,
             market_review_enabled=os.getenv("MARKET_REVIEW_ENABLED", "true").lower()
+            == "true",
+            daily_market_context_enabled=os.getenv(
+                "DAILY_MARKET_CONTEXT_ENABLED", "true"
+            ).lower()
             == "true",
             market_review_region=cls._parse_market_review_region(
                 os.getenv("MARKET_REVIEW_REGION", "cn")

@@ -80,6 +80,8 @@ WEB_SETTINGS_HIDDEN_FROM_UI = {
     "USE_PROXY",
     "PROXY_HOST",
     "PROXY_PORT",
+    "ENABLE_FILE_STORAGE",
+    "REPORTS_DIR",
 }
 
 _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
@@ -1335,7 +1337,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "examples": [
             "CUSTOM_WEBHOOK_URLS=https://api.day.app/YOUR_BARK_KEY",
             "CUSTOM_WEBHOOK_URLS=https://oapi.dingtalk.com/robot/send?access_token=xxx",
-            "CUSTOM_WEBHOOK_BODY_TEMPLATE={\"msg_type\":\"text\",\"content\":$content_json}",
+            'CUSTOM_WEBHOOK_BODY_TEMPLATE={"msg_type":"text","content":$content_json}',
         ],
         "validation": {"multi_value": True, "delimiter": ","},
         "display_order": 50,
@@ -1618,7 +1620,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "chat_id",
-        "options": [{"label": "chat_id (群聊)", "value": "chat_id"}, {"label": "open_id (私聊)", "value": "open_id"}],
+        "options": [
+            {"label": "chat_id (群聊)", "value": "chat_id"},
+            {"label": "open_id (私聊)", "value": "open_id"},
+        ],
         "validation": {"enum": ["chat_id", "open_id"]},
         "display_order": 19,
         "help_key": "settings.notification.FEISHU_RECEIVE_ID_TYPE",
@@ -1643,7 +1648,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "feishu",
-        "options": [{"label": "feishu (飞书国内)", "value": "feishu"}, {"label": "lark (国际版)", "value": "lark"}],
+        "options": [
+            {"label": "feishu (飞书国内)", "value": "feishu"},
+            {"label": "lark (国际版)", "value": "lark"},
+        ],
         "validation": {"enum": ["feishu", "lark"]},
         "display_order": 20,
         "help_key": "settings.notification.FEISHU_DOMAIN",
@@ -2351,8 +2359,14 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "",
-        "options": [{"label": channel, "value": channel} for channel in ROUTABLE_NOTIFICATION_CHANNELS],
-        "validation": {"allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS), "delimiter": ","},
+        "options": [
+            {"label": channel, "value": channel}
+            for channel in ROUTABLE_NOTIFICATION_CHANNELS
+        ],
+        "validation": {
+            "allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS),
+            "delimiter": ",",
+        },
         "display_order": 62,
         "help_key": "settings.notification.channel_routing",
         "examples": [
@@ -2377,8 +2391,14 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "",
-        "options": [{"label": channel, "value": channel} for channel in ROUTABLE_NOTIFICATION_CHANNELS],
-        "validation": {"allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS), "delimiter": ","},
+        "options": [
+            {"label": channel, "value": channel}
+            for channel in ROUTABLE_NOTIFICATION_CHANNELS
+        ],
+        "validation": {
+            "allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS),
+            "delimiter": ",",
+        },
         "display_order": 63,
         "help_key": "settings.notification.channel_routing",
         "examples": [
@@ -2403,8 +2423,14 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "is_required": False,
         "is_editable": True,
         "default_value": "",
-        "options": [{"label": channel, "value": channel} for channel in ROUTABLE_NOTIFICATION_CHANNELS],
-        "validation": {"allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS), "delimiter": ","},
+        "options": [
+            {"label": channel, "value": channel}
+            for channel in ROUTABLE_NOTIFICATION_CHANNELS
+        ],
+        "validation": {
+            "allowed_values": list(ROUTABLE_NOTIFICATION_CHANNELS),
+            "delimiter": ",",
+        },
         "display_order": 64,
         "help_key": "settings.notification.channel_routing",
         "examples": [
@@ -2535,7 +2561,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "",
         "options": [
             {"label": "Not set", "value": ""},
-            *({"label": severity, "value": severity} for severity in NOTIFICATION_SEVERITIES),
+            *(
+                {"label": severity, "value": severity}
+                for severity in NOTIFICATION_SEVERITIES
+            ),
         ],
         "validation": {"enum": ["", *NOTIFICATION_SEVERITIES]},
         "display_order": 69,
@@ -2883,7 +2912,10 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/deploy-webui-cloud.md",
             },
         ],
-        "warning_codes": ["public_webui_requires_auth", "auth_settings_endpoint_required"],
+        "warning_codes": [
+            "public_webui_requires_auth",
+            "auth_settings_endpoint_required",
+        ],
     },
     "TRUST_X_FORWARDED_FOR": {
         "title": "Trust X-Forwarded-For",
@@ -2993,6 +3025,32 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         ],
         "warning_codes": [],
     },
+    "DAILY_MARKET_CONTEXT_ENABLED": {
+        "title": "Daily Market Context Enabled",
+        "description": "Inject daily market context into stock-analysis prompts and apply conservative decision guardrails.",
+        "category": "system",
+        "data_type": "boolean",
+        "ui_control": "switch",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "true",
+        "options": [],
+        "validation": {},
+        "display_order": 47,
+        "help_key": "settings.system.market_review",
+        "examples": [
+            "DAILY_MARKET_CONTEXT_ENABLED=true",
+            "DAILY_MARKET_CONTEXT_ENABLED=false",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：环境变量完整列表",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
+    },
     "MARKET_REVIEW_REGION": {
         "title": "Market Review Region",
         "description": "Market region for review: cn (A-shares), hk (Hong Kong), us (US stocks), or both (all markets).",
@@ -3005,7 +3063,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "default_value": "cn",
         "options": ["cn", "hk", "us", "both"],
         "validation": {"enum": ["cn", "hk", "us", "both"]},
-        "display_order": 47,
+        "display_order": 48,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_REGION=cn",
@@ -3034,7 +3092,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"label": "Red Up / Green Down", "value": "red_up"},
         ],
         "validation": {"enum": ["green_up", "red_up"]},
-        "display_order": 48,
+        "display_order": 49,
         "help_key": "settings.system.market_review",
         "examples": [
             "MARKET_REVIEW_COLOR_SCHEME=green_up",
@@ -3153,6 +3211,56 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {
                 "label": "完整指南：环境变量完整列表",
                 "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#环境变量完整列表",
+            },
+        ],
+        "warning_codes": [],
+    },
+    "WATCHLIST_ANALYSIS_TIME": {
+        "title": "Watchlist Analysis Time",
+        "description": "自选股分析定时执行时间（HH:MM 格式，为空则不启用独立定时）。",
+        "category": "system",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "",
+        "options": [],
+        "validation": {},
+        "display_order": 56,
+        "help_key": "settings.system.WATCHLIST_ANALYSIS_TIME",
+        "examples": [
+            "WATCHLIST_ANALYSIS_TIME=09:00",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：定时任务配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#定时任务配置",
+            },
+        ],
+        "warning_codes": [],
+    },
+    "MARKET_REVIEW_TIME": {
+        "title": "Market Review Time",
+        "description": "大盘复盘独立定时执行时间（HH:MM 格式，为空则不启用独立定时）。",
+        "category": "system",
+        "data_type": "string",
+        "ui_control": "text",
+        "is_sensitive": False,
+        "is_required": False,
+        "is_editable": True,
+        "default_value": "",
+        "options": [],
+        "validation": {},
+        "display_order": 57,
+        "help_key": "settings.system.MARKET_REVIEW_TIME",
+        "examples": [
+            "MARKET_REVIEW_TIME=21:00",
+        ],
+        "docs": [
+            {
+                "label": "完整指南：定时任务配置",
+                "href": "https://github.com/ZhuLinsen/daily_stock_analysis/blob/main/docs/full-guide.md#定时任务配置",
             },
         ],
         "warning_codes": [],
@@ -3463,7 +3571,9 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"label": "Full", "value": "full"},
             {"label": "Specialist", "value": "specialist"},
         ],
-        "validation": {"enum": ["quick", "standard", "full", "specialist", "strategy", "skill"]},
+        "validation": {
+            "enum": ["quick", "standard", "full", "specialist", "strategy", "skill"]
+        },
         "display_order": 61,
         "help_key": "settings.agent.AGENT_ORCHESTRATOR_MODE",
         "examples": [
@@ -4390,7 +4500,11 @@ def get_field_definition(key: str, value_hint: Optional[str] = None) -> Dict[str
         field["key"] = key_upper
         validation = deepcopy(field.get("validation") or {})
         option_values = _extract_option_values(field.get("options", []))
-        if field.get("ui_control") == "select" and option_values and "enum" not in validation:
+        if (
+            field.get("ui_control") == "select"
+            and option_values
+            and "enum" not in validation
+        ):
             validation["enum"] = option_values
         field["validation"] = validation
         return field
@@ -4448,47 +4562,79 @@ def _infer_category(key: str) -> str:
         return "base"
     if key.startswith("BACKTEST_"):
         return "backtest"
-    if key.startswith(("GEMINI_", "OPENAI_", "ANTHROPIC_", "LITELLM_", "AIHUBMIX_", "DEEPSEEK_", "LLM_")):
-        return "ai_model"
-    if key.endswith("_PRIORITY") or key.startswith(
+    if key.startswith(
         (
-            "TUSHARE",
-            "TICKFLOW",
-            "AKSHARE",
-            "EFINANCE",
-            "PYTDX",
-            "BAOSTOCK",
-            "YFINANCE",
-            "TAVILY",
-            "SERPAPI",
-            "BRAVE",
-            "BOCHA",
-            "ANSPIRE",
-            "SEARXNG",
-            "NEWS_",
-            "BIAS_",
+            "GEMINI_",
+            "OPENAI_",
+            "ANTHROPIC_",
+            "LITELLM_",
+            "AIHUBMIX_",
+            "DEEPSEEK_",
+            "LLM_",
         )
-    ) or key in ("ENABLE_REALTIME_QUOTE", "ENABLE_CHIP_DISTRIBUTION"):
+    ):
+        return "ai_model"
+    if (
+        key.endswith("_PRIORITY")
+        or key.startswith(
+            (
+                "TUSHARE",
+                "TICKFLOW",
+                "AKSHARE",
+                "EFINANCE",
+                "PYTDX",
+                "BAOSTOCK",
+                "YFINANCE",
+                "TAVILY",
+                "SERPAPI",
+                "BRAVE",
+                "BOCHA",
+                "ANSPIRE",
+                "SEARXNG",
+                "NEWS_",
+                "BIAS_",
+            )
+        )
+        or key in ("ENABLE_REALTIME_QUOTE", "ENABLE_CHIP_DISTRIBUTION")
+    ):
         return "data_source"
-    if key.startswith((
-        "WECHAT",
-        "FEISHU",
-        "TELEGRAM",
-        "EMAIL",
-        "PUSHOVER",
-        "NTFY",
-        "GOTIFY",
-        "PUSHPLUS",
-        "SERVERCHAN",
-        "DINGTALK",
-        "DISCORD",
-        "SLACK",
-        "CUSTOM_WEBHOOK",
-        "WECOM",
-        "ASTRBOT",
-    )) or "WEBHOOK" in key:
+    if (
+        key.startswith(
+            (
+                "WECHAT",
+                "FEISHU",
+                "TELEGRAM",
+                "EMAIL",
+                "PUSHOVER",
+                "NTFY",
+                "GOTIFY",
+                "PUSHPLUS",
+                "SERVERCHAN",
+                "DINGTALK",
+                "DISCORD",
+                "SLACK",
+                "CUSTOM_WEBHOOK",
+                "WECOM",
+                "ASTRBOT",
+            )
+        )
+        or "WEBHOOK" in key
+    ):
         return "notification"
-    if key.startswith(("LOG_", "SCHEDULE_", "WEBUI_", "HTTP_", "HTTPS_", "MAX_", "DEBUG", "MARKET_REVIEW_", "TRADING_DAY_", "ANALYSIS_DELAY")):
+    if key.startswith(
+        (
+            "LOG_",
+            "SCHEDULE_",
+            "WEBUI_",
+            "HTTP_",
+            "HTTPS_",
+            "MAX_",
+            "DEBUG",
+            "MARKET_REVIEW_",
+            "TRADING_DAY_",
+            "ANALYSIS_DELAY",
+        )
+    ):
         return "system"
     return "uncategorized"
 
