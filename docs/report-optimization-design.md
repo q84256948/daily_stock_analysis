@@ -1,11 +1,14 @@
-# 个股分析报告优化设计（五段式 + 六维评分 + 自反思）
+# 个股分析报告优化设计（长线产业链投研 + 贝叶斯框架）
 
-> 状态：方案已审计并收敛，待实现
+> 状态：方案已大调整为长线产业链方向，待实现
 > 决策日期：2026-06
 > 语言：中文（英文版按需后续同步）
-> 关联模块：`src/analyzer.py`、`src/core/pipeline.py`、`src/agent/`、`src/schemas/`、`data_provider/`
+> 方法论参考：[bayesian-supply-chain-investment-research](https://github.com/cc232421/skill-center/tree/main/skills/bayesian-supply-chain-investment-research)（Serenity 方法论 + 贝叶斯）
+> 关联模块：`src/analyzer.py`、`src/core/pipeline.py`、`src/agent/`、`src/schemas/`、`data_provider/`、`src/scoring/`（新增）
 
 本文档是个股分析报告内容结构优化的设计真源。实际实现时，每阶段需同步更新 `docs/CHANGELOG.md` 的 `[Unreleased]` 段（扁平格式）与本文件。
+
+> **方向变更说明**：本方案经历一次根本性转向——从「中短线趋势交易（盘中阶段、止损止盈、乖离率）」转向「长线产业链/供应链投研 + 贝叶斯概率框架」。原有「六维线性加权评分」不再作为顶层决策，而是降级为**贝叶斯先验 P(H) 的可解释分解**。
 
 ---
 
@@ -13,41 +16,47 @@
 
 ### 1.1 背景
 
-当前个股分析报告输出统一的「决策仪表盘 JSON」（由 `src/analyzer.py` 的 `SYSTEM_PROMPT` 与 `src/agent/` 的多 agent 提示词定义）。现有报告在技术面、消息面、资金流、筹码维度已有覆盖，但存在三类缺口：
+当前个股分析报告输出统一的「决策仪表盘 JSON」，本质是**短线/趋势交易导向**：盘中阶段决策（`phase_decision`）、狙击点位、止损止盈、乖离率、MA 多头排列。该形态不适合长线产业链投研。
 
-- 缺少**可解释的加权总分**（现有 `sentiment_score` 为 LLM 主观拍定，难以解释权重来源，也难以按维度回测）；
-- 缺少**结构化的盘面解读与多时间维度走势预测**；
-- 缺少**操作与评分的记录系统**（无法支撑「评分↔未来涨跌」自反思闭环）。
+参考 Serenity 投资方法论 + 贝叶斯框架，将报告升级为**长线产业链/供应链投研**：从「今天买还是卖」转向「这家公司是产业链瓶颈/长期赢家吗？市场错判了多少（Edge）？」。
 
-### 1.2 目标
+### 1.2 核心理念（对齐 skill）
 
-将个股分析报告升级为**五段式结构**，并建立可量化、可记录、可回测的投研评分框架：
+1. **概率而非信念**：决策基于 `P(H|E) = P(E|H)·P(H)/P(E)`，不是主观打分或看图。
+2. **结构锚定先验**：先验 `P(H)` 由产业链物理现实（供应链地图、瓶颈点、产能集中度、替代周期）构建。
+3. **认知差 Edge 下注**：`Edge = P(H) − 市场隐含概率`，正 Edge 才值得长线持有。
+4. **后验更新 + 轮动**：新证据用似然比持续更新，资金轮动到后验最高的瓶颈点。
+
+### 1.3 目标
+
+五段式长线投研报告：
 
 | 段落 | 内容 |
 |------|------|
-| ① 结论 | 总评分（六维加权）、当下买/卖/具体价位、操作建议（每次记录） |
-| ② 盘面解读 | 上涨/下跌/震荡结构判定、根因（宏观/微观事件）、影响传导 |
-| ③ 走势预测 | 未来重要事件、潜在利好利空、情景概率、1天/1周/1月/1季走势与目标价区间 |
-| ④ 六维加权打分表 | 六维度 × 细分指标，每个指标含权重、一句话总结、打分，加权得总分 |
-| ⑤ 六维详情 | 六大维度每个细分指标的详细分析 |
+| ① 投资结论 | 先验 P(H)、产业链定位结论、Edge、长线仓位建议、1/3/5 年价值区间、建仓/加仓记录 |
+| ② 产业链解读 | 产业链地图、公司定位、瓶颈点分析、上下游关系、中美双链位置、产业驱动根因 |
+| ③ 长期价值与情景 | 产业长期空间、竞争演变、乐观/中性/悲观情景概率、1/3/5 年价值锚、催化与风险 |
+| ④ 贝叶斯评分表 | 六维 × 指标 × 权重 × 打分 → 先验 P(H)；市场隐含 → Edge；证据序列 → 后验；仓位 |
+| ⑤ 六维详情 | 六维每个细分指标的详细分析 + 证据来源（标注可信度） |
 
-### 1.3 范围
+### 1.4 范围
 
-- **本次（P1）**：最小六维评分引擎（纯函数）+ 报告 schema 追加 + 复用现有历史/信号链路写入评分快照 + 测试。
-- **后续（P2–P4）**：akshare 新数据接口、盘面解读与走势预测段、缠论与社交情绪、T+N 回测闭环。
+- **P1**：贝叶斯引擎（纯函数）+ 六维评分引擎（纯函数，作先验分解）+ schema 追加 + 自反思台账 + 测试。
+- **P2–P4**：产业链数据接入（akshare 概念板块/机构持仓）、中美链、长线价值情景、多 agent、T+N 回测闭环。
 
 ---
 
-## 2. 现状与差距
+## 2. 范式转变（短线 → 长线）
 
-| 目标段落 | 现有报告现状 | 缺口 |
-|----------|--------------|------|
-| ① 结论（总评分+操作+记录） | `core_conclusion` + `battle_plan` + `sentiment_score`（LLM 主观） + `decision_signals` | 无可解释加权总分；评分无快照 |
-| ② 盘面解读（结构+根因+传导） | 仅 `trend_prediction`（一句话） | 无结构判定；无根因；无影响传导 |
-| ③ 走势预测（事件+情景+多时间维度） | `short/medium_term_outlook`（两档，粗） | 无多时间维度目标价；无情景概率；无事件预案 |
-| ④ 六维加权打分表 | 无 | 全新：六维 × 细分指标 × 权重 × 打分 |
-| ⑤ 六维详情 | 部分：技术面、消息面、资金流、筹码 | 缺宏观、情绪面、缠论、股权高管、龙虎榜、研报 |
-| 自反思（记录+回测） | `analysis_history` + `decision_signals` + `BacktestEngine` | 缺少六维评分快照；缺少评分维度与未来涨跌的统计入口 |
+| 维度 | 旧（短线趋势） | 新（长线产业链 + 贝叶斯） |
+|---|---|---|
+| 核心问题 | 今天买还是卖？什么价位？ | 是产业链瓶颈/长期赢家吗？市场错判多少（Edge）？ |
+| 决策本质 | 六维线性加权 0-100 | 先验 P(H) + Edge + 后验更新（概率框架） |
+| 技术面权重 | 25%（最高之一） | **10%**（降为长线择时买点辅助） |
+| 时间维度 | 1天/1周/1月/1季 + 盘中阶段 | 1年/3年/5年价值锚 + 产业周期 |
+| 决策输出 | 买卖点位 + 短线止损止盈 | 产业链定位 + Edge + 长线仓位（建仓/加仓/减仓） |
+| 止损逻辑 | 跌破技术位 | 后验 P(H|E) < 先验·60% / 强反面证据 / 认知差消失 |
+| 新增核心 | — | 产业链定位、瓶颈点、中美平行链、认知差 Edge |
 
 ---
 
@@ -57,10 +66,10 @@
 
 | 原则 | 落地 |
 |------|------|
-| KISS、代码整洁 | 评分引擎为纯函数模块；新报告段落为追加字段；新数据源走现有 fetcher 模式 |
-| 高内聚低耦合 | 评分框架独立于报告生成；P1 复用现有历史/信号/回测链路；新数据维度后续再接 |
-| 测试聚焦真实风险 | 评分纯函数强覆盖；schema 与持久化覆盖关键兼容路径；旧报告=兼容回归 |
-| 不影响无关功能 | 只追加字段不改语义；P1 不新增并行操作台账；前端旧渲染不变 |
+| KISS、代码整洁 | 贝叶斯与评分引擎为纯函数模块；新报告段落为追加字段；新数据走现有 fetcher 模式 |
+| 高内聚低耦合 | 贝叶斯/评分/产业链/台账各自独立模块；多 agent 下新维度=新专职 agent |
+| 100% 测试 | 贝叶斯更新/评分=纯函数；schema=Pydantic；新 fetcher=mock（不联网）；旧报告=兼容回归 |
+| 不影响无关功能 | 只追加字段不改语义；新表独立；新 fetcher 独立；前端旧渲染不变 |
 | 稳定性优先 | 默认「不配置也可运行」；Feature flag 渐进开关 |
 
 ---
@@ -69,310 +78,426 @@
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| 报告形态 | **向后兼容增强** | 在现有 Dashboard 追加新字段，保留所有旧字段，Web/通知/历史/决策信号零改动，符合兼容性原则，风险最低 |
-| 评分方式 | **混合（客观规则 + 主观 LLM）** | 客观维度规则算分（确定性、省 token、可回测），主观维度 LLM 给分；这是自反思能回测优化权重的前提 |
-| 自反思范围 | **记录 + 复用现有回测入口** | P1 不新建操作台账；评分快照写入现有报告载荷与 `decision_signals.metadata/evidence`，后续按需要再拆专表 |
+| 报告形态 | **向后兼容增强** | 追加新字段，保留所有旧字段，Web/通知/历史/决策信号零改动 |
+| 短/长线 | **长线为主 + 技术面择时** | 产业链/基本面/价值为核心选股，技术面降权到 10% 作长线买点择时，弱化盘中/短线止损（改为长线逻辑） |
+| 贝叶斯框架 | **顶层，六维作先验分解** | 先验 P(H) 由六维映射，Edge=先验−市场隐含，六维解释「为什么这个概率」，一个统一可回测体系 |
+| 中美平行链 | **贯穿产业链 + 宏观维度** | 作为「产业链定位」和「宏观地缘」维度核心子指标（国产替代/制裁风险/双链位置），不单列，保持六维结构 |
+| 自反思范围 | **记录 + 预留回测** | 本次做持仓台账 + 概率证据台账，T+N 回测调度为下一阶段 |
 
 ---
 
-## 5. 报告数据契约设计
+## 5. 报告数据契约设计（向后兼容）
 
-### 5.1 向后兼容策略
+### 5.1 兼容策略
 
-在现有 `AnalysisReportSchema`（`src/schemas/report_schema.py`）上**追加顶层字段**，不修改、不删除任何现有字段。现有 `stock_name` / `sentiment_score` / `dashboard` / `operation_advice` / `decision_type` 等全部保留，确保 Web 渲染、通知、历史、决策信号提取零改动。
+在现有 `AnalysisReportSchema`（`src/schemas/report_schema.py`）上**追加顶层字段**，不修改/删除任何现有字段。`sentiment_score` / `dashboard` / `operation_advice` / `decision_type` / `phase_decision` 等全部保留。短线字段保留但**前端逐步弱化展示**，长线字段渐进渲染。
 
 ### 5.2 新增字段
 
 | 新字段 | 子字段 | 对应段落 |
 |--------|--------|----------|
-| `research_framework` | `total_score`(0-100)、`score_version`、`score_basis`、`dimensions[]` | ④ + ① 总分来源 |
-| `dimensions[]` | `name`、`weight`、`score`、`summary`、`indicators[]` | 六维 |
-| `indicators[]` | `name`、`weight`、`score`、`summary`、`detail`、`basis` | 细分指标（对应 ⑤ 详情） |
-| `market_structure` | `structure`、`root_cause`、`impact_magnitude`、`outlook_impact` | ② 盘面解读 |
-| `outlook_forecast` | `horizons{1d,1w,1M,1Q}`、`scenarios[]`、`upcoming_events[]` | ③ 走势预测 |
-| `action_plan` | `action`、`entry_zone`、`stop_loss`、`take_profit`、`position_size`、`rationale` | ① 操作（P2+ 可选增强；P1 复用现有 `battle_plan` / `decision_signals`） |
+| `research_framework` | `dimensions[]`、`dimension_total`(0-100) | ④ 六维评分（先验分解） |
+| `bayesian_framework` | `prior_p`、`market_implied_p`、`edge`、`posterior_p`、`position_suggestion`、`evidence_log[]`、`stop_conditions` | ①④ 贝叶斯顶层 |
+| `supply_chain` | `chain_map[]`、`chokepoints[]`、`company_position`、`us_china_chain{role, substitution_progress, sanction_risk, dual_chain}` | ② 产业链解读 |
+| `value_scenarios` | `industry_space`、`competitive_evolution`、`scenarios[]`、`horizons{1y,3y,5y}`、`catalysts[]`、`risks[]` | ③ 长期价值与情景 |
+| `investment_conclusion` | `prior_p`、`edge`、`position`、`value_range{1y,3y,5y}`、`action`(建仓/加仓/减仓/止损/观察)、`rationale` | ① 投资结论（台账来源） |
 
-**并存说明**：`sentiment_score`（旧，LLM 主观）与 `research_framework.total_score`（新，加权）并存，前端可逐步切换展示。
+**并存**：`sentiment_score`（旧 LLM 主观）与 `bayesian_framework.prior_p`（新产业链锚定概率）并存；`operation_advice`（旧短线建议）与 `investment_conclusion.action`（新长线动作）并存。
 
-`indicators[].basis` 取值 `"rule" | "llm"`，标记该分由规则还是 LLM 给出，回测时可分组分析哪类更准。
+`indicators[].basis` = `"rule" | "llm"`，另增 `data_confidence`（高/中/低）标记产业链等 LLM 驱动指标的可信度。
 
 ---
 
-## 6. 六维评分框架
+## 6. 六维评分框架（产业链导向，作先验分解）
 
-### 6.1 维度与初始权重（v1）
+### 6.1 维度与权重（v1，长线口径）
 
-| 维度 | 权重 | 细分指标（权重） |
-|------|------|------------------|
-| 宏观 | 15% | 宏观流动性（50%）· 风险偏好（50%） |
-| 基本面 | 20% | 大盘板块对比龙头（25%）· 股权高管（15%）· 业务财务健康（35%）· 估值（25%） |
-| 资金面 | 20% | 资金流向（40%）· 机构/大户持仓（35%）· 筹码结构（25%） |
-| 技术面 | 25% | 缠论结构（40%）· 支撑压力位（30%）· 技术指标（30%） |
-| 情绪面 | 10% | 研报平台评价（50%）· 社交情绪（50%） |
-| 消息面 | 10% | 真实影响消息（50%）· 未来事件+预案（50%） |
+| 维度 | 权重 | 核心问题 | 细分指标 |
+|------|------|----------|----------|
+| **产业链定位** ⭐ | 25% | 是瓶颈/赢家吗？ | 产业链位置 · 瓶颈属性（专利/产能 CR3/替代周期/认证） · 上下游议价力 · **中美双链位置**（国产替代进度/出口受限） |
+| **基本面与价值** | 25% | 长期价值与护城河 | 护城河 · 财务健康 · 成长性 · 长线估值（产业周期位置/反向 DCF） |
+| **资金面** | 15% | 长线资金在买吗？ | 机构持仓变化 · 北向 · 融资融券 · 筹码集中度 |
+| **技术面** | 10% | 长期趋势 + 买点 | 长期趋势结构 · 关键支撑压力（择时辅助） |
+| **情绪与认知差** ⭐ | 15% | 市场隐含 vs 真实 | 卖方一致预期 · 研报评级 · 社交情绪（**核心：反推市场隐含概率**） |
+| **宏观与地缘** ⭐ | 10% | 政策与中美博弈 | **中美竞争/制裁风险** · 国产替代政策 · 产业周期 · 流动性 |
 
-权重和 = 100%，每维度内指标权重和 = 100%。权重为 v1 初始猜测，是自反思迭代的对象，不追求一次完美。
+权重和 = 100%，每维度内指标权重和 = 100%。权重为 v1 初始猜测，是自反思迭代对象。
 
-### 6.2 评分引擎架构（纯函数）
+### 6.2 中美平行竞争链贯穿点
 
-```
-src/scoring/
-├── __init__.py            # 公开接口：compute_framework_score
-├── contracts.py           # 数据契约：IndicatorResult / DimensionScore / FrameworkScore
-├── weights.py             # 权重表 + 版本管理（纯数据，启动校验权重和=1.0）
-├── engine.py              # 加权聚合（纯函数）
-├── normalization.py       # 分数归一化 / clamp 工具
-└── indicators/            # P2+ 按数据成熟度拆分；P1 可先内聚在少量文件中
-    ├── technical.py       # 规则：MACD / RSI / 均线 / 支撑压力
-    ├── capital.py         # 规则：资金流 / 筹码 / 机构持仓
-    ├── fundamental.py     # 估值=规则；业务财务=LLM 输入
-    ├── macro.py           # 流动性=规则；风险偏好=LLM 输入
-    ├── sentiment.py       # 研报=规则聚合；社交=LLM 输入
-    └── news.py            # LLM 输入
-```
+不单列维度，作为以下指标的子项：
+- **产业链定位**：`中美双链位置`（公司在中国链/美国链的位置、国产替代进度、出口受限程度）
+- **宏观与地缘**：`中美竞争/制裁风险`（出口管制清单、制裁名单、双链脱钩/重连的受益/受损）
 
-**核心约束**：`src/scoring/` 为纯函数模块，不依赖 LLM、不依赖网络、不依赖 DB。相同输入→相同输出，无副作用。这是 100% 覆盖与可回测的根基。
-
-核心函数契约：
-
-```
-aggregate_dimension(indicators, weights) -> DimensionScore
-compute_framework_score(dimensions, weights) -> FrameworkScore
-```
-
-### 6.3 客观维度规则映射（确定性）
+### 6.3 客观维度规则映射（确定性，可回测）
 
 | 维度 | 指标 | 输入 → 0-100 分 |
 |------|------|-----------------|
-| 技术 | 均线排列 | 多头+发散=90；多头粘合=70；缠绕=50；空头=20 |
-| 技术 | MACD | 金叉+零轴上=85；金叉零轴下=60；死叉=25 |
-| 技术 | RSI | 50-70 健康多头=75；超买>80 降权=55；超卖<20 反弹预期=60 |
-| 技术 | 支撑压力距离 | 接近支撑(<2%)=80；接近压力=40；中间=55 |
-| 资金 | 主力净流入 | 5日持续净流入=85；流出=25；中性=55 |
+| 资金 | 机构持仓变化 | QFII/基金连续增持=85；减持=30；稳定=55 |
+| 资金 | 北向资金 | 持续净流入=80；流出=35 |
 | 资金 | 筹码集中度 | 90%集中度<10%=85；<15%=70；>25%=40 |
-| 资金 | 获利比 | 30-70%=80；>90%=45；<10%=50 |
-| 基本面 | 估值（PE 分位） | 历史<20%分位=85（低估）；>80%=35（高估） |
+| 基本面 | 估值（PE 分位/反向 DCF） | 历史<20%分位=85（低估）；>80%=35（高估） |
+| 技术 | 长期趋势 | 周线/月线多头+上行=80；下行=25；震荡=55 |
+| 技术 | 关键位距离 | 接近长线支撑=75；接近压力=40 |
 
-每条规则是 `indicators/*.py` 中的一个纯函数。**缺失数据 → 返回中性分 50 + `summary="数据缺失"`，不抛异常**（保证报告不崩）。
+主观维度（产业链瓶颈属性、护城河、卖方一致预期反推、中美链判断、社交情绪）由 LLM 给分 + 一句话理由，`basis="llm"`。缺失数据 → 中性分 50 + `summary="数据缺失"`，不抛异常。
 
-### 6.4 主观维度 LLM 契约
+### 6.4 评分引擎架构（纯函数）
 
-主观维度（宏观综合 / 业务财务 / 社交情绪 / 消息影响 / 缠论结构）由 LLM 在报告生成时给出 `{score, summary}`，评分引擎只负责**聚合**——引擎不调用 LLM。边界清晰，`basis` 字段区分来源。
+```
+src/scoring/
+├── __init__.py            # 公开接口
+├── contracts.py           # IndicatorInput / IndicatorResult / DimensionScore / FrameworkScore
+├── weights.py             # 权重表 + 版本管理（启动校验和=1.0）
+├── engine.py              # 六维加权聚合（纯函数）
+├── bayesian.py            # 贝叶斯：先验映射 / Edge / 后验更新 / 仓位 / 止损（纯函数）⭐新增
+├── normalization.py       # 归一化 / clamp
+└── indicators/            # 各维度算分（客观=规则，主观=LLM 输入）
+    ├── supply_chain.py    # 产业链定位（多为 LLM 输入）
+    ├── fundamental.py     # 估值=规则；护城河/成长=LLM
+    ├── capital.py         # 规则：机构/北向/融资/筹码
+    ├── technical.py       # 规则：长期趋势/关键位（择时辅助）
+    ├── sentiment.py       # 研报=规则聚合；社交=LLM；反推市场隐含
+    └── macro.py           # 流动性=规则；中美链/政策=LLM
+```
 
-P1 不强制接入 LLM 主观评分。数据缺失或主观维度未启用时，返回中性分 50，并在指标中标记 `basis="missing"` 或 `data_available=false`。这样先建立可解释总分和持久化快照，避免同一阶段同时改 prompt、schema、保存、回测和 agent。
-
-### 6.5 权重版本化
-
-- `weights.py` 按 `score_version` 加载权重表，启动校验权重和 = 1.0。
-- 权重可经 `config_registry` 覆盖（走现有配置入口，不新增平行实现）。
-- 报告载荷与信号元数据存储 `weight_snapshot`，回测时按版本分组统计「评分↔涨跌」相关性，验证不了则迭代 v2。
+**核心约束**：`src/scoring/` 纯函数，不依赖 LLM/网络/DB。相同输入→相同输出。
 
 ---
 
-## 7. 自反思记录系统
+## 7. 贝叶斯概率框架（顶层）⭐
 
-### 7.1 P1 持久化策略：复用现有链路
+### 7.1 核心公式
 
-P1 不新增 `action_ledger`。现有 `decision_signal_extractor` 已经从报告提取 `action`、`entry_low/high`、`stop_loss`、`target_price`、`score`、`evidence`，且 `BacktestEngine` 已能基于操作建议、止损止盈和未来 K 线做收益评估。重复建操作台账会形成并行事实源。
+```
+P(H|E) = P(E|H) × P(H) / P(E)
 
-P1 写入位置：
+赔率形式（实用，纯函数易实现）：
+O(H|E) = O(H) × LR       其中 O(H)=P(H)/(1−P(H)),  LR=P(E|H)/P(E|¬H)
+P(H|E) = O(H|E) / (1 + O(H|E))
+```
 
-| 写入位置 | 内容 | 用途 |
-|----------|------|------|
-| `analysis_history` 的原始报告载荷 | 完整 `research_framework`，含 `total_score`、`score_version`、`dimensions`、`weight_snapshot` | 历史报告展示、后续评分统计 |
-| `decision_signals.metadata` | `framework_score`、`score_version`、六维分数摘要 | 操作信号列表与回测聚合 |
-| `decision_signals.evidence` | 完整或裁剪后的评分依据 | 回溯单次建议的依据 |
+`P(H)` 语义：公司成为产业链长期赢家 / 关键瓶颈的概率。
 
-`decision_signals.score` P1 暂不直接替换为 `research_framework.total_score`，继续保持旧 `sentiment_score` 语义，避免 API/Web/回测统计突然切换口径。前端或 API 后续切换展示时再明确迁移。
+### 7.2 先验 P(H) 构建（六维 → P(H) 映射，纯函数）
 
-### 7.2 暂缓新表
+六维加权总分（0-100）→ 先验 P(H)（0-1）分段映射，对齐 skill 的瓶颈分级：
 
-`score_ledger` 不是 P1 必需项。只有当以下条件出现时再拆独立表：
+| 六维总分 | 先验 P(H) | 含义（对齐 skill） |
+|----------|-----------|--------------------|
+| ≥85 | 0.8–1.0 | 极端瓶颈/长期赢家（单一来源、专利锁定） |
+| 70–85 | 0.6–0.8 | 强瓶颈（CR3>70%、高资本开支） |
+| 55–70 | 0.4–0.6 | 中等（存在替代但成本高） |
+| 40–55 | 0.2–0.4 | 弱（竞争分散） |
+| <40 | 0.0–0.2 | 非瓶颈/商品化 |
 
-- 从 `analysis_history` / `decision_signals` 的 JSON 字段统计评分明显变慢；
-- 需要高频按 `score_version`、维度分、未来收益做 SQL 聚合；
-- 需要独立生命周期管理评分样本，而不是跟随报告历史。
+该映射为纯函数 `map_prior(dimension_total) -> float`，可 100% 测试。
 
-若后续新增 `score_ledger`，字段可为：
+### 7.3 市场隐含概率与 Edge
+
+- **市场隐含概率**：由估值（PE 分位/反向 DCF）+ 卖方一致预期 + 股价表现反推；半规则 + LLM 辅助，`basis` 标注。
+- **Edge** = `prior_p − market_implied_p`（纯函数）。
+
+### 7.4 后验更新（似然比，纯函数）
+
+证据分类 → 似然比 LR（对齐 skill 速查表）：
+
+| 证据强度 | LR | 典型证据 |
+|----------|-----|----------|
+| 强正面 | 5–10 | 大客户订单、独家供应协议、竞争者退出、财报超预期且符瓶颈逻辑 |
+| 弱正面 | 2–3 | 行业需求向好、小批量订单、管理层正面指引 |
+| 中性 | ~1 | 无重大新闻、股价技术性波动 |
+| 弱反面 | 0.3–0.5 | 季度略低预期、新竞争者进入、客户分散供应商 |
+| 强反面 | 0.1–0.2 | 技术路线颠覆、核心专利无效、主客切换、监管/制裁 |
+
+`update_posterior(prior_p, lr) -> posterior_p`（纯函数，赔率形式），100% 可测。
+
+### 7.5 仓位映射（纯函数，对齐 skill）
+
+| Edge | 建议仓位 | 信心 |
+|------|----------|------|
+| >50% | 5–8% | 高（核心仓） |
+| 30–50% | 3–5% | 中（标准仓） |
+| 10–30% | 1–3% | 观察 |
+| <10% | 0–1% | 观察为主 |
+
+**约束**：单赛道集中 ≤ 40%（`suggest_position` 需结合组合现有集中度，组合层校验）。
+
+### 7.6 止损规则（长线逻辑，纯函数判定，对齐 skill）
+
+满足任一即触发（区别于短线技术位止损）：
+1. 后验 `P(H|E) < prior_p × 0.6`
+2. 强反面证据（技术路线颠覆 / 核心专利无效 / 重大制裁）
+3. 认知差消失（`market_implied_p ≥ prior_p`）
+
+---
+
+## 8. 产业链与供应链分析框架
+
+### 8.1 供应链地图（下游 → 上游逐层拆解）
+
+```
+下游应用 → OEM/系统集成 → 中游制造 → 上游关键组件 → 原材料/设备
+```
+
+由 LLM 基于行业知识 + 财报主营业务 + akshare 概念板块构建，输出 `supply_chain.chain_map[]`。
+
+### 8.2 瓶颈点（Chokepoint）识别
+
+对每个链层评估（LLM 驱动，标注 `data_confidence`）：
+- **专利垄断**：核心专利壁垒
+- **产能集中**：CR3/CR5 市场份额
+- **地理风险**：产地区域集中度
+- **技术壁垒**：工艺难度、资本开支门槛
+- **替代难度**：客户切换成本、认证周期
+
+### 8.3 中美平行竞争链分析
+
+输出 `supply_chain.us_china_chain`：
+- `role`：公司在中国链 / 美国链 / 双链节点的位置
+- `substitution_progress`：国产替代进度（若在替代链）
+- `sanction_risk`：出口管制 / 制裁风险（若依赖美国技术/市场）
+- `dual_chain`：脱钩/重连的受益 or 受损判断
+
+### 8.4 数据现实约束（诚实说明）⚠️
+
+| 数据 | 来源 | 可信度 |
+|------|------|--------|
+| 国产替代/产业链概念分类 | akshare `stock_board_concept_em` | 高（免费 API） |
+| 机构持仓 | `stock_report_fund_hold` / `qfiy_hold` | 高 |
+| 财报（供应商/客户集中度） | 现有 fundamental | 高 |
+| 专利垄断、产能 CR3、BOM | **LLM 知识 + 财报文本**（无免费实时 API） | 中 |
+| 出口管制清单、制裁名单 | **LLM 知识 + 新闻**（无稳定免费源） | 中低 |
+
+**结论**：产业链维度高度依赖 LLM（主观），客观规则算分主要落在资金/技术指标/估值。每个指标标注 `basis` 与 `data_confidence`，回测时按可信度分组分析。
+
+---
+
+## 9. 报告五段（长线版）
+
+| 段 | 字段 | 内容 |
+|---|---|---|
+| ① 投资结论 | `investment_conclusion` + `bayesian_framework` | 先验 P(H)、产业链定位一句话、Edge、长线仓位、1/3/5 年价值区间、动作（建仓/加仓/减仓/止损/观察）、理由 |
+| ② 产业链解读 | `supply_chain` | 供应链地图、公司定位、瓶颈点矩阵、上下游议价、中美双链位置、产业驱动根因（趋势/政策/技术变革） |
+| ③ 长期价值与情景 | `value_scenarios` | 产业长期空间、竞争格局演变、乐观/中性/悲观情景（概率+价值锚）、1/3/5 年价值、催化与风险事件 |
+| ④ 贝叶斯评分表 | `research_framework` + `bayesian_framework` | 六维 × 指标 × 权重 × 打分 → 先验 P(H)；市场隐含 → Edge；证据序列 → 后验；仓位 |
+| ⑤ 六维详情 | `dimensions[].indicators[].detail` | 每个细分指标详细分析 + 证据来源 + 可信度 |
+
+---
+
+## 10. 自反思记录系统
+
+### 10.1 三张台账（独立新表）
+
+**`position_ledger`（长线持仓台账）**
 
 | 字段 | 说明 |
 |------|------|
 | `id`, `report_id`, `stock_code`, `market` | 关联 |
-| `total_score`, `score_version` | 总分与版本 |
-| `dimension_scores` (JSON) | 六维分数快照 |
-| `weight_snapshot` (JSON) | 权重快照 |
-| `created_at` | 生成时间 |
-| `future_returns` (JSON) | 1d/1w/1M 实际涨跌 |
+| `action` | 建仓/加仓/减仓/止损/观察 |
+| `prior_p`, `edge`, `position_size` | 决策时概率与仓位 |
+| `value_anchor_1y/3y/5y` | 价值锚 |
+| `created_at`, `status`(open/closed/stop_hit) | 状态 |
+| `realized_pnl`, `evaluated_at` | 回测填 |
 
-### 7.3 写入流程
+**`belief_ledger`（概率与证据台账）** ⭐ 新增
 
-报告生成成功后，先把 `research_framework` 附加到 result，再保存历史记录。历史保存成功后，现有 `decision_signal_extractor` 在构建 payload 时把评分摘要写入 `metadata/evidence`。信号写入失败继续 best-effort，不阻塞主流程。
+| 字段 | 说明 |
+|------|------|
+| `id`, `report_id`, `stock_code` | 关联 |
+| `prior_p`, `market_implied_p`, `edge` | 先验/隐含/Edge 快照 |
+| `evidence_seq` (JSON) | 证据序列 `[{evidence, strength, lr, posterior_p, date}]` |
+| `posterior_p`, `score_version`, `weight_snapshot` | 后验与版本 |
+| `created_at`, `future_returns` (JSON) | 回测填 |
 
-### 7.4 回测接口（复用现有能力）
+**`score_ledger`（六维评分台账，先验分解快照）**
 
-P1 不新增 T+N 调度。后续统计「评分↔未来涨跌」时，优先复用 `BacktestEngine` 与现有回测结果；需要新增的只是按 `framework_score` / `score_version` / 六维分数分桶统计。
+| 字段 | 说明 |
+|------|------|
+| `id`, `report_id`, `stock_code`, `dimension_total`, `score_version`, `dimension_scores` (JSON), `weight_snapshot` (JSON), `created_at` | 六维快照 |
+
+### 10.2 写入流程
+
+报告生成成功后 best-effort 写入三张台账（失败不阻塞主流程）。走现有 `_ensure_*_columns` 建表模式（不引入 Alembic）。
+
+### 10.3 回测接口（预留，下一阶段）
+
+T+N 调度任务（长线周期：月/季）：
+- **先验准确度**：高 P(H) 标的是否真成瓶颈/赢家
+- **Edge 实现**：正 Edge 是否跑赢基准
+- **事件预测**：产业链事件是否被先验/后验预测
+- **复盘指标**：胜率、盈亏比、夏普比率
 
 ---
 
-## 8. 新数据维度与数据源接入
+## 11. 新数据维度与数据源
 
-六维度所需新数据，**优先用 akshare 现成免费接口**（已在依赖、A 股覆盖最全、零成本）：
+| 维度数据 | 来源 | 现状 |
+|----------|------|------|
+| 国产替代/产业链概念 | akshare `stock_board_concept_em` | 未接 |
+| 机构持仓 | `stock_report_fund_hold` / `qfiy_hold` | 未接 |
+| 北向 / 融资融券 | `stock_hsgt_*` / `stock_margin_*` | 未接 |
+| 财报供应商/客户集中度 | 现有 fundamental | 已有（待结构化） |
+| 专利 / 产能 CR3 / BOM | LLM 知识 + 财报文本 | 无免费 API |
+| 出口管制 / 制裁 | LLM 知识 + 新闻 | 无稳定免费源 |
 
-| 维度数据 | akshare 接口 | 现状 |
-|----------|--------------|------|
-| 宏观流动性 | `macro_china_money_supply`（M2）、`macro_china_shrzgm`（社融） | 未接 |
-| 北向资金 | `stock_hsgt_north_net_flow_in` | 未接 |
-| 融资融券 | `stock_margin_*` | 未接 |
-| 股东/高管 | `stock_gdfx_free_holding_detail_em` | 未接 |
-| 龙虎榜 | `stock_lhb_detail_em` | 未接 |
-| 研报评级 | `stock_research_report_em` | 未接 |
-| 社交情绪（雪球/微博/贴吧） | 需爬虫 | 无（P4） |
-| 缠论 K 线结构 | 需自研算法 / 第三方库 | 无（P4） |
-
-**接入策略**：前 6 项封装为新的 fetcher 方法或独立 `data_provider/macro/`、`data_provider/sentiment/` 模块，走现有 fetcher 注册与熔断模式。社交爬虫与缠论算法列为 P4，不阻塞主报告。
+接入策略：免费 API 项封装为新 fetcher 方法或独立 `data_provider/supply_chain/` 模块，走现有注册与熔断；LLM 驱动项在 agent/prompt 内完成，标注可信度。
 
 ---
 
-## 9. 提示词与 Agent 改造
+## 12. 提示词与 Agent 改造
 
-### 9.1 经典路径（`src/analyzer.py`）
+### 12.1 经典路径（`src/analyzer.py`）
 
 | 改动点 | 内容 |
 |--------|------|
-| `SYSTEM_PROMPT` | P1 不强制改；P2 再追加：要求 LLM 对主观维度给 `{score, summary}`，并追加盘面结构、走势预测指令 |
-| `_format_prompt` | 追加新数据表格（宏观/龙虎榜/研报，P2 接入后） |
-| `_check_content_integrity` | 仅在 `SCORE_FRAMEWORK_ENABLED=true` 且评分服务成功时校验 `research_framework.dimensions`；旧报告和关闭开关时不得失败 |
+| `SYSTEM_PROMPT` | 追加：产业链分析指令、贝叶斯评分（主观维度给分组件）、长线价值情景、中美链视角。**不动现有 JSON schema 块** |
+| `_format_prompt` | 追加产业链/概念板块/机构持仓数据表格（P2 接入后） |
+| `_check_content_integrity` | 新增 `bayesian_framework.prior_p` / `research_framework.dimensions` 必填校验 |
 
-经典路径 P1 先行：报告生成后调 `research_scoring_service` 聚合已有客观数据 + 缺失维度中性分 → 填 `research_framework` → 随历史报告与 `decision_signals` 写入快照。
+经典路径 P1 先行：报告生成后调 `research_scoring_service` → 六维算分 → `bayesian` 模块聚合先验/Edge/后验 → 填字段 → 写台账。
 
-### 9.2 多 agent 路径（`src/agent/`，P3）
+### 12.2 多 agent 路径（`src/agent/`，P3）
 
-新增两个专职 agent（高内聚，不塞进现有 agent）：
+新增专职 agent（高内聚）：
+- `supply_chain_agent`（产业链地图 + 瓶颈 + 中美链）
+- `value_agent`（长线价值 + 情景）
 
-- `macro_agent`（宏观流动性 + 风险偏好）
-- `sentiment_agent`（研报 + 社交情绪）
-
-`decision_agent` 聚合六维 → 输出 `research_framework`。agent 链中 macro/sentiment 为可选阶段（类似 specialist 插入）。
+`decision_agent` 聚合 → 输出 `bayesian_framework` + `investment_conclusion`。
 
 ---
 
-## 10. 测试策略与测试报告
+## 13. 测试策略与测试报告
 
-### 10.1 测试矩阵
+### 13.1 测试矩阵
 
 | 模块 | 测试方式 | 覆盖目标 |
 |------|----------|----------|
-| `src/scoring/`（纯函数） | 纯单测：给定输入→期望分数/加权总分 | **100%** |
-| 权重配置 | 单测：权重和=100%、版本切换、边界 | 100% |
-| `research_framework` schema | Pydantic 校验：合法/非法 JSON、旧报告兼容、关闭开关兼容 | 关键路径覆盖 |
-| `decision_signals` 快照写入 | payload 构造单测：metadata/evidence 含评分摘要；写入失败不阻塞 | 关键路径覆盖 |
-| 新 fetcher 方法（P2） | mock akshare 返回（不联网）→ 字段标准化 | 关键路径覆盖；真实调用标 `@pytest.mark.network` |
-| 向后兼容 | 旧报告（无 `research_framework`）解析/渲染回归测 | 确保旧报告不崩 |
-| 提示词构造 | P2 再做 prompt 快照测：六维数据正确拼入 | P2 覆盖 |
+| `src/scoring/bayesian.py`（纯函数） | 先验映射 / Edge / 后验更新（似然比）/ 仓位 / 止损 全场景 | **100%** |
+| `src/scoring/` 六维引擎（纯函数） | 给定输入→期望分数/加权 | **100%** |
+| 权重配置 | 和=100%、版本切换、边界 | 100% |
+| `research_framework` / `bayesian_framework` / `supply_chain` schema | Pydantic 校验 | 100% |
+| `position_ledger` / `belief_ledger` / `score_ledger` repo | CRUD（mock db） | 100% |
+| 新 fetcher 方法 | mock akshare（不联网） | 100%；真实调用标 `@network` |
+| 向后兼容 | 旧报告（无新字段）解析/渲染回归 | 不崩 |
+| 提示词构造 | prompt 快照：产业链/贝叶斯数据正确拼入 | 100% |
 
-### 10.2 100% 覆盖范围
+### 13.2 贝叶斯引擎关键测试用例
 
-强制 100%：`src/scoring/`（纯函数）。schema、历史保存、`decision_signals` 快照写入走关键路径测试，不为追求覆盖率新增低价值测试。
+| 测试 | 断言 |
+|------|------|
+| `test_map_prior` | 总分 90→P(H)≥0.8；50→0.2–0.4；边界连续性 |
+| `test_update_posterior` | 先验 0.6 + LR=8 → 后验≈0.92；LR=0.125 → ≈0.16（对齐 skill 速查表） |
+| `test_edge` | prior−implied 正负与边界 |
+| `test_position_mapping` | Edge 55%→5–8%；5%→0–1% |
+| `test_stop_conditions` | 后验<先验·60%触发；认知差消失触发 |
+| `test_odds_conversion` | P↔O 往返一致 |
 
-### 10.3 测试用例清单
-
-| 测试文件 | 断言内容 |
-|----------|----------|
-| `test_weights.py` | 六维权重和=1.0；v1 存在；非法配置报错；指标权重和=1 |
-| `test_normalization.py` | 归一化映射；越界 clamp [0,100]；None 处理 |
-| `test_engine.py` | 加权聚合数值；空 dimensions；全 0/全 100 边界；四舍五入；权重缺失报错 |
-| `test_indicators_technical.py` | 均线多头/空头/缠绕；MACD 金叉/死叉/零轴；RSI 超买超卖；支撑压力距离；缺失→中性 50 |
-| `test_indicators_capital.py` | 主力净流入方向→分；筹码集中度阈值；获利比区间；缺失→中性 |
-| `test_indicators_valuation.py` | PE 分位低估/高估/中位；负 PE 处理 |
-| `test_research_framework_schema.py` | 合法 JSON 通过；类型错失败；维度数=6；权重和校验；`extra=allow` 与旧报告兼容 |
-| `test_decision_signal_framework_snapshot.py` | payload metadata/evidence 写入 `framework_score`、`score_version`、六维摘要；旧报告无评分时不变 |
-| `test_legacy_report_compat.py` | 旧报告（无 research_framework）解析+渲染不崩 |
-| `test_prompt_framework_section.py`（P2） | 六维数据正确拼入 prompt |
-| `test_research_scoring_service.py` | 编排：客观算分+缺失维度中性分+附加 result；信号快照失败不阻塞 |
-| `test_macro_fetcher.py`（P2） | mock akshare→字段标准化；真实调用标 `@network` |
-
-### 10.4 测试报告产出
+### 13.3 测试报告产出
 
 ```bash
-pytest tests/test_scoring test_research_framework_schema test_decision_signal_framework_snapshot \
+pytest tests/test_scoring tests/test_bayesian tests/test_*_ledger_repo \
+  test_research_framework_schema test_bayesian_framework_schema \
   --cov=src/scoring \
+  --cov=src/repositories/position_ledger_repo \
+  --cov=src/repositories/belief_ledger_repo \
+  --cov=src/repositories/score_ledger_repo \
   --cov-fail-under=100 \
   --cov-report=term-missing --cov-report=xml
 ```
 
-产出 coverage xml + 终端报告，附在 PR 描述（符合 `AGENTS.md` 报告变更需附证据）。
+产出 coverage xml + 终端报告，附 PR 描述。
 
 ---
 
-## 11. 影响面与兼容性保证
+## 14. 影响面与兼容性保证
 
 - **现有字段零改动** → Web/通知/历史/决策信号提取不受影响。
-- **P1 复用现有表** → 不新增并行操作台账；评分快照随报告和信号保存。
-- **新 fetcher 方法独立** → 不改现有 fetcher 行为。
-- **前端渐进** → 后端先给 `research_framework` 数据，旧渲染不变，前端后续适配新段落。
-- **Feature flag** `SCORE_FRAMEWORK_ENABLED`（默认渐进），关闭时不生成 `research_framework`、不写评分快照，等价回滚。
+- **新表独立** → 不动 `analysis_history` / `decision_signals`。
+- **新 fetcher 方法独立** → 不改现有 fetcher。
+- **前端渐进** → 后端先给新字段，旧渲染不变，前端逐步弱化短线要素、渲染长线段落。
+- **Feature flag** `RESEARCH_FRAMEWORK_ENABLED` / `BAYESIAN_FRAMEWORK_ENABLED`（默认渐进），关闭等价回滚。
 
 ---
 
-## 12. 分阶段交付路线图
+## 15. 分阶段交付路线图
 
 | 阶段 | 内容 | 产出 |
 |------|------|------|
-| **P1**（基础） | 最小六维评分引擎（纯函数，已有客观数据规则算分，缺失维度中性分）+ schema 追加 + 历史/信号评分快照 + Feature flag + 评分引擎 100% 测试 | 报告有可解释加权总分，数据开始记录 |
-| **P2**（数据） | akshare 新接口（宏观/北向/融资/龙虎榜/股东/研报）+ LLM 主观维度打分 + 提示词改造 | 六维内容充实 |
-| **P3**（预测） | 盘面解读段 + 走势预测段（多时间维度+情景）+ 多 agent 新增 macro/sentiment | 五段完整 |
-| **P4**（可选） | 缠论算法 + 社交情绪爬虫 + T+N 回测调度（自反思闭环） | 自反思完整闭环 |
+| **P1**（基础） | 贝叶斯引擎（纯函数）+ 六维评分引擎 + schema 追加 + 三台账 + Feature flag + 100% 测试 | 报告有先验/Edge/仓位，数据开始记录 |
+| **P2**（产业链数据） | akshare 概念板块/机构持仓/北向/融资接入 + 产业链 LLM 分析 + 中美链 | 产业链维度充实 |
+| **P3**（价值与 agent） | 长线价值情景段 + 多 agent（supply_chain/value）+ 提示词 | 五段完整 |
+| **P4**（可选） | 社交情绪/专利数据 + T+N 回测闭环（先验准确度/Edge 实现） | 自反思完整闭环 |
 
-**起点为 P1**：评分引擎是地基，纯函数最易 100% 测试、零风险。先有可解释评分，再逐步填数据与预测段。
+**起点为 P1**：贝叶斯 + 评分引擎纯函数，最易 100% 测试、零风险。
 
 ### P1 有序实现步骤（TDD）
 
-1. 建 `src/scoring/` 骨架（`contracts` + `weights` + `engine` + `normalization`），先写测试再实现（RED→GREEN）。
-2. 客观维度规则算分先覆盖现有数据可稳定提供的指标；缺失维度返回中性分并标记缺失原因。
-3. `research_framework` schema（Pydantic）+ 校验测试。
-4. `research_scoring_service` 编排：接入报告生成（经典 analyzer），把 `research_framework` 附加到 result。
-5. 扩展 `decision_signal_extractor`：把评分摘要写入 `metadata/evidence`，不替换 `score` 字段语义。
-6. Feature flag + 兼容回归测试。
-7. 文档同步：本文件、`docs/CHANGELOG.md` `[Unreleased]`、`.env.example`（新增 `SCORE_FRAMEWORK_ENABLED` 等配置项）。
+1. 建 `src/scoring/` 骨架（`contracts` + `weights` + `engine` + `bayesian` + `normalization`），先写测试再实现。
+2. 贝叶斯纯函数：`map_prior` / `update_posterior` / `edge` / `position_mapping` / `stop_conditions`（对齐 skill 速查表数值，TDD）。
+3. 六维客观维度规则算分（`indicators/capital | fundamental | technical`）。
+4. `research_framework` / `bayesian_framework` schema + 校验测试。
+5. 三张台账表 + repo（mock 测试）。
+6. `research_scoring_service` 编排：接入报告生成，写台账；产业链/价值主观维度 P1 占位，P2/P3 充实。
+7. Feature flag + 兼容回归测试。
+8. 文档同步：本文件、`docs/CHANGELOG.md` `[Unreleased]`、`.env.example`（新增开关配置）。
 
 ---
 
-## 13. 风险与回滚
+## 16. 风险与回滚
 
 | 风险 | 应对 |
 |------|------|
-| 报告变长 → token 成本 + LLM 完整性下降 | 评分用规则（省 token），LLM 只给主观维度+综合段；必要时评分与报告生成拆两轮 |
-| LLM 评分一致性差 | 坚持客观维度规则化，否则无法回测 |
-| akshare 接口易被封 | 复用现有熔断 + 子进程超时模式，不重复造 |
-| 回测需时间积累 | 先记录，回测分阶段，本次不做闭环 |
-| 主观维度 P1 数据不足 | 先给中性分+标记，P2 数据接入后充实，不影响 P1 闭环与测试 |
-| 新旧评分口径混用 | P1 保持 `decision_signals.score` 使用旧 `sentiment_score`，新分数只写 `framework_score` 元数据 |
+| 产业链数据缺免费 API，高度依赖 LLM | 客观算分落在资金/技术/估值；产业链标注 `data_confidence`，回测按可信度分组 |
+| LLM 生成先验不稳定 | 先验锚定产业链物理现实（地图/瓶颈/CR3），禁止仅凭新闻/社交生成先验 |
+| 长线回测周期长 | 先记录，回测分阶段（月/季周期） |
+| 报告变长 token 成本 | 评分/贝叶斯用规则（省 token），LLM 只给主观维度 + 综合段 |
+| 主观维度 P1 数据不足 | 先占位中性分，P2/P3 充实，不影响 P1 闭环与测试 |
 
-**回滚**：`SCORE_FRAMEWORK_ENABLED=false` → 不生成 `research_framework`、不写评分快照；已保存历史中的追加字段不会影响旧解析，等价回滚。
+**回滚**：`BAYESIAN_FRAMEWORK_ENABLED=false` → 不生成贝叶斯/产业链字段、不写台账，新表空表不影响现有查询，等价完全回滚。
 
 ---
 
-## 14. 附录：模块结构
+## 17. 禁止事项（对齐 skill 方法论）
+
+- ❌ 不基于新闻或社交情绪生成先验（先验必须锚定产业链物理现实）
+- ❌ 无量化概率表（先验/Edge）不给出仓位建议
+- ❌ 不忽略反面证据或强行乐观（后验须如实更新）
+- ❌ 单一赛道集中 > 40% 仓位
+- ❌ 概率 ≠ 确定性（禁止将后验 P(H|E) 表述为「一定会发生」）
+- ❌ 长线止损不得用短线技术位（须用后验/认知差逻辑）
+
+---
+
+## 18. 附录：模块结构
 
 ```
-src/scoring/                       纯函数评分引擎（零外部依赖）
+src/scoring/                       纯函数评分 + 贝叶斯引擎（零外部依赖）
 ├── contracts.py / weights.py / engine.py / normalization.py
-└── indicators/                    P2+ 按数据成熟度拆分
+├── bayesian.py                    ⭐ 先验映射/Edge/后验更新/仓位/止损
+└── indicators/ (supply_chain, fundamental, capital, technical, sentiment, macro)
 
-src/schemas/research_framework.py  六维评分 schema（Pydantic）
-src/services/research_scoring_service.py  编排：取数→客观算分→附加评分快照
+src/schemas/
+├── research_framework.py          六维评分 schema
+├── bayesian_framework.py          ⭐ 贝叶斯 schema
+└── supply_chain.py                ⭐ 产业链 schema
 
-data_provider/macro_fetcher.py     P2: akshare 宏观/北向/融资
-data_provider/sentiment_fetcher.py P2/P4: 研报/社交
-src/agent/agents/macro_agent.py    P3: 宏观 agent
-src/agent/agents/sentiment_agent.py P3: 情绪 agent
+src/repositories/
+├── position_ledger_repo.py        ⭐ 长线持仓台账
+├── belief_ledger_repo.py          ⭐ 概率与证据台账
+└── score_ledger_repo.py           六维评分台账
+
+src/services/research_scoring_service.py  编排：六维→先验→Edge→后验→台账
+
+data_provider/supply_chain/        P2: akshare 概念板块/机构持仓
+src/agent/agents/supply_chain_agent.py  P3: 产业链 agent
+src/agent/agents/value_agent.py         P3: 长线价值 agent
 ```
 
 依赖方向（单向无环）：
 
 ```
-report 生成 → research_scoring_service → src/scoring（纯函数）
-                                  → analysis_history（完整报告快照）
-                                  → decision_signals（评分摘要/evidence）
+report 生成 → research_scoring_service → src/scoring（纯函数：六维 + 贝叶斯）
+                                  → repositories（三台账）
                                   → data_provider（取数，P2）
 ```

@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [文档] 补充 AlphaSift 迁移与回退边界：明确 `ALPHASIFT_INSTALL_SPEC` 显式覆盖语义、`requirements.txt + DEFAULT_ALPHASIFT_INSTALL_SPEC` 与运行时兼容边界、以及回滚路径（关闭功能/完整 revert）说明，覆盖旧 pin 用户升级行为。
 
 - [新功能] 个股分析历史成功保存后会从最终报告 best-effort 提取 `DecisionSignal` 决策信号，复用现有信号去重、计划质量计算和脱敏契约。
-- [文档] 新增个股分析报告优化设计文档（docs/report-optimization-design.md），规划五段式报告结构、六维加权评分框架与自反思记录系统，作为后续分阶段实现的真源。
+- [文档] 新增个股分析报告优化设计文档（docs/report-optimization-design.md），规划长线产业链/供应链投研、贝叶斯概率框架（先验/Edge/后验/仓位）、中美平行竞争链与自反思记录系统，作为后续分阶段实现的真源。
 
 ## [3.22.0] - 2026-06-13
 
