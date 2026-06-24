@@ -102,7 +102,7 @@ describe('SidebarNav', () => {
     );
 
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
-    expect(screen.getByLabelText('问股有新消息')).toBeInTheDocument();
+    expect(screen.getByLabelText('A股分析有新消息')).toBeInTheDocument();
 
     completionBadgeState.value = false;
     rerender(

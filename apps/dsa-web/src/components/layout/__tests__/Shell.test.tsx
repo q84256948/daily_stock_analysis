@@ -47,7 +47,7 @@ describe('Shell', () => {
     );
 
     expect(screen.getAllByRole('button', { name: '切换主题' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: '问股' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'A股分析' })).toBeInTheDocument();
     expect(screen.getByTestId('chat-completion-badge')).toBeInTheDocument();
     const logoutButton = screen.getByRole('button', { name: '退出' });
     expect(logoutButton).toBeInTheDocument();

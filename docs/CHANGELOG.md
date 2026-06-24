@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [改进] Web 端将「问股」导航菜单及对应页面标题、浏览器标签页标题、新消息提示与空状态引导文案统一更名为「A股分析」，同步更新相关单测与 e2e 断言文案；用量分类、配置说明、会话导出标题等非导航语境的「问股」保持不变。
 - [修复] 修复供应链与郑希对话刷新页面后当前会话内容丢失的问题：后端会话列表返回的 session_id 去掉命名空间前缀（与前端 localStorage 无前缀格式对齐），GET/DELETE 会话端点兼容无前缀 id；问股不加前缀不受影响。
 - [新功能] 五段式长线产业链投研报告（P0/P1/P2）：
   - [P0] 新增 `src/schemas/report_schema.py` 五段式字段（investment_conclusion/supply_chain/value_scenarios/bayesian_framework/research_framework）
