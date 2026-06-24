@@ -68,6 +68,7 @@ def _normalize_code_for_grouping(code: str) -> str:
     SH600519, 600519.SH, HK00700, 00700.HK, BJ920748, etc.
     """
     from data_provider.base import normalize_stock_code
+
     return normalize_stock_code(code or "")
 
 
@@ -79,22 +80,24 @@ def _normalize_code_for_grouping(code: str) -> str:
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史分析列表",
-    description="分页获取历史分析记录摘要，支持按股票代码和日期范围筛选"
+    description="分页获取历史分析记录摘要，支持按股票代码和日期范围筛选",
 )
 def get_history_list(
     stock_code: Optional[str] = Query(None, description="股票代码筛选"),
-    report_type: Optional[str] = Query(None, description="报告类型筛选，如 market_review"),
+    report_type: Optional[str] = Query(
+        None, description="报告类型筛选，如 market_review"
+    ),
     start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
     page: int = Query(1, ge=1, description="页码（从 1 开始）"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> HistoryListResponse:
     """
     获取历史分析列表
-    
+
     分页获取历史分析记录摘要，支持按股票代码和日期范围筛选
-    
+
     Args:
         stock_code: 股票代码筛选
         report_type: 报告类型筛选
@@ -103,13 +106,13 @@ def get_history_list(
         page: 页码
         limit: 每页数量
         db_manager: 数据库管理器依赖
-        
+
     Returns:
         HistoryListResponse: 历史记录列表
     """
     try:
         service = HistoryService(db_manager)
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_list(
             stock_code=stock_code,
@@ -117,9 +120,9 @@ def get_history_list(
             start_date=start_date,
             end_date=end_date,
             page=page,
-            limit=limit
+            limit=limit,
         )
-        
+
         # 转换为响应模型
         items = [
             HistoryItem(
@@ -144,22 +147,19 @@ def get_history_list(
             )
             for item in result.get("items", [])
         ]
-        
+
         return HistoryListResponse(
-            total=result.get("total", 0),
-            page=page,
-            limit=limit,
-            items=items
+            total=result.get("total", 0), page=page, limit=limit, items=items
         )
-        
+
     except Exception as e:
         logger.error(f"查询历史列表失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询历史列表失败: {str(e)}"
-            }
+                "message": f"查询历史列表失败: {str(e)}",
+            },
         )
 
 
@@ -180,7 +180,9 @@ def delete_history_by_code(
 ) -> DeleteHistoryResponse:
     try:
         candidates = HistoryService._history_code_filter_candidates(stock_code)
-        records, _ = db_manager.get_analysis_history_paginated(code=candidates, limit=10000)
+        records, _ = db_manager.get_analysis_history_paginated(
+            code=candidates, limit=10000
+        )
         record_ids = [r.id for r in records if r.id is not None]
         if not record_ids:
             return DeleteHistoryResponse(deleted=0)
@@ -203,23 +205,22 @@ def delete_history_by_code(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="删除历史分析记录",
-    description="按历史记录主键 ID 批量删除分析历史"
+    description="按历史记录主键 ID 批量删除分析历史",
 )
 def delete_history_records(
     request: DeleteHistoryRequest = Body(...),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> DeleteHistoryResponse:
     """
     按主键 ID 批量删除历史分析记录。
     """
-    record_ids = sorted({record_id for record_id in request.record_ids if record_id is not None})
+    record_ids = sorted(
+        {record_id for record_id in request.record_ids if record_id is not None}
+    )
     if not record_ids:
         raise HTTPException(
             status_code=400,
-            detail={
-                "error": "invalid_request",
-                "message": "record_ids 不能为空"
-            }
+            detail={"error": "invalid_request", "message": "record_ids 不能为空"},
         )
 
     try:
@@ -234,8 +235,8 @@ def delete_history_records(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"删除历史记录失败: {str(e)}"
-            }
+                "message": f"删除历史记录失败: {str(e)}",
+            },
         )
 
 
@@ -282,16 +283,24 @@ def get_stock_bar(
         for norm_code in seen:
             record = seen[norm_code]
             raw_result = parse_json_field(getattr(record, "raw_result", None))
-            model_used = raw_result.get("model_used") if isinstance(raw_result, dict) else None
+            model_used = (
+                raw_result.get("model_used") if isinstance(raw_result, dict) else None
+            )
             action_fields = build_action_fields(
                 operation_advice=(
-                    raw_result.get("operation_advice") if isinstance(raw_result, dict) else None
+                    raw_result.get("operation_advice")
+                    if isinstance(raw_result, dict)
+                    else None
                 )
                 or record.operation_advice,
-                explicit_action=raw_result.get("action") if isinstance(raw_result, dict) else None,
+                explicit_action=raw_result.get("action")
+                if isinstance(raw_result, dict)
+                else None,
                 report_type=record.report_type,
                 report_language=normalize_report_language(
-                    raw_result.get("report_language") if isinstance(raw_result, dict) else None
+                    raw_result.get("report_language")
+                    if isinstance(raw_result, dict)
+                    else None
                 ),
             )
 
@@ -316,7 +325,9 @@ def get_stock_bar(
                         record.created_at.isoformat() if record.created_at else None
                     ),
                     model_used=normalize_model_used(model_used),
-                    market_phase_summary=extract_market_phase_summary(getattr(record, "context_snapshot", None)),
+                    market_phase_summary=extract_market_phase_summary(
+                        getattr(record, "context_snapshot", None)
+                    ),
                 )
             )
 
@@ -343,54 +354,55 @@ def get_stock_bar(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告详情",
-    description="根据分析历史记录 ID 或 query_id 获取完整的历史分析报告"
+    description="根据分析历史记录 ID 或 query_id 获取完整的历史分析报告",
 )
 def get_history_detail(
-    record_id: str,
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    record_id: str, db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> AnalysisReport:
     """
     获取历史报告详情
-    
+
     根据分析历史记录主键 ID 或 query_id 获取完整的历史分析报告。
     优先尝试按主键 ID（整数）查询，若参数不是合法整数则按 query_id 查询。
-    
+
     Args:
         record_id: 分析历史记录主键 ID（整数）或 query_id（字符串）
         db_manager: 数据库管理器依赖
-        
+
     Returns:
         AnalysisReport: 完整分析报告
-        
+
     Raises:
         HTTPException: 404 - 报告不存在
     """
     try:
         service = HistoryService(db_manager)
-        
+
         # Try integer ID first, fall back to query_id string lookup
         result = service.resolve_and_get_detail(record_id)
-        
+
         if result is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"未找到 id/query_id={record_id} 的分析记录"
-                }
+                    "message": f"未找到 id/query_id={record_id} 的分析记录",
+                },
             )
-        
+
         # 从 context_snapshot 中提取价格信息
         # 注意：使用 `is None` 而非 `or`，避免把 0.0（平盘）误判为缺失值；
         # 同时不混用 `change_60d`（60 日累计涨跌幅）作为日内 change_pct 的兜底。
         context_snapshot = result.get("context_snapshot")
-        analysis_context_pack_overview = extract_analysis_context_pack_overview(context_snapshot)
+        analysis_context_pack_overview = extract_analysis_context_pack_overview(
+            context_snapshot
+        )
         market_phase_summary = extract_market_phase_summary(context_snapshot)
         api_context_snapshot = sanitize_context_snapshot_for_api(context_snapshot)
         realtime_fields = extract_realtime_detail_fields(context_snapshot)
         current_price = realtime_fields.get("current_price")
         change_pct = realtime_fields.get("change_pct")
-        
+
         raw_result = result.get("raw_result")
         if not isinstance(raw_result, dict):
             raw_result = {}
@@ -423,7 +435,7 @@ def get_history_detail(
             model_used=normalize_model_used(result.get("model_used")),
             market_phase_summary=market_phase_summary,
         )
-        
+
         summary = ReportSummary(
             analysis_summary=result.get("analysis_summary"),
             operation_advice=localize_operation_advice(
@@ -441,16 +453,16 @@ def get_history_detail(
                 get_sentiment_label(result.get("sentiment_score"), report_language)
                 if result.get("sentiment_score") is not None
                 else result.get("sentiment_label")
-            )
+            ),
         )
-        
+
         strategy = ReportStrategy(
             ideal_buy=result.get("ideal_buy"),
             secondary_buy=result.get("secondary_buy"),
             stop_loss=result.get("stop_loss"),
-            take_profit=result.get("take_profit")
+            take_profit=result.get("take_profit"),
         )
-        
+
         fallback_fundamental = db_manager.get_latest_fundamental_snapshot(
             query_id=result.get("query_id", ""),
             code=result.get("stock_code", ""),
@@ -474,14 +486,25 @@ def get_history_detail(
             belong_boards=extracted_boards.get("belong_boards"),
             sector_rankings=extracted_boards.get("sector_rankings"),
         )
-        
+
+        research_framework = result.get("research_framework")
+        bayesian_framework = result.get("bayesian_framework")
+        supply_chain = result.get("supply_chain")
+        value_scenarios = result.get("value_scenarios")
+        investment_conclusion = result.get("investment_conclusion")
+
         return AnalysisReport(
             meta=meta,
             summary=summary,
             strategy=strategy,
-            details=details
+            details=details,
+            research_framework=research_framework,
+            bayesian_framework=bayesian_framework,
+            supply_chain=supply_chain,
+            value_scenarios=value_scenarios,
+            investment_conclusion=investment_conclusion,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -490,8 +513,8 @@ def get_history_detail(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询历史详情失败: {str(e)}"
-            }
+                "message": f"查询历史详情失败: {str(e)}",
+            },
         )
 
 
@@ -589,12 +612,12 @@ def get_history_run_flow(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告关联新闻",
-    description="根据分析历史记录 ID 获取关联的新闻情报列表（为空也返回 200）"
+    description="根据分析历史记录 ID 获取关联的新闻情报列表（为空也返回 200）",
 )
 def get_history_news(
     record_id: str,
     limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    db_manager: DatabaseManager = Depends(get_database_manager),
 ) -> NewsIntelResponse:
     """
     获取历史报告关联新闻
@@ -618,15 +641,12 @@ def get_history_news(
             NewsIntelItem(
                 title=item.get("title", ""),
                 snippet=item.get("snippet"),
-                url=item.get("url", "")
+                url=item.get("url", ""),
             )
             for item in items
         ]
 
-        return NewsIntelResponse(
-            total=len(response_items),
-            items=response_items
-        )
+        return NewsIntelResponse(total=len(response_items), items=response_items)
 
     except Exception as e:
         logger.error(f"查询新闻情报失败: {e}", exc_info=True)
@@ -634,8 +654,8 @@ def get_history_news(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"查询新闻情报失败: {str(e)}"
-            }
+                "message": f"查询新闻情报失败: {str(e)}",
+            },
         )
 
 
@@ -648,11 +668,10 @@ def get_history_news(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取历史报告 Markdown 格式",
-    description="根据分析历史记录 ID 获取 Markdown 格式的完整分析报告"
+    description="根据分析历史记录 ID 获取 Markdown 格式的完整分析报告",
 )
 def get_history_markdown(
-    record_id: str,
-    db_manager: DatabaseManager = Depends(get_database_manager)
+    record_id: str, db_manager: DatabaseManager = Depends(get_database_manager)
 ) -> MarkdownReportResponse:
     """
     获取历史报告的 Markdown 格式内容
@@ -680,8 +699,8 @@ def get_history_markdown(
             status_code=500,
             detail={
                 "error": "generation_failed",
-                "message": f"生成 Markdown 报告失败: {e.message}"
-            }
+                "message": f"生成 Markdown 报告失败: {e.message}",
+            },
         )
     except Exception as e:
         logger.error(f"获取 Markdown 报告失败: {e}", exc_info=True)
@@ -689,8 +708,8 @@ def get_history_markdown(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"获取 Markdown 报告失败: {str(e)}"
-            }
+                "message": f"获取 Markdown 报告失败: {str(e)}",
+            },
         )
 
     if markdown_content is None:
@@ -698,8 +717,8 @@ def get_history_markdown(
             status_code=404,
             detail={
                 "error": "not_found",
-                "message": f"未找到 id/query_id={record_id} 的分析记录"
-            }
+                "message": f"未找到 id/query_id={record_id} 的分析记录",
+            },
         )
 
     return MarkdownReportResponse(content=markdown_content)

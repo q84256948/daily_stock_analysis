@@ -49,6 +49,12 @@ const REPORT_TEXT = {
     laggingBoard: '领跌',
     neutralBoard: '中性',
     reanalyze: '重新分析',
+    noRelatedBoards: '暂无板块联动信息',
+    priorPH: 'P(H)（假设成立的先验概率）',
+    edge: 'Edge',
+    longTermPosition: '长线仓位',
+    aiPerspective: 'AI观点',
+    marketImplied: '市场预期',
   },
   en: {
     keyInsights: 'KEY INSIGHTS',
@@ -95,6 +101,12 @@ const REPORT_TEXT = {
     laggingBoard: 'Lagging',
     neutralBoard: 'Neutral',
     reanalyze: 'Reanalyze',
+    noRelatedBoards: 'No board linkage info',
+    priorPH: 'P(H)(Prior Probability of Hypothesis)',
+    edge: 'Edge',
+    longTermPosition: 'Long-term Position',
+    aiPerspective: 'AI View',
+    marketImplied: 'Market Implied',
   },
 } as const;
 

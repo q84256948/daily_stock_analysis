@@ -8,6 +8,9 @@ import { ReportDetails } from './ReportDetails';
 import { ReportDiagnostics } from './ReportDiagnostics';
 import { AnalysisContextSummary } from './AnalysisContextSummary';
 import { MarketReviewReportView } from './MarketReviewReportView';
+import { ResearchFrameworkPanel } from './ResearchFrameworkPanel';
+import { AgentAnalysisPanel } from './AgentAnalysisPanel';
+import { FiveSectionReportView } from './FiveSectionReportView';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
 interface ReportSummaryProps {
@@ -71,6 +74,24 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
 
       {/* 策略点位区 */}
       <ReportStrategy strategy={strategy} language={reportLanguage} />
+
+      {/* 长线投研框架 - 五段式长线产业链投研报告 */}
+      {report.researchFramework || report.investmentConclusion || report.supplyChain || 
+       report.valueScenarios || report.bayesianFramework ? (
+        <FiveSectionReportView report={report} language={reportLanguage} />
+      ) : (
+        <ResearchFrameworkPanel data={report.researchFramework} language={reportLanguage} />
+      )}
+
+      {/* AI 深度分析 - 产业链 & 价值情景 */}
+      {report.supplyChainAnalysis || report.valueAnalysis ? (
+        <AgentAnalysisPanel
+          data={{
+            supplyChainAnalysis: report.supplyChainAnalysis,
+            valueAnalysis: report.valueAnalysis,
+          }}
+        />
+      ) : null}
 
       {/* 从当前历史报告提取的结构化信号 */}
       <ReportDecisionSignals recordId={recordId} reportType={meta.reportType} />

@@ -10,6 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 - [修复] 修复供应链与郑希对话刷新页面后当前会话内容丢失的问题：后端会话列表返回的 session_id 去掉命名空间前缀（与前端 localStorage 无前缀格式对齐），GET/DELETE 会话端点兼容无前缀 id；问股不加前缀不受影响。
+- [新功能] 五段式长线产业链投研报告（P0/P1/P2）：
+  - [P0] 新增 `src/schemas/report_schema.py` 五段式字段（investment_conclusion/supply_chain/value_scenarios/bayesian_framework/research_framework）
+  - [P0] 新增 `src/services/research_integration_service.py` 五段式报告编排服务
+  - [P0] 新增 `apps/dsa-web/src/components/report/FiveSectionReportView.tsx` 五段式报告整合视图
+  - [P0] 新增 `apps/dsa-web/src/components/report/SupplyChainPanel.tsx` 产业链解读面板
+  - [P0] 新增 `apps/dsa-web/src/components/report/BayesianScoreTable.tsx` 贝叶斯评分表
+  - [P0] 新增 `apps/dsa-web/src/components/report/InvestmentConclusionCard.tsx` 投资结论卡片
+  - [P0] 新增 `apps/dsa-web/src/components/report/ValueScenariosCard.tsx` 价值情景卡片
+  - [P0] 修改 `ReportSummary.tsx` 集成五段式报告展示
+- [新功能] P1 六维详情展开面板：新增 `apps/dsa-web/src/components/report/DimensionDetailPanel.tsx` 展示六维每个细分指标的详细分析
+- [新功能] P1 Feature Flag 配置：新增 `RESEARCH_FRAMEWORK_ENABLED`、`BAYESIAN_FRAMEWORK_ENABLED`、`SUPPLY_CHAIN_ANALYSIS_ENABLED`、`VALUE_SCENARIOS_ENABLED`、`ENABLE_AGENT_ANALYSIS` 环境变量配置
+- [新功能] P2 数据提供者：验证 `data_provider/supply_chain/` 模块（概念板块/机构持仓/北向资金）已完整可用
+- [新功能] P3 产业链 Agent：新增 src/agent/agents/supply_chain_agent.py，继承 BaseAgent，实现产业链定位分析、护城河评估、中美链风险识别和客户集中度分析。
+- [新功能] P3 价值 Agent：新增 src/agent/agents/value_agent.py，继承 BaseAgent，实现长期价值情景分析（乐观/基准/悲观）、价值区间锚定和投资边缘计算。
+- [新功能] P3 价值情景 Prompt：新增 src/agents/prompts/value_prompts.py，包含完整价值情景分析 Prompt 模板和摘要生成 Prompt。
+- [新功能] P3 评分服务集成：ResearchScoringService 新增 _init_agents、analyze_supply_chain_agent、analyze_value_agent、enrich_with_agent_analysis 方法，支持 P3 Agent 自动调用和数据增强。
+- [新功能] P3 前端 Agent 分析面板：新增 apps/dsa-web/src/components/report/AgentAnalysisPanel.tsx，展示产业链分析、价值情景分析和催化剂/风险。
+- [新功能] P2 前端展示：新增 apps/dsa-web/src/components/report/ResearchFrameworkPanel.tsx 前端组件，展示六维评分、贝叶斯分析和仓位建议，支持紧凑和完整两种模式。
+- [新功能] P2 产业链数据：新增 data_provider/supply_chain 数据提供模块，包含概念板块（ConceptBoardProvider）、机构持仓（InstitutionalHoldingsProvider）、北向资金（NorthboundFlowProvider）三个数据源，支持 akshare 数据接入和 mock 数据降级。
+- [新功能] P2 产业链 Prompt：新增 src/agents/prompts/supply_chain_prompts.py，包含完整产业链分析 Prompt 模板和 LLM 分析指引。
+- [新功能] P2 LLM 主观评分：新增 src/services/llm_subjective_service.py，实现基于 LiteLLM 的产业链、价值情景、情绪推断等主观评分服务。
+- [新功能] P2 评分服务集成：ResearchScoringService 新增 enrich_with_p2_data 和 process_with_p2_enrichment 方法，支持 P2 数据自动增强和混合评分。
+- [新功能] P1 长线投研框架：新增贝叶斯概率引擎（map_prior/calculate_edge/update_posterior/map_position）、六维评分引擎（产业链/基本面/资金面/技术面/情绪/宏观）、持仓/评分账本（PositionLedger/ScoreLedger）及对应 Repository/Service。
+- [新功能] P1 新增 `/api/v1/research-framework/positions` 持仓 CRUD API、`/api/v1/research-framework/positions/concentration` 集中度查询 API、`/api/v1/research-framework/research/validate` 仓位验证 API。
+- [新功能] P1 将研究框架集成到主分析流程（StockAnalysisPipeline._integrate_research_framework），分析结果包含 research_framework 和 investment_conclusion 字段。
+- [新功能] P1 新增 `ENABLE_RESEARCH_FRAMEWORK` 配置开关，默认启用。
+- [测试] P1 完成 72 项完整验证测试，覆盖贝叶斯引擎、六维评分、指标模块、持久化层、API 端点和主流程集成。
+- [文档] P1 新增长线投研框架实施文档（docs/long-term-research-implementation-v2.md），规划 P1-P4 实施路线。
 - [修复] AlphaSift 热点题材刷新在 EastMoney 瞬断且无缓存时返回友好空态，并让桌面更新保留 AlphaSift 热点缓存。
 - [修复] 问股从历史报告进入后的追问会持续携带当前标的，切回或重载已有会话时可从历史消息恢复基础当前标的，并由后端阻断未明确切换时的错误股票工具调用、交易所片段和指标缩写误路由。
 - [修复] 自选股加入和删除按等价股票代码匹配港股及大小写美股变体，避免 `00700`、`HK00700`、`00700.HK` 或 `aapl`、`AAPL` 被误判为不同标的。

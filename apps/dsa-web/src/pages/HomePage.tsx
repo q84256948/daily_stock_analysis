@@ -957,6 +957,23 @@ const HomePage: React.FC = () => {
                     </svg>
                     {t('home.fullReport')}
                   </Button>
+                  {!isMarketReviewHistoryReport && (
+                    <Button
+                      variant="home-action-ai"
+                      size="sm"
+                      isLoading={watchlistState.isActioning}
+                      onClick={() => watchlistState.toggleWatchlist(selectedReport.meta.stockCode)}
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {watchlistState.isInWatchlist(selectedReport.meta.stockCode) ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        )}
+                      </svg>
+                      {watchlistState.isInWatchlist(selectedReport.meta.stockCode) ? t('report.removeFromWatchlist') : t('report.addToWatchlist')}
+                    </Button>
+                  )}
                 </div>
                 {isHistoryTrendOpen ? (
                   <StockHistoryTrendDrawer

@@ -19,7 +19,17 @@ import logging
 import threading
 import time
 from datetime import datetime, date, timedelta, timezone
-from typing import Optional, List, Dict, Any, TYPE_CHECKING, Tuple, Callable, TypeVar, Union
+from typing import (
+    Optional,
+    List,
+    Dict,
+    Any,
+    TYPE_CHECKING,
+    Tuple,
+    Callable,
+    TypeVar,
+    Union,
+)
 
 import pandas as pd
 from sqlalchemy import (
@@ -81,10 +91,11 @@ def to_utc_naive_datetime(value: datetime) -> datetime:
 
 # === 数据模型定义 ===
 
+
 class DatabaseSchemaMigration(Base):
     """Applied database schema version marker."""
 
-    __tablename__ = 'schema_migrations'
+    __tablename__ = "schema_migrations"
 
     version = Column(String(64), primary_key=True)
     description = Column(String(255), nullable=False)
@@ -94,71 +105,72 @@ class DatabaseSchemaMigration(Base):
 class StockDaily(Base):
     """
     股票日线数据模型
-    
+
     存储每日行情数据和计算的技术指标
     支持多股票、多日期的唯一约束
     """
-    __tablename__ = 'stock_daily'
-    
+
+    __tablename__ = "stock_daily"
+
     # 主键
     id = Column(Integer, primary_key=True, autoincrement=True)
-    
+
     # 股票代码（如 600519, 000001）
     code = Column(String(10), nullable=False, index=True)
-    
+
     # 交易日期
     date = Column(Date, nullable=False, index=True)
-    
+
     # OHLC 数据
     open = Column(Float)
     high = Column(Float)
     low = Column(Float)
     close = Column(Float)
-    
+
     # 成交数据
     volume = Column(Float)  # 成交量（股）
     amount = Column(Float)  # 成交额（元）
     pct_chg = Column(Float)  # 涨跌幅（%）
-    
+
     # 技术指标
     ma5 = Column(Float)
     ma10 = Column(Float)
     ma20 = Column(Float)
     volume_ratio = Column(Float)  # 量比
-    
+
     # 数据来源
     data_source = Column(String(50))  # 记录数据来源（如 AkshareFetcher）
-    
+
     # 更新时间
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    
+
     # 唯一约束：同一股票同一日期只能有一条数据
     __table_args__ = (
-        UniqueConstraint('code', 'date', name='uix_code_date'),
-        Index('ix_code_date', 'code', 'date'),
+        UniqueConstraint("code", "date", name="uix_code_date"),
+        Index("ix_code_date", "code", "date"),
     )
-    
+
     def __repr__(self):
         return f"<StockDaily(code={self.code}, date={self.date}, close={self.close})>"
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
-            'code': self.code,
-            'date': self.date,
-            'open': self.open,
-            'high': self.high,
-            'low': self.low,
-            'close': self.close,
-            'volume': self.volume,
-            'amount': self.amount,
-            'pct_chg': self.pct_chg,
-            'ma5': self.ma5,
-            'ma10': self.ma10,
-            'ma20': self.ma20,
-            'volume_ratio': self.volume_ratio,
-            'data_source': self.data_source,
+            "code": self.code,
+            "date": self.date,
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+            "amount": self.amount,
+            "pct_chg": self.pct_chg,
+            "ma5": self.ma5,
+            "ma10": self.ma10,
+            "ma20": self.ma20,
+            "volume_ratio": self.volume_ratio,
+            "data_source": self.data_source,
         }
 
 
@@ -168,7 +180,8 @@ class NewsIntel(Base):
 
     存储搜索到的新闻情报条目，用于后续分析与查询
     """
-    __tablename__ = 'news_intel'
+
+    __tablename__ = "news_intel"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -180,7 +193,9 @@ class NewsIntel(Base):
     name = Column(String(50))
 
     # 搜索上下文
-    dimension = Column(String(32), index=True)  # latest_news / risk_check / earnings / market_analysis / industry
+    dimension = Column(
+        String(32), index=True
+    )  # latest_news / risk_check / earnings / market_analysis / industry
     query = Column(String(255))
     provider = Column(String(32), index=True)
 
@@ -202,8 +217,8 @@ class NewsIntel(Base):
     requester_query = Column(String(255))
 
     __table_args__ = (
-        UniqueConstraint('url', name='uix_news_url'),
-        Index('ix_news_code_pub', 'code', 'published_date'),
+        UniqueConstraint("url", name="uix_news_url"),
+        Index("ix_news_code_pub", "code", "published_date"),
     )
 
     def __repr__(self) -> str:
@@ -216,7 +231,8 @@ class FundamentalSnapshot(Base):
 
     仅用于写入，主链路不依赖读取该表，便于后续回测/画像扩展。
     """
-    __tablename__ = 'fundamental_snapshot'
+
+    __tablename__ = "fundamental_snapshot"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     query_id = Column(String(64), nullable=False, index=True)
@@ -227,8 +243,8 @@ class FundamentalSnapshot(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        Index('ix_fundamental_snapshot_query_code', 'query_id', 'code'),
-        Index('ix_fundamental_snapshot_created', 'created_at'),
+        Index("ix_fundamental_snapshot_query_code", "query_id", "code"),
+        Index("ix_fundamental_snapshot_created", "created_at"),
     )
 
     def __repr__(self) -> str:
@@ -241,7 +257,8 @@ class AnalysisHistory(Base):
 
     保存每次分析结果，支持按 query_id/股票代码检索
     """
-    __tablename__ = 'analysis_history'
+
+    __tablename__ = "analysis_history"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -270,45 +287,57 @@ class AnalysisHistory(Base):
     stop_loss = Column(Float)
     take_profit = Column(Float)
 
+    # 长线投研框架（P1 新增）
+    research_framework = Column(Text)
+
+    # 五段式长线投研报告（P1-P2 新增）
+    bayesian_framework = Column(Text)
+    supply_chain = Column(Text)
+    value_scenarios = Column(Text)
+    investment_conclusion = Column(Text)
+
     created_at = Column(DateTime, default=datetime.now, index=True)
 
-    __table_args__ = (
-        Index('ix_analysis_code_time', 'code', 'created_at'),
-    )
+    __table_args__ = (Index("ix_analysis_code_time", "code", "created_at"),)
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
-            'id': self.id,
-            'query_id': self.query_id,
-            'code': self.code,
-            'name': self.name,
-            'report_type': self.report_type,
-            'sentiment_score': self.sentiment_score,
-            'operation_advice': self.operation_advice,
-            'trend_prediction': self.trend_prediction,
-            'analysis_summary': self.analysis_summary,
-            'raw_result': self.raw_result,
-            'news_content': self.news_content,
-            'context_snapshot': self.context_snapshot,
-            'ideal_buy': self.ideal_buy,
-            'secondary_buy': self.secondary_buy,
-            'stop_loss': self.stop_loss,
-            'take_profit': self.take_profit,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            "id": self.id,
+            "query_id": self.query_id,
+            "code": self.code,
+            "name": self.name,
+            "report_type": self.report_type,
+            "sentiment_score": self.sentiment_score,
+            "operation_advice": self.operation_advice,
+            "trend_prediction": self.trend_prediction,
+            "analysis_summary": self.analysis_summary,
+            "raw_result": self.raw_result,
+            "news_content": self.news_content,
+            "context_snapshot": self.context_snapshot,
+            "ideal_buy": self.ideal_buy,
+            "secondary_buy": self.secondary_buy,
+            "stop_loss": self.stop_loss,
+            "take_profit": self.take_profit,
+            "research_framework": self.research_framework,
+            "bayesian_framework": self.bayesian_framework,
+            "supply_chain": self.supply_chain,
+            "value_scenarios": self.value_scenarios,
+            "investment_conclusion": self.investment_conclusion,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
 class BacktestResult(Base):
     """单条分析记录的回测结果。"""
 
-    __tablename__ = 'backtest_results'
+    __tablename__ = "backtest_results"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     analysis_history_id = Column(
         Integer,
-        ForeignKey('analysis_history.id'),
+        ForeignKey("analysis_history.id"),
         nullable=False,
         index=True,
     )
@@ -319,10 +348,10 @@ class BacktestResult(Base):
 
     # 回测参数
     eval_window_days = Column(Integer, nullable=False, default=10)
-    engine_version = Column(String(16), nullable=False, default='v1')
+    engine_version = Column(String(16), nullable=False, default="v1")
 
     # 状态
-    eval_status = Column(String(16), nullable=False, default='pending')
+    eval_status = Column(String(16), nullable=False, default="pending")
     evaluated_at = Column(DateTime, default=datetime.now, index=True)
 
     # 建议快照（避免未来分析字段变化导致回测不可解释）
@@ -346,31 +375,35 @@ class BacktestResult(Base):
     take_profit = Column(Float)
     hit_stop_loss = Column(Boolean)
     hit_take_profit = Column(Boolean)
-    first_hit = Column(String(16))  # take_profit/stop_loss/ambiguous/neither/not_applicable
+    first_hit = Column(
+        String(16)
+    )  # take_profit/stop_loss/ambiguous/neither/not_applicable
     first_hit_date = Column(Date)
     first_hit_trading_days = Column(Integer)
 
     # 模拟执行（long-only）
     simulated_entry_price = Column(Float)
     simulated_exit_price = Column(Float)
-    simulated_exit_reason = Column(String(24))  # stop_loss/take_profit/window_end/cash/ambiguous_stop_loss
+    simulated_exit_reason = Column(
+        String(24)
+    )  # stop_loss/take_profit/window_end/cash/ambiguous_stop_loss
     simulated_return_pct = Column(Float)
 
     __table_args__ = (
         UniqueConstraint(
-            'analysis_history_id',
-            'eval_window_days',
-            'engine_version',
-            name='uix_backtest_analysis_window_version',
+            "analysis_history_id",
+            "eval_window_days",
+            "engine_version",
+            name="uix_backtest_analysis_window_version",
         ),
-        Index('ix_backtest_code_date', 'code', 'analysis_date'),
+        Index("ix_backtest_code_date", "code", "analysis_date"),
     )
 
 
 class BacktestSummary(Base):
     """回测汇总指标（按股票或全局）。"""
 
-    __tablename__ = 'backtest_summaries'
+    __tablename__ = "backtest_summaries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
 
@@ -378,7 +411,7 @@ class BacktestSummary(Base):
     code = Column(String(16), index=True)
 
     eval_window_days = Column(Integer, nullable=False, default=10)
-    engine_version = Column(String(16), nullable=False, default='v1')
+    engine_version = Column(String(16), nullable=False, default="v1")
     computed_at = Column(DateTime, default=datetime.now, index=True)
 
     # 计数
@@ -413,11 +446,11 @@ class BacktestSummary(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            'scope',
-            'code',
-            'eval_window_days',
-            'engine_version',
-            name='uix_backtest_summary_scope_code_window_version',
+            "scope",
+            "code",
+            "eval_window_days",
+            "engine_version",
+            name="uix_backtest_summary_scope_code_window_version",
         ),
     )
 
@@ -425,34 +458,36 @@ class BacktestSummary(Base):
 class PortfolioAccount(Base):
     """Portfolio account metadata."""
 
-    __tablename__ = 'portfolio_accounts'
+    __tablename__ = "portfolio_accounts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     owner_id = Column(String(64), index=True)
     name = Column(String(64), nullable=False)
     broker = Column(String(64))
-    market = Column(String(8), nullable=False, default='cn', index=True)  # cn/hk/us
-    base_currency = Column(String(8), nullable=False, default='CNY')
+    market = Column(String(8), nullable=False, default="cn", index=True)  # cn/hk/us
+    base_currency = Column(String(8), nullable=False, default="CNY")
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, default=datetime.now, index=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
-        Index('ix_portfolio_account_owner_active', 'owner_id', 'is_active'),
+        Index("ix_portfolio_account_owner_active", "owner_id", "is_active"),
     )
 
 
 class PortfolioTrade(Base):
     """Executed trade events used as the source of truth for replay."""
 
-    __tablename__ = 'portfolio_trades'
+    __tablename__ = "portfolio_trades"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
     trade_uid = Column(String(128))
     symbol = Column(String(16), nullable=False, index=True)
-    market = Column(String(8), nullable=False, default='cn')
-    currency = Column(String(8), nullable=False, default='CNY')
+    market = Column(String(8), nullable=False, default="cn")
+    currency = Column(String(8), nullable=False, default="CNY")
     trade_date = Column(Date, nullable=False, index=True)
     side = Column(String(8), nullable=False)  # buy/sell
     quantity = Column(Float, nullable=False)
@@ -464,41 +499,47 @@ class PortfolioTrade(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        UniqueConstraint('account_id', 'trade_uid', name='uix_portfolio_trade_uid'),
-        UniqueConstraint('account_id', 'dedup_hash', name='uix_portfolio_trade_dedup_hash'),
-        Index('ix_portfolio_trade_account_date', 'account_id', 'trade_date'),
+        UniqueConstraint("account_id", "trade_uid", name="uix_portfolio_trade_uid"),
+        UniqueConstraint(
+            "account_id", "dedup_hash", name="uix_portfolio_trade_dedup_hash"
+        ),
+        Index("ix_portfolio_trade_account_date", "account_id", "trade_date"),
     )
 
 
 class PortfolioCashLedger(Base):
     """Cash in/out events."""
 
-    __tablename__ = 'portfolio_cash_ledger'
+    __tablename__ = "portfolio_cash_ledger"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
     event_date = Column(Date, nullable=False, index=True)
     direction = Column(String(8), nullable=False)  # in/out
     amount = Column(Float, nullable=False)
-    currency = Column(String(8), nullable=False, default='CNY')
+    currency = Column(String(8), nullable=False, default="CNY")
     note = Column(String(255))
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        Index('ix_portfolio_cash_account_date', 'account_id', 'event_date'),
+        Index("ix_portfolio_cash_account_date", "account_id", "event_date"),
     )
 
 
 class PortfolioCorporateAction(Base):
     """Corporate actions that impact cash or share quantity."""
 
-    __tablename__ = 'portfolio_corporate_actions'
+    __tablename__ = "portfolio_corporate_actions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
     symbol = Column(String(16), nullable=False, index=True)
-    market = Column(String(8), nullable=False, default='cn')
-    currency = Column(String(8), nullable=False, default='CNY')
+    market = Column(String(8), nullable=False, default="cn")
+    currency = Column(String(8), nullable=False, default="CNY")
     effective_date = Column(Date, nullable=False, index=True)
     action_type = Column(String(24), nullable=False)  # cash_dividend/split_adjustment
     cash_dividend_per_share = Column(Float)
@@ -507,38 +548,42 @@ class PortfolioCorporateAction(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        Index('ix_portfolio_ca_account_date', 'account_id', 'effective_date'),
+        Index("ix_portfolio_ca_account_date", "account_id", "effective_date"),
     )
 
 
 class PortfolioPosition(Base):
     """Latest replayed position snapshot for each symbol in one account."""
 
-    __tablename__ = 'portfolio_positions'
+    __tablename__ = "portfolio_positions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
-    cost_method = Column(String(8), nullable=False, default='fifo')
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
+    cost_method = Column(String(8), nullable=False, default="fifo")
     symbol = Column(String(16), nullable=False, index=True)
-    market = Column(String(8), nullable=False, default='cn')
-    currency = Column(String(8), nullable=False, default='CNY')
+    market = Column(String(8), nullable=False, default="cn")
+    currency = Column(String(8), nullable=False, default="CNY")
     quantity = Column(Float, nullable=False, default=0.0)
     avg_cost = Column(Float, nullable=False, default=0.0)
     total_cost = Column(Float, nullable=False, default=0.0)
     last_price = Column(Float, nullable=False, default=0.0)
     market_value_base = Column(Float, nullable=False, default=0.0)
     unrealized_pnl_base = Column(Float, nullable=False, default=0.0)
-    valuation_currency = Column(String(8), nullable=False, default='CNY')
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    valuation_currency = Column(String(8), nullable=False, default="CNY")
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now, index=True
+    )
 
     __table_args__ = (
         UniqueConstraint(
-            'account_id',
-            'symbol',
-            'market',
-            'currency',
-            'cost_method',
-            name='uix_portfolio_position_account_symbol_market_currency',
+            "account_id",
+            "symbol",
+            "market",
+            "currency",
+            "cost_method",
+            name="uix_portfolio_position_account_symbol_market_currency",
         ),
     )
 
@@ -546,35 +591,39 @@ class PortfolioPosition(Base):
 class PortfolioPositionLot(Base):
     """Lot-level remaining quantities used by FIFO replay."""
 
-    __tablename__ = 'portfolio_position_lots'
+    __tablename__ = "portfolio_position_lots"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
-    cost_method = Column(String(8), nullable=False, default='fifo')
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
+    cost_method = Column(String(8), nullable=False, default="fifo")
     symbol = Column(String(16), nullable=False, index=True)
-    market = Column(String(8), nullable=False, default='cn')
-    currency = Column(String(8), nullable=False, default='CNY')
+    market = Column(String(8), nullable=False, default="cn")
+    currency = Column(String(8), nullable=False, default="CNY")
     open_date = Column(Date, nullable=False, index=True)
     remaining_quantity = Column(Float, nullable=False, default=0.0)
     unit_cost = Column(Float, nullable=False, default=0.0)
-    source_trade_id = Column(Integer, ForeignKey('portfolio_trades.id'))
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
-
-    __table_args__ = (
-        Index('ix_portfolio_lot_account_symbol', 'account_id', 'symbol'),
+    source_trade_id = Column(Integer, ForeignKey("portfolio_trades.id"))
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now, index=True
     )
+
+    __table_args__ = (Index("ix_portfolio_lot_account_symbol", "account_id", "symbol"),)
 
 
 class PortfolioDailySnapshot(Base):
     """Daily account snapshot generated by read-time replay."""
 
-    __tablename__ = 'portfolio_daily_snapshots'
+    __tablename__ = "portfolio_daily_snapshots"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer, ForeignKey('portfolio_accounts.id'), nullable=False, index=True)
+    account_id = Column(
+        Integer, ForeignKey("portfolio_accounts.id"), nullable=False, index=True
+    )
     snapshot_date = Column(Date, nullable=False, index=True)
-    cost_method = Column(String(8), nullable=False, default='fifo')  # fifo/avg
-    base_currency = Column(String(8), nullable=False, default='CNY')
+    cost_method = Column(String(8), nullable=False, default="fifo")  # fifo/avg
+    base_currency = Column(String(8), nullable=False, default="CNY")
     total_cash = Column(Float, nullable=False, default=0.0)
     total_market_value = Column(Float, nullable=False, default=0.0)
     total_equity = Column(Float, nullable=False, default=0.0)
@@ -589,10 +638,10 @@ class PortfolioDailySnapshot(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            'account_id',
-            'snapshot_date',
-            'cost_method',
-            name='uix_portfolio_snapshot_account_date_method',
+            "account_id",
+            "snapshot_date",
+            "cost_method",
+            name="uix_portfolio_snapshot_account_date_method",
         ),
     )
 
@@ -600,23 +649,23 @@ class PortfolioDailySnapshot(Base):
 class PortfolioFxRate(Base):
     """Cached FX rates used for cross-currency portfolio conversion."""
 
-    __tablename__ = 'portfolio_fx_rates'
+    __tablename__ = "portfolio_fx_rates"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     from_currency = Column(String(8), nullable=False, index=True)
     to_currency = Column(String(8), nullable=False, index=True)
     rate_date = Column(Date, nullable=False, index=True)
     rate = Column(Float, nullable=False)
-    source = Column(String(32), nullable=False, default='manual')
+    source = Column(String(32), nullable=False, default="manual")
     is_stale = Column(Boolean, nullable=False, default=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     __table_args__ = (
         UniqueConstraint(
-            'from_currency',
-            'to_currency',
-            'rate_date',
-            name='uix_portfolio_fx_pair_date',
+            "from_currency",
+            "to_currency",
+            "rate_date",
+            name="uix_portfolio_fx_pair_date",
         ),
     )
 
@@ -625,7 +674,8 @@ class ConversationMessage(Base):
     """
     Agent 对话历史记录表
     """
-    __tablename__ = 'conversation_messages'
+
+    __tablename__ = "conversation_messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), index=True, nullable=False)
@@ -637,7 +687,7 @@ class ConversationMessage(Base):
 class ConversationSummary(Base):
     """Rolling summary for visible Agent chat history."""
 
-    __tablename__ = 'conversation_summaries'
+    __tablename__ = "conversation_summaries"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, unique=True, index=True)
@@ -646,13 +696,15 @@ class ConversationSummary(Base):
     source_message_count = Column(Integer, nullable=False, default=0)
     estimated_tokens = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.now, index=True)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now, index=True
+    )
 
 
 class AgentProviderTurn(Base):
     """Provider protocol trace required for thinking/tool-call roundtrip."""
 
-    __tablename__ = 'agent_provider_turns'
+    __tablename__ = "agent_provider_turns"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     session_id = Column(String(100), nullable=False, index=True)
@@ -670,14 +722,20 @@ class AgentProviderTurn(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        Index('ix_agent_provider_turn_bucket', 'session_id', 'provider', 'model', 'must_roundtrip'),
+        Index(
+            "ix_agent_provider_turn_bucket",
+            "session_id",
+            "provider",
+            "model",
+            "must_roundtrip",
+        ),
     )
 
 
 class LLMUsage(Base):
     """One row per litellm.completion() call — token-usage audit log."""
 
-    __tablename__ = 'llm_usage'
+    __tablename__ = "llm_usage"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     # 'analysis' | 'agent' | 'market_review'
@@ -775,25 +833,27 @@ _LLM_USAGE_DROPPED_FREE_TEXT_COLUMNS = {"tokenizer_name", "tokenizer_version"}
 class AlertRuleRecord(Base):
     """Persisted alert rule managed through the Alert API."""
 
-    __tablename__ = 'alert_rules'
+    __tablename__ = "alert_rules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(64), nullable=False)
-    target_scope = Column(String(32), nullable=False, default='single_symbol', index=True)
+    target_scope = Column(
+        String(32), nullable=False, default="single_symbol", index=True
+    )
     target = Column(String(64), nullable=False, index=True)
     alert_type = Column(String(32), nullable=False, index=True)
-    parameters = Column(Text, nullable=False, default='{}')
-    severity = Column(String(16), nullable=False, default='warning', index=True)
+    parameters = Column(Text, nullable=False, default="{}")
+    severity = Column(String(16), nullable=False, default="warning", index=True)
     enabled = Column(Boolean, nullable=False, default=True, index=True)
-    source = Column(String(16), nullable=False, default='api', index=True)
+    source = Column(String(16), nullable=False, default="api", index=True)
     cooldown_policy = Column(Text)
     notification_policy = Column(Text)
     created_at = Column(DateTime, default=datetime.now, index=True)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
-
-    __table_args__ = (
-        Index('ix_alert_rule_type_target', 'alert_type', 'target'),
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now, index=True
     )
+
+    __table_args__ = (Index("ix_alert_rule_type_target", "alert_type", "target"),)
 
 
 class AlertTriggerRecord(Base):
@@ -803,7 +863,7 @@ class AlertTriggerRecord(Base):
     later phases.
     """
 
-    __tablename__ = 'alert_triggers'
+    __tablename__ = "alert_triggers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     rule_id = Column(Integer, index=True)
@@ -814,12 +874,10 @@ class AlertTriggerRecord(Base):
     data_source = Column(String(64))
     data_timestamp = Column(DateTime, index=True)
     triggered_at = Column(DateTime, default=datetime.now, index=True)
-    status = Column(String(16), nullable=False, default='triggered', index=True)
+    status = Column(String(16), nullable=False, default="triggered", index=True)
     diagnostics = Column(Text)
 
-    __table_args__ = (
-        Index('ix_alert_trigger_rule_time', 'rule_id', 'triggered_at'),
-    )
+    __table_args__ = (Index("ix_alert_trigger_rule_time", "rule_id", "triggered_at"),)
 
 
 class AlertNotificationRecord(Base):
@@ -829,7 +887,7 @@ class AlertNotificationRecord(Base):
     later phases.
     """
 
-    __tablename__ = 'alert_notifications'
+    __tablename__ = "alert_notifications"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     trigger_id = Column(Integer, index=True)
@@ -843,36 +901,43 @@ class AlertNotificationRecord(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
-        Index('ix_alert_notification_trigger_channel', 'trigger_id', 'channel'),
+        Index("ix_alert_notification_trigger_channel", "trigger_id", "channel"),
     )
 
 
 class AlertCooldownRecord(Base):
     """Persisted alert cooldown state for DB-managed alert rules."""
 
-    __tablename__ = 'alert_cooldowns'
+    __tablename__ = "alert_cooldowns"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     rule_id = Column(Integer, index=True)
     # Reserved for future non-DB/expanded-scope rules; P4 queries by rule_id.
     rule_key = Column(String(255), index=True)
     target = Column(String(64), nullable=False, index=True)
-    severity = Column(String(16), nullable=False, default='warning', index=True)
+    severity = Column(String(16), nullable=False, default="warning", index=True)
     last_triggered_at = Column(DateTime, index=True)
     cooldown_until = Column(DateTime, index=True)
     reason = Column(Text)
-    state = Column(String(16), nullable=False, default='active', index=True)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    state = Column(String(16), nullable=False, default="active", index=True)
+    updated_at = Column(
+        DateTime, default=datetime.now, onupdate=datetime.now, index=True
+    )
 
     __table_args__ = (
-        UniqueConstraint('rule_id', 'target', 'severity', name='uix_alert_cooldown_rule_target_severity'),
+        UniqueConstraint(
+            "rule_id",
+            "target",
+            "severity",
+            name="uix_alert_cooldown_rule_target_severity",
+        ),
     )
 
 
 class DecisionSignalRecord(Base):
     """Persisted AI decision signal asset for Issue #1390 P1."""
 
-    __tablename__ = 'decision_signals'
+    __tablename__ = "decision_signals"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     stock_code = Column(String(16), nullable=False, index=True)
@@ -900,35 +965,41 @@ class DecisionSignalRecord(Base):
     catalyst_summary = Column(Text)
     evidence_json = Column(Text)
     data_quality_summary_json = Column(Text)
-    plan_quality = Column(String(16), nullable=False, default='unknown', index=True)
-    status = Column(String(16), nullable=False, default='active', index=True)
+    plan_quality = Column(String(16), nullable=False, default="unknown", index=True)
+    status = Column(String(16), nullable=False, default="active", index=True)
     expires_at = Column(DateTime, index=True)
     created_at = Column(DateTime, default=utc_naive_now, index=True)
-    updated_at = Column(DateTime, default=utc_naive_now, onupdate=utc_naive_now, index=True)
+    updated_at = Column(
+        DateTime, default=utc_naive_now, onupdate=utc_naive_now, index=True
+    )
     metadata_json = Column(Text)
 
     __table_args__ = (
-        Index('ix_decision_signal_stock_status_time', 'stock_code', 'status', 'created_at'),
-        Index('ix_decision_signal_market_status_time', 'market', 'status', 'created_at'),
         Index(
-            'ix_decision_signal_report_type_market_stock_action_horizon_phase',
-            'source_report_id',
-            'source_type',
-            'market',
-            'stock_code',
-            'action',
-            'horizon',
-            'market_phase',
+            "ix_decision_signal_stock_status_time", "stock_code", "status", "created_at"
         ),
         Index(
-            'ix_decision_signal_trace_type_market_stock_action_horizon_phase',
-            'trace_id',
-            'source_type',
-            'market',
-            'stock_code',
-            'action',
-            'horizon',
-            'market_phase',
+            "ix_decision_signal_market_status_time", "market", "status", "created_at"
+        ),
+        Index(
+            "ix_decision_signal_report_type_market_stock_action_horizon_phase",
+            "source_report_id",
+            "source_type",
+            "market",
+            "stock_code",
+            "action",
+            "horizon",
+            "market_phase",
+        ),
+        Index(
+            "ix_decision_signal_trace_type_market_stock_action_horizon_phase",
+            "trace_id",
+            "source_type",
+            "market",
+            "stock_code",
+            "action",
+            "horizon",
+            "market_phase",
         ),
     )
 
@@ -944,32 +1015,32 @@ class _DatabaseManagerMeta(type):
 class DatabaseManager(metaclass=_DatabaseManagerMeta):
     """
     数据库管理器 - 单例模式
-    
+
     职责：
     1. 管理数据库连接池
     2. 提供 Session 上下文管理
     3. 封装数据存取操作
     """
-    
-    _instance: Optional['DatabaseManager'] = None
+
+    _instance: Optional["DatabaseManager"] = None
     _init_lock = threading.RLock()
     _initialized: bool = False
-    
+
     def __new__(cls, *args, **kwargs):
         """单例模式实现"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self, db_url: Optional[str] = None):
         """
         初始化数据库管理器
-        
+
         Args:
             db_url: 数据库连接 URL（可选，默认从配置读取）
         """
-        if getattr(self, '_initialized', False):
+        if getattr(self, "_initialized", False):
             return
 
         created_engine = None
@@ -1000,8 +1071,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 **engine_kwargs,
             )
             self._engine = created_engine
-            self._is_sqlite_engine = self._engine.url.get_backend_name() == 'sqlite'
-            self._sqlite_file_db = self._is_sqlite_engine and self._is_file_sqlite_database()
+            self._is_sqlite_engine = self._engine.url.get_backend_name() == "sqlite"
+            self._sqlite_file_db = (
+                self._is_sqlite_engine and self._is_file_sqlite_database()
+            )
             self._install_sqlite_pragma_handler()
 
             # 创建 Session 工厂
@@ -1010,6 +1083,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 autocommit=False,
                 autoflush=False,
             )
+
+            # 确保所有表模型被导入（包含台账表）
+            from src.repositories.position_ledger_repo import PositionLedger
+            from src.repositories.score_ledger_repo import ScoreLedger
+            from src.repositories.belief_ledger_repo import BeliefLedger
 
             # 创建所有表
             Base.metadata.create_all(self._engine)
@@ -1045,12 +1123,16 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 statement = statement.on_conflict_do_nothing(index_elements=["version"])
                 session.execute(statement)
             else:
-                session.execute(DatabaseSchemaMigration.__table__.insert().values(**values))
+                session.execute(
+                    DatabaseSchemaMigration.__table__.insert().values(**values)
+                )
             session.commit()
         except IntegrityError:
             session.rollback()
             with self._SessionLocal() as verify_session:
-                existing = verify_session.get(DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION)
+                existing = verify_session.get(
+                    DatabaseSchemaMigration, CURRENT_SCHEMA_VERSION
+                )
             if existing is None:
                 raise
         except Exception:
@@ -1094,7 +1176,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                         existing.add(column)
                         break
                     if self._is_sqlite_locked_error(exc) and attempt < max_retries:
-                        delay = self._sqlite_write_retry_base_delay * (2 ** attempt)
+                        delay = self._sqlite_write_retry_base_delay * (2**attempt)
                         logger.warning(
                             "[LLM usage] SQLite telemetry column backfill locked, "
                             "retrying: %s (%s/%s, %.2fs)",
@@ -1109,19 +1191,22 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     raise
 
     @classmethod
-    def get_instance(cls) -> 'DatabaseManager':
+    def get_instance(cls) -> "DatabaseManager":
         """获取单例实例"""
         with cls._init_lock:
             if cls._instance is None:
                 cls()
             return cls._instance
-    
+
     @classmethod
     def reset_instance(cls) -> None:
         """重置单例（用于测试）"""
         with cls._init_lock:
             if cls._instance is not None:
-                if hasattr(cls._instance, '_engine') and cls._instance._engine is not None:
+                if (
+                    hasattr(cls._instance, "_engine")
+                    and cls._instance._engine is not None
+                ):
                     cls._instance._engine.dispose()
                 cls._instance._initialized = False
                 cls._instance = None
@@ -1152,7 +1237,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
             cursor = dbapi_connection.cursor()
             try:
-                cursor.execute(f"PRAGMA busy_timeout={int(self._sqlite_busy_timeout_ms)}")
+                cursor.execute(
+                    f"PRAGMA busy_timeout={int(self._sqlite_busy_timeout_ms)}"
+                )
                 if self._sqlite_file_db and self._sqlite_wal_enabled:
                     cursor.execute("PRAGMA journal_mode=WAL")
             except Exception as exc:
@@ -1189,7 +1276,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     and self._is_sqlite_locked_error(exc)
                     and attempt < max_retries
                 ):
-                    delay = self._sqlite_write_retry_base_delay * (2 ** attempt)
+                    delay = self._sqlite_write_retry_base_delay * (2**attempt)
                     logger.warning(
                         "SQLite 写入锁冲突，准备重试: %s (%s/%s, %.2fs)",
                         operation_name,
@@ -1227,7 +1314,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
     @staticmethod
     def _normalize_daily_date(value: Any) -> Any:
         if isinstance(value, str):
-            return datetime.strptime(value, '%Y-%m-%d').date()
+            return datetime.strptime(value, "%Y-%m-%d").date()
         if isinstance(value, pd.Timestamp):
             return value.date()
         if isinstance(value, datetime):
@@ -1237,17 +1324,19 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
     @staticmethod
     def _normalize_sql_value(value: Any) -> Any:
         return None if pd.isna(value) else value
-    
+
     def get_session(self) -> Session:
         """
         获取数据库 Session
-        
+
         使用示例:
             with db.get_session() as session:
                 # 执行查询
                 session.commit()  # 如果需要
         """
-        if not getattr(self, '_initialized', False) or not hasattr(self, '_SessionLocal'):
+        if not getattr(self, "_initialized", False) or not hasattr(
+            self, "_SessionLocal"
+        ):
             raise RuntimeError(
                 "DatabaseManager 未正确初始化。"
                 "请确保通过 DatabaseManager.get_instance() 获取实例。"
@@ -1271,17 +1360,17 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             raise
         finally:
             session.close()
-    
+
     def has_today_data(self, code: str, target_date: Optional[date] = None) -> bool:
         """
         检查是否已有指定日期的数据
-        
+
         用于断点续传逻辑：如果已有数据则跳过网络请求
-        
+
         Args:
             code: 股票代码
             target_date: 目标日期（默认今天）
-            
+
         Returns:
             是否存在数据
         """
@@ -1290,44 +1379,41 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         # 注意：这里的 target_date 语义是“自然日”，而不是“最新交易日”。
         # 在周末/节假日/非交易日运行时，即使数据库已有最新交易日数据，这里也会返回 False。
         # 该行为目前保留（按需求不改逻辑）。
-        
+
         with self.get_session() as session:
             result = session.execute(
                 select(StockDaily).where(
-                    and_(
-                        StockDaily.code == code,
-                        StockDaily.date == target_date
-                    )
+                    and_(StockDaily.code == code, StockDaily.date == target_date)
                 )
             ).scalar_one_or_none()
-            
+
             return result is not None
-    
-    def get_latest_data(
-        self, 
-        code: str, 
-        days: int = 2
-    ) -> List[StockDaily]:
+
+    def get_latest_data(self, code: str, days: int = 2) -> List[StockDaily]:
         """
         获取最近 N 天的数据
-        
+
         用于计算"相比昨日"的变化
-        
+
         Args:
             code: 股票代码
             days: 获取天数
-            
+
         Returns:
             StockDaily 对象列表（按日期降序）
         """
         with self.get_session() as session:
-            results = session.execute(
-                select(StockDaily)
-                .where(StockDaily.code == code)
-                .order_by(desc(StockDaily.date))
-                .limit(days)
-            ).scalars().all()
-            
+            results = (
+                session.execute(
+                    select(StockDaily)
+                    .where(StockDaily.code == code)
+                    .order_by(desc(StockDaily.date))
+                    .limit(days)
+                )
+                .scalars()
+                .all()
+            )
+
             return list(results)
 
     def save_news_intel(
@@ -1336,8 +1422,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         name: str,
         dimension: str,
         query: str,
-        response: 'SearchResponse',
-        query_context: Optional[Dict[str, str]] = None
+        response: "SearchResponse",
+        query_context: Optional[Dict[str, str]] = None,
     ) -> int:
         """
         保存新闻情报到数据库
@@ -1360,20 +1446,17 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             local_saved_count = 0
 
             for item in response.results:
-                title = (item.title or '').strip()
-                url = (item.url or '').strip()
-                source = (item.source or '').strip()
-                snippet = (item.snippet or '').strip()
+                title = (item.title or "").strip()
+                url = (item.url or "").strip()
+                source = (item.source or "").strip()
+                snippet = (item.snippet or "").strip()
                 published_date = self._parse_published_date(item.published_date)
 
                 if not title and not url:
                     continue
 
                 url_key = url or self._build_fallback_url_key(
-                    code=code,
-                    title=title,
-                    source=source,
-                    published_date=published_date
+                    code=code, title=title, source=source, published_date=published_date
                 )
 
                 existing = session.execute(
@@ -1397,22 +1480,28 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                             query_context.get("query_source") or existing.query_source
                         )
                         existing.requester_platform = (
-                            query_context.get("requester_platform") or existing.requester_platform
+                            query_context.get("requester_platform")
+                            or existing.requester_platform
                         )
                         existing.requester_user_id = (
-                            query_context.get("requester_user_id") or existing.requester_user_id
+                            query_context.get("requester_user_id")
+                            or existing.requester_user_id
                         )
                         existing.requester_user_name = (
-                            query_context.get("requester_user_name") or existing.requester_user_name
+                            query_context.get("requester_user_name")
+                            or existing.requester_user_name
                         )
                         existing.requester_chat_id = (
-                            query_context.get("requester_chat_id") or existing.requester_chat_id
+                            query_context.get("requester_chat_id")
+                            or existing.requester_chat_id
                         )
                         existing.requester_message_id = (
-                            query_context.get("requester_message_id") or existing.requester_message_id
+                            query_context.get("requester_message_id")
+                            or existing.requester_message_id
                         )
                         existing.requester_query = (
-                            query_context.get("requester_query") or existing.requester_query
+                            query_context.get("requester_query")
+                            or existing.requester_query
                         )
                     continue
 
@@ -1474,6 +1563,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return 0
 
         try:
+
             def _write(session: Session) -> int:
                 session.add(
                     FundamentalSnapshot(
@@ -1485,6 +1575,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     )
                 )
                 return 1
+
             return self._run_write_transaction(
                 f"save_fundamental_snapshot[{query_id}:{code}]",
                 _write,
@@ -1541,28 +1632,35 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             except Exception:
                 return None
 
-    def get_recent_news(self, code: str, days: int = 7, limit: int = 20) -> List[NewsIntel]:
+    def get_recent_news(
+        self, code: str, days: int = 7, limit: int = 20
+    ) -> List[NewsIntel]:
         """
         获取指定股票最近 N 天的新闻情报
         """
         cutoff_date = datetime.now() - timedelta(days=days)
 
         with self.get_session() as session:
-            results = session.execute(
-                select(NewsIntel)
-                .where(
-                    and_(
-                        NewsIntel.code == code,
-                        NewsIntel.fetched_at >= cutoff_date
+            results = (
+                session.execute(
+                    select(NewsIntel)
+                    .where(
+                        and_(
+                            NewsIntel.code == code, NewsIntel.fetched_at >= cutoff_date
+                        )
                     )
+                    .order_by(desc(NewsIntel.fetched_at))
+                    .limit(limit)
                 )
-                .order_by(desc(NewsIntel.fetched_at))
-                .limit(limit)
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             return list(results)
 
-    def get_news_intel_by_query_id(self, query_id: str, limit: int = 20) -> List[NewsIntel]:
+    def get_news_intel_by_query_id(
+        self, query_id: str, limit: int = 20
+    ) -> List[NewsIntel]:
         """
         根据 query_id 获取新闻情报列表
 
@@ -1576,15 +1674,23 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         from sqlalchemy import func
 
         with self.get_session() as session:
-            results = session.execute(
-                select(NewsIntel)
-                .where(NewsIntel.query_id == query_id)
-                .order_by(
-                    desc(func.coalesce(NewsIntel.published_date, NewsIntel.fetched_at)),
-                    desc(NewsIntel.fetched_at)
+            results = (
+                session.execute(
+                    select(NewsIntel)
+                    .where(NewsIntel.query_id == query_id)
+                    .order_by(
+                        desc(
+                            func.coalesce(
+                                NewsIntel.published_date, NewsIntel.fetched_at
+                            )
+                        ),
+                        desc(NewsIntel.fetched_at),
+                    )
+                    .limit(limit)
                 )
-                .limit(limit)
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             return list(results)
 
@@ -1595,7 +1701,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         report_type: str,
         news_content: Optional[str],
         context_snapshot: Optional[Dict[str, Any]] = None,
-        save_snapshot: bool = True
+        save_snapshot: bool = True,
     ) -> int:
         """
         保存分析结果历史记录。
@@ -1613,6 +1719,35 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             context_text = self._safe_json_dumps(context_snapshot)
 
         try:
+            research_framework_text = None
+            if hasattr(result, "research_framework") and result.research_framework:
+                research_framework_text = self._safe_json_dumps(
+                    result.research_framework
+                )
+
+            bayesian_framework_text = None
+            if hasattr(result, "bayesian_framework") and result.bayesian_framework:
+                bayesian_framework_text = self._safe_json_dumps(
+                    result.bayesian_framework
+                )
+
+            supply_chain_text = None
+            if hasattr(result, "supply_chain") and result.supply_chain:
+                supply_chain_text = self._safe_json_dumps(result.supply_chain)
+
+            value_scenarios_text = None
+            if hasattr(result, "value_scenarios") and result.value_scenarios:
+                value_scenarios_text = self._safe_json_dumps(result.value_scenarios)
+
+            investment_conclusion_text = None
+            if (
+                hasattr(result, "investment_conclusion")
+                and result.investment_conclusion
+            ):
+                investment_conclusion_text = self._safe_json_dumps(
+                    result.investment_conclusion
+                )
+
             def _write(session: Session) -> int:
                 history = AnalysisHistory(
                     query_id=query_id,
@@ -1630,11 +1765,17 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     secondary_buy=sniper_points.get("secondary_buy"),
                     stop_loss=sniper_points.get("stop_loss"),
                     take_profit=sniper_points.get("take_profit"),
+                    research_framework=research_framework_text,
+                    bayesian_framework=bayesian_framework_text,
+                    supply_chain=supply_chain_text,
+                    value_scenarios=value_scenarios_text,
+                    investment_conclusion=investment_conclusion_text,
                     created_at=datetime.now(),
                 )
                 session.add(history)
                 session.flush()
                 return int(history.id or 0)
+
             return self._run_write_transaction(
                 f"save_analysis_history[{result.code}]",
                 _write,
@@ -1661,17 +1802,22 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return 0
 
         try:
+
             def _write(session: Session) -> int:
                 conditions = [AnalysisHistory.query_id == query_id]
                 if code:
                     conditions.append(AnalysisHistory.code == code)
 
-                row = session.execute(
-                    select(AnalysisHistory)
-                    .where(and_(*conditions))
-                    .order_by(desc(AnalysisHistory.created_at))
-                    .limit(1)
-                ).scalars().first()
+                row = (
+                    session.execute(
+                        select(AnalysisHistory)
+                        .where(and_(*conditions))
+                        .order_by(desc(AnalysisHistory.created_at))
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
                 if row is None:
                     return 0
 
@@ -1755,12 +1901,16 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             if exclude_query_id and not query_id:
                 conditions.append(AnalysisHistory.query_id != exclude_query_id)
 
-            results = session.execute(
-                select(AnalysisHistory)
-                .where(and_(*conditions))
-                .order_by(desc(AnalysisHistory.created_at))
-                .limit(limit)
-            ).scalars().all()
+            results = (
+                session.execute(
+                    select(AnalysisHistory)
+                    .where(and_(*conditions))
+                    .order_by(desc(AnalysisHistory.created_at))
+                    .limit(limit)
+                )
+                .scalars()
+                .all()
+            )
 
             return list(results)
 
@@ -1791,7 +1941,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 .order_by(desc(AnalysisHistory.created_at), desc(AnalysisHistory.id))
                 .limit(1)
             ).scalar_one_or_none()
-    
+
     def get_analysis_history_paginated(
         self,
         code: Optional[Union[str, List[str]]] = None,
@@ -1799,11 +1949,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
     ) -> Tuple[List[AnalysisHistory], int]:
         """
         分页查询分析历史记录（带总数）
-        
+
         Args:
             code: 股票代码筛选
             report_type: 报告类型筛选
@@ -1811,15 +1961,15 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             end_date: 结束日期（含）
             offset: 偏移量（跳过前 N 条）
             limit: 每页数量
-            
+
         Returns:
             Tuple[List[AnalysisHistory], int]: (记录列表, 总数)
         """
         from sqlalchemy import func
-        
+
         with self.get_session() as session:
             conditions = []
-            
+
             if code:
                 if isinstance(code, list):
                     codes = [c for c in code if c]
@@ -1831,18 +1981,26 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 conditions.append(AnalysisHistory.report_type == report_type)
             if start_date:
                 # created_at >= start_date 00:00:00
-                conditions.append(AnalysisHistory.created_at >= datetime.combine(start_date, datetime.min.time()))
+                conditions.append(
+                    AnalysisHistory.created_at
+                    >= datetime.combine(start_date, datetime.min.time())
+                )
             if end_date:
                 # created_at < end_date+1 00:00:00 (即 <= end_date 23:59:59)
-                conditions.append(AnalysisHistory.created_at < datetime.combine(end_date + timedelta(days=1), datetime.min.time()))
-            
+                conditions.append(
+                    AnalysisHistory.created_at
+                    < datetime.combine(
+                        end_date + timedelta(days=1), datetime.min.time()
+                    )
+                )
+
             # 构建 where 子句
             where_clause = and_(*conditions) if conditions else True
-            
+
             # 查询总数
             total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
             total = session.execute(total_query).scalar() or 0
-            
+
             # 查询分页数据
             data_query = (
                 select(AnalysisHistory)
@@ -1852,26 +2010,30 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 .limit(limit)
             )
             results = session.execute(data_query).scalars().all()
-            
+
             return list(results), total
-    
+
     def get_analysis_history_by_id(self, record_id: int) -> Optional[AnalysisHistory]:
         """
         根据数据库主键 ID 查询单条分析历史记录
-        
+
         由于 query_id 可能重复（批量分析时多条记录共享同一 query_id），
         使用主键 ID 确保精确查询唯一记录。
-        
+
         Args:
             record_id: 分析历史记录的主键 ID
-            
+
         Returns:
             AnalysisHistory 对象，不存在返回 None
         """
         with self.get_session() as session:
-            result = session.execute(
-                select(AnalysisHistory).where(AnalysisHistory.id == record_id)
-            ).scalars().first()
+            result = (
+                session.execute(
+                    select(AnalysisHistory).where(AnalysisHistory.id == record_id)
+                )
+                .scalars()
+                .first()
+            )
             return result
 
     def delete_analysis_history_records(self, record_ids: List[int]) -> int:
@@ -1888,7 +2050,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         Returns:
             实际删除的历史记录数量
         """
-        ids = sorted({int(record_id) for record_id in record_ids if record_id is not None})
+        ids = sorted(
+            {int(record_id) for record_id in record_ids if record_id is not None}
+        )
         if not ids:
             return 0
 
@@ -1896,7 +2060,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             existing_ids = sorted(
                 session.execute(
                     select(AnalysisHistory.id).where(AnalysisHistory.id.in_(ids))
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             if not existing_ids:
                 return 0
@@ -1910,7 +2076,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 )
             )
             session.execute(
-                delete(BacktestResult).where(BacktestResult.analysis_history_id.in_(existing_ids))
+                delete(BacktestResult).where(
+                    BacktestResult.analysis_history_id.in_(existing_ids)
+                )
             )
             result = session.execute(
                 delete(AnalysisHistory).where(AnalysisHistory.id.in_(existing_ids))
@@ -1940,19 +2108,21 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             每条股票最新一条 AnalysisHistory 记录列表
         """
         with self.get_session() as session:
-            subq = (
-                select(
-                    AnalysisHistory.code,
-                    func.max(AnalysisHistory.id).label("max_id"),
-                )
+            subq = select(
+                AnalysisHistory.code,
+                func.max(AnalysisHistory.id).label("max_id"),
             )
             if start_date:
                 subq = subq.where(
-                    AnalysisHistory.created_at >= datetime.combine(start_date, datetime.min.time())
+                    AnalysisHistory.created_at
+                    >= datetime.combine(start_date, datetime.min.time())
                 )
             if end_date:
                 subq = subq.where(
-                    AnalysisHistory.created_at < datetime.combine(end_date + timedelta(days=1), datetime.min.time())
+                    AnalysisHistory.created_at
+                    < datetime.combine(
+                        end_date + timedelta(days=1), datetime.min.time()
+                    )
                 )
             if not include_market_review:
                 subq = subq.where(
@@ -2007,65 +2177,67 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             if report_type:
                 conditions.append(AnalysisHistory.report_type == report_type)
 
-            result = session.execute(
-                select(AnalysisHistory)
-                .where(and_(*conditions))
-                .order_by(desc(AnalysisHistory.created_at))
-                .limit(1)
-            ).scalars().first()
+            result = (
+                session.execute(
+                    select(AnalysisHistory)
+                    .where(and_(*conditions))
+                    .order_by(desc(AnalysisHistory.created_at))
+                    .limit(1)
+                )
+                .scalars()
+                .first()
+            )
             return result
-    
+
     def get_data_range(
-        self, 
-        code: str, 
-        start_date: date, 
-        end_date: date
+        self, code: str, start_date: date, end_date: date
     ) -> List[StockDaily]:
         """
         获取指定日期范围的数据
-        
+
         Args:
             code: 股票代码
             start_date: 开始日期
             end_date: 结束日期
-            
+
         Returns:
             StockDaily 对象列表
         """
         with self.get_session() as session:
-            results = session.execute(
-                select(StockDaily)
-                .where(
-                    and_(
-                        StockDaily.code == code,
-                        StockDaily.date >= start_date,
-                        StockDaily.date <= end_date
+            results = (
+                session.execute(
+                    select(StockDaily)
+                    .where(
+                        and_(
+                            StockDaily.code == code,
+                            StockDaily.date >= start_date,
+                            StockDaily.date <= end_date,
+                        )
                     )
+                    .order_by(StockDaily.date)
                 )
-                .order_by(StockDaily.date)
-            ).scalars().all()
-            
+                .scalars()
+                .all()
+            )
+
             return list(results)
-    
+
     def save_daily_data(
-        self, 
-        df: pd.DataFrame, 
-        code: str,
-        data_source: str = "Unknown"
+        self, df: pd.DataFrame, code: str, data_source: str = "Unknown"
     ) -> int:
         """
         保存日线数据到数据库
-        
+
         策略：
         - 按 `(code, date)` 做批量 UPSERT，已存在记录会覆盖更新
         - 同一批次内若存在重复日期，以最后一条记录为准
         - SQLite 分支按 chunk 写入以避免绑定参数上限
-        
+
         Args:
             df: 包含日线数据的 DataFrame
             code: 股票代码
             data_source: 数据来源名称
-            
+
         Returns:
             本次实际新增的记录数（不含更新）
         """
@@ -2075,25 +2247,25 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
         now = datetime.now()
         records_by_date: Dict[date, Dict[str, Any]] = {}
-        for row in df.to_dict(orient='records'):
-            row_date = self._normalize_daily_date(row.get('date'))
+        for row in df.to_dict(orient="records"):
+            row_date = self._normalize_daily_date(row.get("date"))
             records_by_date[row_date] = {
-                'code': code,
-                'date': row_date,
-                'open': self._normalize_sql_value(row.get('open')),
-                'high': self._normalize_sql_value(row.get('high')),
-                'low': self._normalize_sql_value(row.get('low')),
-                'close': self._normalize_sql_value(row.get('close')),
-                'volume': self._normalize_sql_value(row.get('volume')),
-                'amount': self._normalize_sql_value(row.get('amount')),
-                'pct_chg': self._normalize_sql_value(row.get('pct_chg')),
-                'ma5': self._normalize_sql_value(row.get('ma5')),
-                'ma10': self._normalize_sql_value(row.get('ma10')),
-                'ma20': self._normalize_sql_value(row.get('ma20')),
-                'volume_ratio': self._normalize_sql_value(row.get('volume_ratio')),
-                'data_source': data_source,
-                'created_at': now,
-                'updated_at': now,
+                "code": code,
+                "date": row_date,
+                "open": self._normalize_sql_value(row.get("open")),
+                "high": self._normalize_sql_value(row.get("high")),
+                "low": self._normalize_sql_value(row.get("low")),
+                "close": self._normalize_sql_value(row.get("close")),
+                "volume": self._normalize_sql_value(row.get("volume")),
+                "amount": self._normalize_sql_value(row.get("amount")),
+                "pct_chg": self._normalize_sql_value(row.get("pct_chg")),
+                "ma5": self._normalize_sql_value(row.get("ma5")),
+                "ma10": self._normalize_sql_value(row.get("ma10")),
+                "ma20": self._normalize_sql_value(row.get("ma20")),
+                "volume_ratio": self._normalize_sql_value(row.get("volume_ratio")),
+                "data_source": data_source,
+                "created_at": now,
+                "updated_at": now,
             }
 
         if not records_by_date:
@@ -2124,10 +2296,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                                     StockDaily.date.in_(chunk_dates),
                                 )
                             )
-                        ).scalars().all()
+                        )
+                        .scalars()
+                        .all()
                     )
                 new_records = [
-                    record for record in records if record['date'] not in existing_dates
+                    record for record in records if record["date"] not in existing_dates
                 ]
                 for i in range(0, len(records), _SQLITE_CHUNK):
                     chunk = records[i : i + _SQLITE_CHUNK]
@@ -2135,21 +2309,21 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     excluded = stmt.excluded
                     session.execute(
                         stmt.on_conflict_do_update(
-                            index_elements=['code', 'date'],
+                            index_elements=["code", "date"],
                             set_={
-                                'open': excluded.open,
-                                'high': excluded.high,
-                                'low': excluded.low,
-                                'close': excluded.close,
-                                'volume': excluded.volume,
-                                'amount': excluded.amount,
-                                'pct_chg': excluded.pct_chg,
-                                'ma5': excluded.ma5,
-                                'ma10': excluded.ma10,
-                                'ma20': excluded.ma20,
-                                'volume_ratio': excluded.volume_ratio,
-                                'data_source': excluded.data_source,
-                                'updated_at': excluded.updated_at,
+                                "open": excluded.open,
+                                "high": excluded.high,
+                                "low": excluded.low,
+                                "close": excluded.close,
+                                "volume": excluded.volume,
+                                "amount": excluded.amount,
+                                "pct_chg": excluded.pct_chg,
+                                "ma5": excluded.ma5,
+                                "ma10": excluded.ma10,
+                                "ma20": excluded.ma20,
+                                "volume_ratio": excluded.volume_ratio,
+                                "data_source": excluded.data_source,
+                                "updated_at": excluded.updated_at,
                             },
                         )
                     )
@@ -2164,28 +2338,30 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                                 StockDaily.date.in_(batch_dates),
                             )
                         )
-                    ).scalars().all()
+                    )
+                    .scalars()
+                    .all()
                 }
                 new_count = 0
                 for record in records:
-                    existing = existing_rows.get(record['date'])
+                    existing = existing_rows.get(record["date"])
                     if existing is None:
                         session.add(StockDaily(**record))
                         new_count += 1
                         continue
-                    existing.open = record['open']
-                    existing.high = record['high']
-                    existing.low = record['low']
-                    existing.close = record['close']
-                    existing.volume = record['volume']
-                    existing.amount = record['amount']
-                    existing.pct_chg = record['pct_chg']
-                    existing.ma5 = record['ma5']
-                    existing.ma10 = record['ma10']
-                    existing.ma20 = record['ma20']
-                    existing.volume_ratio = record['volume_ratio']
-                    existing.data_source = record['data_source']
-                    existing.updated_at = record['updated_at']
+                    existing.open = record["open"]
+                    existing.high = record["high"]
+                    existing.low = record["low"]
+                    existing.close = record["close"]
+                    existing.volume = record["volume"]
+                    existing.amount = record["amount"]
+                    existing.pct_chg = record["pct_chg"]
+                    existing.ma5 = record["ma5"]
+                    existing.ma10 = record["ma10"]
+                    existing.ma20 = record["ma20"]
+                    existing.volume_ratio = record["volume_ratio"]
+                    existing.data_source = record["data_source"]
+                    existing.updated_at = record["updated_at"]
                 return new_count
 
         try:
@@ -2198,21 +2374,19 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         except Exception as e:
             logger.error(f"保存 {code} 数据失败: {e}")
             raise
-    
+
     def get_analysis_context(
-        self, 
-        code: str,
-        target_date: Optional[date] = None
+        self, code: str, target_date: Optional[date] = None
     ) -> Optional[Dict[str, Any]]:
         """
         获取分析所需的上下文数据
-        
+
         返回今日数据 + 昨日数据的对比信息
-        
+
         Args:
             code: 股票代码
             target_date: 目标日期（默认今天）
-            
+
         Returns:
             包含今日数据、昨日对比等信息的字典
         """
@@ -2222,46 +2396,49 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         # 并不会按 target_date 精确取当日/前一交易日的上下文。
         # 因此若未来需要支持“按历史某天复盘/重算”的可解释性，这里需要调整。
         # 该行为目前保留（按需求不改逻辑）。
-        
+
         # 获取最近2天数据
         recent_data = self.get_latest_data(code, days=2)
-        
+
         if not recent_data:
             logger.warning(f"未找到 {code} 的数据")
             return None
-        
+
         today_data = recent_data[0]
         yesterday_data = recent_data[1] if len(recent_data) > 1 else None
-        
+
         context = {
-            'code': code,
-            'date': today_data.date.isoformat(),
-            'today': today_data.to_dict(),
+            "code": code,
+            "date": today_data.date.isoformat(),
+            "today": today_data.to_dict(),
         }
-        
+
         if yesterday_data:
-            context['yesterday'] = yesterday_data.to_dict()
-            
+            context["yesterday"] = yesterday_data.to_dict()
+
             # 计算相比昨日的变化
             if yesterday_data.volume and yesterday_data.volume > 0:
-                context['volume_change_ratio'] = round(
+                context["volume_change_ratio"] = round(
                     today_data.volume / yesterday_data.volume, 2
                 )
-            
+
             if yesterday_data.close and yesterday_data.close > 0:
-                context['price_change_ratio'] = round(
-                    (today_data.close - yesterday_data.close) / yesterday_data.close * 100, 2
+                context["price_change_ratio"] = round(
+                    (today_data.close - yesterday_data.close)
+                    / yesterday_data.close
+                    * 100,
+                    2,
                 )
-            
+
             # 均线形态判断
-            context['ma_status'] = self._analyze_ma_status(today_data)
-        
+            context["ma_status"] = self._analyze_ma_status(today_data)
+
         return context
-    
+
     def _analyze_ma_status(self, data: StockDaily) -> str:
         """
         分析均线形态
-        
+
         判断条件：
         - 多头排列：close > ma5 > ma10 > ma20
         - 空头排列：close < ma5 < ma10 < ma20
@@ -2274,7 +2451,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         ma5 = data.ma5 or 0
         ma10 = data.ma10 or 0
         ma20 = data.ma20 or 0
-        
+
         if close > ma5 > ma10 > ma20 > 0:
             return "多头排列 📈"
         elif close < ma5 < ma10 < ma20 and ma20 > 0:
@@ -2338,10 +2515,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         生成完整分析结果字典
         """
         data = result.to_dict() if hasattr(result, "to_dict") else {}
-        data.update({
-            'data_sources': getattr(result, 'data_sources', ''),
-            'raw_response': getattr(result, 'raw_response', None),
-        })
+        data.update(
+            {
+                "data_sources": getattr(result, "data_sources", ""),
+                "raw_response": getattr(result, "raw_response", None),
+            }
+        )
         return data
 
     @staticmethod
@@ -2355,10 +2534,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
     @staticmethod
     def _build_fallback_url_key(
-        code: str,
-        title: str,
-        source: str,
-        published_date: Optional[datetime]
+        code: str, title: str, source: str, published_date: Optional[datetime]
     ) -> str:
         """
         生成无 URL 时的去重键（确保稳定且较短）
@@ -2368,34 +2544,41 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         digest = hashlib.md5(raw_key.encode("utf-8")).hexdigest()
         return f"no-url:{code}:{digest}"
 
-    def save_conversation_message(self, session_id: str, role: str, content: str) -> int:
+    def save_conversation_message(
+        self, session_id: str, role: str, content: str
+    ) -> int:
         """
         保存 Agent 对话消息
         """
         with self.session_scope() as session:
-            msg = ConversationMessage(
-                session_id=session_id,
-                role=role,
-                content=content
-            )
+            msg = ConversationMessage(session_id=session_id, role=role, content=content)
             session.add(msg)
             session.flush()
             return int(msg.id)
 
-    def get_conversation_history(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_conversation_history(
+        self, session_id: str, limit: int = 20
+    ) -> List[Dict[str, Any]]:
         """
         获取 Agent 对话历史
         """
         with self.session_scope() as session:
-            stmt = select(ConversationMessage).filter(
-                ConversationMessage.session_id == session_id
-            ).order_by(ConversationMessage.created_at.desc()).limit(limit)
+            stmt = (
+                select(ConversationMessage)
+                .filter(ConversationMessage.session_id == session_id)
+                .order_by(ConversationMessage.created_at.desc())
+                .limit(limit)
+            )
             messages = session.execute(stmt).scalars().all()
 
             # 倒序返回，保证时间顺序
-            return [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
+            return [
+                {"role": msg.role, "content": msg.content} for msg in reversed(messages)
+            ]
 
-    def get_visible_conversation_messages(self, session_id: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    def get_visible_conversation_messages(
+        self, session_id: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """Return visible user/assistant conversation messages in chronological order."""
         with self.session_scope() as session:
             stmt = (
@@ -2411,7 +2594,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             if limit is not None:
                 stmt = (
                     stmt.order_by(None)
-                    .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+                    .order_by(
+                        ConversationMessage.created_at.desc(),
+                        ConversationMessage.id.desc(),
+                    )
                     .limit(limit)
                 )
             messages = session.execute(stmt).scalars().all()
@@ -2473,7 +2659,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 model=model,
                 anchor_user_message_id=int(anchor_user_message_id or 0),
                 anchor_assistant_message_id=int(anchor_assistant_message_id or 0),
-                messages_json=json.dumps(messages or [], ensure_ascii=False, default=str),
+                messages_json=json.dumps(
+                    messages or [], ensure_ascii=False, default=str
+                ),
                 contains_reasoning=bool(contains_reasoning),
                 contains_tool_calls=bool(contains_tool_calls),
                 contains_thinking_blocks=bool(contains_thinking_blocks),
@@ -2528,23 +2716,25 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                         exc,
                     )
                     messages = []
-                result.append({
-                    "id": row.id,
-                    "session_id": row.session_id,
-                    "run_id": row.run_id,
-                    "provider": row.provider,
-                    "model": row.model,
-                    "anchor_user_message_id": row.anchor_user_message_id,
-                    "anchor_assistant_message_id": row.anchor_assistant_message_id,
-                    "messages": messages if isinstance(messages, list) else [],
-                    "messages_json": row.messages_json,
-                    "contains_reasoning": row.contains_reasoning,
-                    "contains_tool_calls": row.contains_tool_calls,
-                    "contains_thinking_blocks": row.contains_thinking_blocks,
-                    "must_roundtrip": row.must_roundtrip,
-                    "estimated_tokens": row.estimated_tokens,
-                    "created_at": row.created_at,
-                })
+                result.append(
+                    {
+                        "id": row.id,
+                        "session_id": row.session_id,
+                        "run_id": row.run_id,
+                        "provider": row.provider,
+                        "model": row.model,
+                        "anchor_user_message_id": row.anchor_user_message_id,
+                        "anchor_assistant_message_id": row.anchor_assistant_message_id,
+                        "messages": messages if isinstance(messages, list) else [],
+                        "messages_json": row.messages_json,
+                        "contains_reasoning": row.contains_reasoning,
+                        "contains_tool_calls": row.contains_tool_calls,
+                        "contains_thinking_blocks": row.contains_thinking_blocks,
+                        "must_roundtrip": row.must_roundtrip,
+                        "estimated_tokens": row.estimated_tokens,
+                        "created_at": row.created_at,
+                    }
+                )
             return result
 
     def _trim_agent_provider_turns(
@@ -2639,28 +2829,31 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         with self.session_scope() as session:
             normalized_prefix = None
             if session_prefix:
-                normalized_prefix = session_prefix if session_prefix.endswith(":") else f"{session_prefix}:"
+                normalized_prefix = (
+                    session_prefix
+                    if session_prefix.endswith(":")
+                    else f"{session_prefix}:"
+                )
             exact_ids = [sid for sid in (extra_session_ids or []) if sid]
 
             # 聚合每个 session 的消息数和最后活跃时间
-            base = (
-                select(
-                    ConversationMessage.session_id,
-                    func.count(ConversationMessage.id).label("message_count"),
-                    func.min(ConversationMessage.created_at).label("created_at"),
-                    func.max(ConversationMessage.created_at).label("last_active"),
-                )
+            base = select(
+                ConversationMessage.session_id,
+                func.count(ConversationMessage.id).label("message_count"),
+                func.min(ConversationMessage.created_at).label("created_at"),
+                func.max(ConversationMessage.created_at).label("last_active"),
             )
             conditions = []
             if normalized_prefix:
-                conditions.append(ConversationMessage.session_id.startswith(normalized_prefix))
+                conditions.append(
+                    ConversationMessage.session_id.startswith(normalized_prefix)
+                )
             if exact_ids:
                 conditions.append(ConversationMessage.session_id.in_(exact_ids))
             if conditions:
                 base = base.where(or_(*conditions))
             stmt = (
-                base
-                .group_by(ConversationMessage.session_id)
+                base.group_by(ConversationMessage.session_id)
                 .order_by(desc(func.max(ConversationMessage.created_at)))
                 .limit(limit)
             )
@@ -2683,16 +2876,24 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 ).scalar()
                 title = (first_user_msg or "新对话")[:60]
 
-                results.append({
-                    "session_id": sid,
-                    "title": title,
-                    "message_count": row.message_count,
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                    "last_active": row.last_active.isoformat() if row.last_active else None,
-                })
+                results.append(
+                    {
+                        "session_id": sid,
+                        "title": title,
+                        "message_count": row.message_count,
+                        "created_at": row.created_at.isoformat()
+                        if row.created_at
+                        else None,
+                        "last_active": row.last_active.isoformat()
+                        if row.last_active
+                        else None,
+                    }
+                )
             return results
 
-    def get_conversation_messages(self, session_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_conversation_messages(
+        self, session_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         获取单个会话的完整消息列表（用于前端恢复历史）
         """
@@ -2709,7 +2910,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     "id": str(msg.id),
                     "role": msg.role,
                     "content": msg.content,
-                    "created_at": msg.created_at.isoformat() if msg.created_at else None,
+                    "created_at": msg.created_at.isoformat()
+                    if msg.created_at
+                    else None,
                 }
                 for msg in messages
             ]
@@ -2763,7 +2966,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             "total_tokens": total_tokens,
         }
         for column in _LLM_USAGE_TELEMETRY_COLUMN_SQL:
-            row_values[column] = None if column in _LLM_USAGE_DROPPED_FREE_TEXT_COLUMNS else telemetry.get(column)
+            row_values[column] = (
+                None
+                if column in _LLM_USAGE_DROPPED_FREE_TEXT_COLUMNS
+                else telemetry.get(column)
+            )
         row = LLMUsage(**row_values)
         with self.session_scope() as session:
             session.add(row)
@@ -2792,8 +2999,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             totals = session.execute(
                 select(
                     func.count(LLMUsage.id).label("calls"),
-                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label("prompt_tokens"),
-                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label(
+                        "prompt_tokens"
+                    ),
+                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label(
+                        "completion_tokens"
+                    ),
                     func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("tokens"),
                 ).where(base_filter)
             ).one()
@@ -2803,8 +3014,12 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 select(
                     LLMUsage.call_type,
                     func.count(LLMUsage.id).label("calls"),
-                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label("prompt_tokens"),
-                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label(
+                        "prompt_tokens"
+                    ),
+                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label(
+                        "completion_tokens"
+                    ),
                     func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("tokens"),
                 )
                 .where(base_filter)
@@ -2817,10 +3032,16 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 select(
                     LLMUsage.model,
                     func.count(LLMUsage.id).label("calls"),
-                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label("prompt_tokens"),
-                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label("completion_tokens"),
+                    func.coalesce(func.sum(LLMUsage.prompt_tokens), 0).label(
+                        "prompt_tokens"
+                    ),
+                    func.coalesce(func.sum(LLMUsage.completion_tokens), 0).label(
+                        "completion_tokens"
+                    ),
                     func.coalesce(func.sum(LLMUsage.total_tokens), 0).label("tokens"),
-                    func.coalesce(func.max(LLMUsage.total_tokens), 0).label("max_total_tokens"),
+                    func.coalesce(func.max(LLMUsage.total_tokens), 0).label(
+                        "max_total_tokens"
+                    ),
                 )
                 .where(base_filter)
                 .group_by(LLMUsage.model)
@@ -2920,15 +3141,22 @@ def persist_llm_usage(
     """Fire-and-forget: write one LLM call record to llm_usage. Never raises."""
     try:
         usage = usage or {}
-        prompt_tokens = _coerce_llm_usage_non_negative_int(usage.get("prompt_tokens")) or 0
-        completion_tokens = _coerce_llm_usage_non_negative_int(usage.get("completion_tokens")) or 0
-        total_tokens = _coerce_llm_usage_non_negative_int(usage.get("total_tokens")) or 0
+        prompt_tokens = (
+            _coerce_llm_usage_non_negative_int(usage.get("prompt_tokens")) or 0
+        )
+        completion_tokens = (
+            _coerce_llm_usage_non_negative_int(usage.get("completion_tokens")) or 0
+        )
+        total_tokens = (
+            _coerce_llm_usage_non_negative_int(usage.get("total_tokens")) or 0
+        )
         telemetry = {
-            column: usage.get(column)
-            for column in _LLM_USAGE_TELEMETRY_COLUMN_SQL
+            column: usage.get(column) for column in _LLM_USAGE_TELEMETRY_COLUMN_SQL
         }
         for column in _LLM_USAGE_INTEGER_TELEMETRY_COLUMNS:
-            telemetry[column] = _coerce_llm_usage_non_negative_int(telemetry.get(column))
+            telemetry[column] = _coerce_llm_usage_non_negative_int(
+                telemetry.get(column)
+            )
         telemetry["normalized_prompt_tokens"] = (
             telemetry.get("normalized_prompt_tokens")
             if telemetry.get("normalized_prompt_tokens") is not None
@@ -2971,7 +3199,9 @@ def persist_llm_usage(
             **telemetry,
         )
     except Exception as exc:
-        logging.getLogger(__name__).warning("[LLM usage] failed to persist usage record: %s", exc)
+        logging.getLogger(__name__).warning(
+            "[LLM usage] failed to persist usage record: %s", exc
+        )
 
 
 def _coerce_llm_usage_non_negative_int(value: Any) -> Optional[int]:
@@ -2996,35 +3226,37 @@ def _coerce_llm_usage_non_negative_int(value: Any) -> Optional[int]:
 if __name__ == "__main__":
     # 测试代码
     logging.basicConfig(level=logging.DEBUG)
-    
+
     db = get_db()
-    
+
     print("=== 数据库测试 ===")
     print(f"数据库初始化成功")
-    
+
     # 测试检查今日数据
-    has_data = db.has_today_data('600519')
+    has_data = db.has_today_data("600519")
     print(f"茅台今日是否有数据: {has_data}")
-    
+
     # 测试保存数据
-    test_df = pd.DataFrame({
-        'date': [date.today()],
-        'open': [1800.0],
-        'high': [1850.0],
-        'low': [1780.0],
-        'close': [1820.0],
-        'volume': [10000000],
-        'amount': [18200000000],
-        'pct_chg': [1.5],
-        'ma5': [1810.0],
-        'ma10': [1800.0],
-        'ma20': [1790.0],
-        'volume_ratio': [1.2],
-    })
-    
-    saved = db.save_daily_data(test_df, '600519', 'TestSource')
+    test_df = pd.DataFrame(
+        {
+            "date": [date.today()],
+            "open": [1800.0],
+            "high": [1850.0],
+            "low": [1780.0],
+            "close": [1820.0],
+            "volume": [10000000],
+            "amount": [18200000000],
+            "pct_chg": [1.5],
+            "ma5": [1810.0],
+            "ma10": [1800.0],
+            "ma20": [1790.0],
+            "volume_ratio": [1.2],
+        }
+    )
+
+    saved = db.save_daily_data(test_df, "600519", "TestSource")
     print(f"保存测试数据: {saved} 条")
-    
+
     # 测试获取上下文
-    context = db.get_analysis_context('600519')
+    context = db.get_analysis_context("600519")
     print(f"分析上下文: {context}")

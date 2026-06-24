@@ -2,16 +2,29 @@
 """
 ===================================
 Report Engine - Pydantic Schema
-===================================
+==================================
 
 Defines AnalysisReportSchema for validating LLM JSON output.
 Aligns with SYSTEM_PROMPT in src/analyzer.py.
 Uses Optional for lenient parsing; business-layer integrity checks are separate.
+
+P0: Extended with Five-Section Long-term Research Framework:
+- ① Investment Conclusion (investment_conclusion)
+- ② Supply Chain Analysis (supply_chain)
+- ③ Value Scenarios (value_scenarios)
+- ④ Bayesian Framework (bayesian_framework)
+- ⑤ Research Framework (research_framework)
 """
 
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.schemas.research_framework import ResearchFramework
+from src.schemas.bayesian_framework import BayesianFramework
+from src.schemas.supply_chain import SupplyChain
+from src.schemas.value_scenarios import ValueScenarios
+from src.schemas.investment_conclusion import InvestmentConclusion
 
 
 class PositionAdvice(BaseModel):
@@ -138,7 +151,14 @@ class Dashboard(BaseModel):
 class AnalysisReportSchema(BaseModel):
     """
     Top-level schema for LLM report JSON.
-    Aligns with SYSTEM_PROMPT output format.
+    Aligns with SYSTEM_PROMPT in output format.
+
+    P0 Extended: Five-Section Long-term Research Framework fields:
+    - investment_conclusion: ① 投资结论
+    - supply_chain: ② 产业链解读
+    - value_scenarios: ③ 长期价值与情景
+    - bayesian_framework: ④ 贝叶斯评分表
+    - research_framework: ⑤ 六维评分详情
     """
 
     model_config = ConfigDict(extra="allow")  # Allow extra fields from LLM
@@ -173,3 +193,22 @@ class AnalysisReportSchema(BaseModel):
 
     search_performed: Optional[bool] = None
     data_sources: Optional[str] = None
+
+    # ===== 五段式长线投研报告字段 (P0) =====
+    investment_conclusion: Optional[InvestmentConclusion] = Field(
+        None,
+        description="① 投资结论: 先验P(H)、产业链定位结论、Edge、长线仓位建议、1/3/5年价值区间",
+    )
+    supply_chain: Optional[SupplyChain] = Field(
+        None, description="② 产业链解读: 供应链地图、公司定位、瓶颈点分析、中美双链位置"
+    )
+    value_scenarios: Optional[ValueScenarios] = Field(
+        None,
+        description="③ 长期价值与情景: 产业长期空间、乐观/中性/悲观情景、1/3/5年价值锚",
+    )
+    bayesian_framework: Optional[BayesianFramework] = Field(
+        None, description="④ 贝叶斯评分表: 六维→先验P(H)→Edge→后验→仓位"
+    )
+    research_framework: Optional[ResearchFramework] = Field(
+        None, description="⑤ 六维评分: 六维×指标×权重×打分详情"
+    )

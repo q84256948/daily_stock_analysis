@@ -46,7 +46,7 @@
   --elevated: 0 0% 100%;
   --hover: 214 29% 90%;
   --secondary-text: 224 18% 28%;
-  --muted-text: 224 12% 35%;
+  --muted-text: 220 14% 45%;
 
   --color-cyan: hsl(var(--primary));
   --color-cyan-dim: hsl(var(--primary) / 0.8);
@@ -155,9 +155,11 @@
   --home-accent-text: hsl(var(--primary));
   --home-secondary-accent-text: hsl(247 84% 66%);
   --home-title-accent: hsl(247 84% 66%);
-  --home-price-up: hsl(0 88% 62%);
-  --home-price-down: hsl(149 100% 42%);
-  --home-strategy-buy: hsl(149 100% 42%);
+  --home-price-up: hsl(0 85% 55%);
+  --home-price-down: hsl(142 80% 45%);
+  --home-price-flat: hsl(45 93% 50%);
+  --home-accent: hsl(262 83% 58%);
+  --home-strategy-buy: hsl(142 80% 45%);
   --home-strategy-secondary: hsl(var(--primary));
   --home-strategy-stop: hsl(346 100% 63%);
   --home-strategy-take: hsl(38 100% 52%);
@@ -324,7 +326,7 @@
   --elevated: 230 22% 12%;
   --hover: 231 20% 16%;
   --secondary-text: 228 16% 72%;
-  --muted-text: 228 10% 48%;
+  --muted-text: 225 12% 60%;
 
   --color-cyan: hsl(var(--primary));
   --color-cyan-dim: hsl(var(--primary) / 0.8);
@@ -430,9 +432,11 @@
   --home-accent-text: hsl(var(--primary));
   --home-secondary-accent-text: hsl(247 84% 72%);
   --home-title-accent: hsl(247 84% 72%);
-  --home-price-up: hsl(0 88% 64%);
-  --home-price-down: hsl(149 100% 44%);
-  --home-strategy-buy: hsl(149 100% 44%);
+  --home-price-up: hsl(0 80% 60%);
+  --home-price-down: hsl(142 75% 50%);
+  --home-price-flat: hsl(45 90% 55%);
+  --home-accent: hsl(262 78% 65%);
+  --home-strategy-buy: hsl(142 75% 50%);
   --home-strategy-secondary: hsl(var(--primary));
   --home-strategy-stop: hsl(346 100% 66%);
   --home-strategy-take: hsl(38 100% 58%);

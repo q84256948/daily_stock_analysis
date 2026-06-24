@@ -814,6 +814,9 @@ class Config:
         ""  # JSON array of serialized EventMonitor rules
     )
 
+    # === 长线投研框架配置 ===
+    enable_research_framework: bool = True  # 启用长线投研框架（贝叶斯评分、六维框架）
+
     # === 通知配置（可同时配置多个，全部推送）===
 
     # 企业微信 Webhook
@@ -1041,6 +1044,18 @@ class Config:
     fundamental_cache_ttl_seconds: int = 120
     # 基本面缓存最大条目数（避免长时间运行内存增长）
     fundamental_cache_max_entries: int = 256
+
+    # === 长线产业链投研框架 (P0/P1) Feature Flags ===
+    # 启用长线投研框架（贝叶斯评分、六维评分、五段式报告）
+    research_framework_enabled: bool = True
+    # 启用贝叶斯概率计算（先验→Edge→后验）
+    bayesian_framework_enabled: bool = True
+    # 启用产业链分析
+    supply_chain_analysis_enabled: bool = True
+    # 启用价值情景分析
+    value_scenarios_enabled: bool = True
+    # 启用 Agent 分析（可能较慢，建议关闭使用规则生成）
+    enable_agent_analysis: bool = False
 
     # === Portfolio PR2: import/risk/fx settings ===
     portfolio_risk_concentration_alert_pct: float = 35.0
@@ -2104,6 +2119,23 @@ class Config:
                 field_name="FUNDAMENTAL_CACHE_MAX_ENTRIES",
                 minimum=1,
             ),
+            # === 长线产业链投研框架 Feature Flags ===
+            research_framework_enabled=os.getenv(
+                "RESEARCH_FRAMEWORK_ENABLED", "true"
+            ).lower()
+            == "true",
+            bayesian_framework_enabled=os.getenv(
+                "BAYESIAN_FRAMEWORK_ENABLED", "true"
+            ).lower()
+            == "true",
+            supply_chain_analysis_enabled=os.getenv(
+                "SUPPLY_CHAIN_ANALYSIS_ENABLED", "true"
+            ).lower()
+            == "true",
+            value_scenarios_enabled=os.getenv("VALUE_SCENARIOS_ENABLED", "true").lower()
+            == "true",
+            enable_agent_analysis=os.getenv("ENABLE_AGENT_ANALYSIS", "false").lower()
+            == "true",
             portfolio_risk_concentration_alert_pct=parse_env_float(
                 os.getenv("PORTFOLIO_RISK_CONCENTRATION_ALERT_PCT"),
                 35.0,

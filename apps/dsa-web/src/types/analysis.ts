@@ -105,6 +105,8 @@ export interface ReportSummary {
   trendPrediction: string;
   sentimentScore: number;
   sentimentLabel?: SentimentLabel;
+  /** 操作建议与趋势预测的原因 */
+  actionReason?: string;
 }
 
 /** Strategy section */
@@ -260,6 +262,202 @@ export interface AnalysisReport {
   summary: ReportSummary;
   strategy?: ReportStrategy;
   details?: ReportDetails;
+  /** 长线投研框架 - 六维评分 & 贝叶斯分析 */
+  researchFramework?: ResearchFrameworkData;
+  /** 贝叶斯框架 - ④贝叶斯评分表 */
+  bayesianFramework?: BayesianFramework;
+  /** 产业链解读 - ②产业链解读 */
+  supplyChain?: SupplyChain;
+  /** 长期价值与情景 - ③长期价值与情景 */
+  valueScenarios?: ValueScenarios;
+  /** 投资结论 - ①投资结论 */
+  investmentConclusion?: InvestmentConclusion;
+  /** 产业链分析（兼容旧字段） */
+  supplyChainAnalysis?: SupplyChainAnalysis;
+  /** 价值情景分析（兼容旧字段） */
+  valueAnalysis?: ValueAnalysis;
+}
+
+// ============ Research Framework Types ============
+
+export interface DimensionScore {
+  dimension: string;
+  weight: number;
+  score: number;
+  indicators?: Array<{
+    name: string;
+    score: number;
+    weight: number;
+    basis: string;
+    summary?: string;
+  }>;
+}
+
+export interface BayesianResult {
+  priorP: number;
+  marketImpliedP: number;
+  edge: number;
+  posteriorP: number;
+  positionSuggestion: string;
+  stopConditions?: {
+    shouldStop: boolean;
+    posteriorBelowPriorThreshold: boolean;
+    strongNegativeEvidence: boolean;
+    edgeDisappeared: boolean;
+  };
+}
+
+export interface ResearchFrameworkData {
+  dimensionTotal: number;
+  dimensions: DimensionScore[];
+  version: string;
+  bayesianResult?: BayesianResult;
+}
+
+// ============ Agent Analysis Types ============
+
+export interface ValueScenario {
+  probability: number;
+  valueAnchor: string;
+  upsidePct?: number;
+  downsidePct?: number;
+  keyAssumptions?: string[];
+  timeframeYears?: number;
+}
+
+export interface ValueAnalysis {
+  valueHorizons?: ValueHorizons;
+  scenarios?: {
+    bullCase?: ValueScenario;
+    baseCase?: ValueScenario;
+    bearCase?: ValueScenario;
+  };
+  catalysts?: string[];
+  risks?: string[];
+  valueScore?: number;
+}
+
+export interface SupplyChainAnalysis {
+  chainPosition?: string;
+  chainPositionRationale?: string;
+  moatType?: string;
+  moatStrength?: string;
+  moatRationale?: string;
+  usChinaRisk?: string;
+  chokepointType?: string;
+  overallSupplyChainScore?: number;
+  keyInsights?: string[];
+  risks?: string[];
+}
+
+// ============ 五段式长线投研报告类型 ============
+
+/** 贝叶斯框架 - ④贝叶斯评分表 */
+export interface BayesianFramework {
+  priorP: number;
+  marketImpliedP: number;
+  edge: number;
+  posteriorP: number;
+  positionSuggestion: string;
+  evidenceLog?: EvidenceItem[];
+  stopConditions?: StopConditions;
+}
+
+export interface EvidenceItem {
+  evidence: string;
+  strength: 'strong_pos' | 'weak_pos' | 'neutral' | 'weak_neg' | 'strong_neg';
+  lr: number;
+  posteriorP: number;
+  date: string;
+}
+
+export interface StopConditions {
+  shouldStop?: boolean;
+  posteriorBelowPriorThreshold?: boolean;
+  strongNegativeEvidence?: boolean;
+  edgeDisappeared?: boolean;
+}
+
+/** 产业链解读 - ②产业链解读 */
+export interface SupplyChain {
+  chainMap?: ChainNode[];
+  chokepoints?: Chokepoint[];
+  companyPosition?: string;
+  upstreamSuppliers?: string[];
+  downstreamCustomers?: string[];
+  usChinaChain?: USChinaChain;
+  industryDrivers?: string[];
+}
+
+export interface ChainNode {
+  level: string;
+  companies?: string[];
+  concentration?: string;
+}
+
+export interface Chokepoint {
+  type: string;
+  description: string;
+  confidence?: 'high' | 'medium' | 'low';
+}
+
+export interface USChinaChain {
+  role?: string;
+  substitutionProgress?: string;
+  sanctionRisk?: string;
+  dualChainImpact?: string;
+}
+
+/** 长期价值与情景 - ③长期价值与情景 */
+export interface ValueScenarios {
+  industrySpace?: string;
+  competitiveEvolution?: string;
+  scenarios?: Scenario[];
+  horizons?: ValueHorizons;
+  catalysts?: string[];
+  risks?: string[];
+}
+
+export interface Scenario {
+  type: 'optimistic' | 'neutral' | 'pessimistic';
+  probability: number;
+  valueAnchor?: number | string;
+  description?: string;
+  upsidePct?: number;
+  downsidePct?: number;
+  keyAssumptions?: string[];
+}
+
+export interface ValueHorizons {
+  horizon1y?: string;
+  horizon3y?: string;
+  horizon5y?: string;
+}
+
+/** 投资结论 - ①投资结论 */
+export interface InvestmentConclusion {
+  priorP?: number;
+  marketImpliedP?: number;
+  edge?: number;
+  posteriorP?: number;
+  position?: string;
+  action?: '建仓' | '加仓' | '持有' | '减仓' | '止损' | '观察';
+  chainPositionSummary?: string;
+  valueRange1y?: string;
+  valueRange3y?: string;
+  valueRange5y?: string;
+  rationale?: string;
+  stopConditions?: StopConditions;
+  buildPositionRecords?: PositionRecord[];
+}
+
+export interface PositionRecord {
+  date: string;
+  action: string;
+  price: string;
+  positionPct: number;
+  priorP: number;
+  edge: number;
 }
 
 // ============ Analysis Result Types ============
