@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- [修复] 深度投研报告多处「数据缺失」根因：fundamental pipeline 超时默认值过紧（fetch 3s/stage 8s），代理/限流环境下可达的 em 接口（realtime_quote ~4s、业绩报表 stock_yjbb_em 全量分页 ~5s）被误判超时 → 估值/财务/机构/龙虎榜全 failed。放宽默认值（fetch 3→10s、stage 8→25s，同步 `.env.example`），正常环境（em 快）用不到额外时间，仅慢接口受益；实测 valuation/growth/institution/dragon_tiger 从全 failed 恢复为 ok/partial。
+- [改进] `get_capital_flow` 资金流失败诚实降级：资金流源 `stock_individual_fund_flow` 走 push2his.eastmoney.com（代理/限流不可达、无 em 备份源），失败时返回明确 `note`（"资金流数据源暂不可用，请结合成交量/换手率判断"），避免 LLM 误判「数据缺失」而编造。
+- [修复] `get_chip_distribution` 工具筹码数据缺失：`ak.stock_cyq_em` 是唯一筹码源，em 网络/代理不可达时全失败且无 fallback。新增 fail-open 估算降级——em 失败时用历史K线（tencent 等可用源）按成交量加权估算 `avg_cost`/`profit_ratio`/`cost_70/90`/`concentration`，返回带 `estimated=True` 标记的数据供 LLM 标注精度；估算失败仍返回 error 不阻塞；只改工具层，不影响 base/fetcher。
+- [修复] `get_stock_info` 工具估值「数据缺失」：`get_fundamental_context` 的 valuation 步骤受严格 fetch 超时（默认 3s）限制，而 `get_realtime_quote` 带 em→sina→tencent fallback 实测可达 4-5s，em 源失败时易超时 → pe/pb/市值全 None。新增 fail-open 兜底：`_handle_get_stock_info` 检测 valuation 缺 pe 时，用无超时的 `get_realtime_quote` 补全缺失字段（已有值不覆盖），兜底失败仍保持原值不阻塞；只改工具层，不影响 fundamental pipeline 主流程/alphasift。
+- [改进] 深度投研报告保存健壮性：① `report_id` 同分钟同股票冲突保护——生成前检测 DB，已存在则追加 `_1/_2/...` 序号后缀（避免 `save` 的 merge 覆盖旧记录导致 .md/.pdf 文件孤儿），同步放宽 report_id 白名单为 `^\d{6}_\d{12}(_\d+)?$`（路径穿越防护不变）；② `stock_name` 缺省（前端未传）时反查真实中文名（复用 `get_realtime_quote.name`），避免元数据 `stock_name` 退化成代码，反查失败仍 fallback 到 code 不阻塞生成。
+- [修复] 修复深度投研（及所有 agent）盘中报告「当前价」用过时昨收价的问题：`analyze_trend` 的 `current_price` 原取自历史日线最后一根 close（盘中今日未入库 → 昨收），现于 `_fetch_trend_data` 盘中自动合并今日实时行情 bar，使 `current_price`/MA/bias 等统一反映实时价；收盘后/非交易日/实时失败时零行为变化（优雅降级）。
+- [修复] 深度投研报告 PDF 下载 404：重构 `src/md2pdf.py` 渲染引擎，从 `imgkit`（`wkhtmltoimage` 封装，PDF 非其原生能力）切换为 `xhtml2pdf`（纯 Python）+ `reportlab` 内置 CID 字体（`STSong-Light`），修复了 imgkit 找错二进制 + macOS Homebrew 6.0+ 无 `wkhtmltopdf` formula 的双重问题；纯 Python 零系统依赖，macOS / Linux / Docker 全平台一致；`download_pdf` 端点区分「报告不存在」与「渲染失败」两种 404 文案；前端 `downloadPdf` 解析后端 `detail` 回显更具体错误原因。
+- [新功能] A股深度投研报告模块：左侧菜单（首页下方）新增「深度投研」入口（`/deep-research`），表单输入 A 股代码/名称生成机构级五层穿透（宏观/产业/财务/估值/博弈）深度研报，支持 PDF 下载与历史报告列表。
+- [新功能] 深度投研后端：新增 `deep_research_executor`（复用问股 10 个工具 + 五层穿透 prompt）、`deep_research_validator`（三层防线质量校验）、`md2pdf`（wkhtmltopdf 惰性生成 + Semaphore 限流）、SQLite 存储表 `deep_research_reports`（替代易损坏的 index.json）、5 个 API 接口 `/api/v1/deep-research/*`（SSE 生成 + 报告 CRUD + PDF 下载，含路径穿越白名单防护）。
+- [新功能] 深度投研前端：新增 `DeepResearchPage`（双栏：历史列表 + 表单/报告）、`useDeepResearch` hook（SSE + 心跳 watchdog + 可取消）、`api/deepResearch.ts`、`.deep-research-prose` 表格样式（修正 nowrap、数字右对齐）。
+- [改进] `StockAutocomplete` 新增 `mode`（`instant`/`form`）参数，适配表单流（选中不立即提交）；`.env.example` 新增 `DEEP_RESEARCH_MAX_REPORTS` 配置项。
+- [文档] 新增 `docs/deep-research.md` 深度投研报告专题文档。
 - [改进] Web 端将「问股」导航菜单及对应页面标题、浏览器标签页标题、新消息提示与空状态引导文案统一更名为「A股分析」，同步更新相关单测与 e2e 断言文案；用量分类、配置说明、会话导出标题等非导航语境的「问股」保持不变。
 - [修复] 修复供应链与郑希对话刷新页面后当前会话内容丢失的问题：后端会话列表返回的 session_id 去掉命名空间前缀（与前端 localStorage 无前缀格式对齐），GET/DELETE 会话端点兼容无前缀 id；问股不加前缀不受影响。
 - [新功能] 五段式长线产业链投研报告（P0/P1/P2）：
