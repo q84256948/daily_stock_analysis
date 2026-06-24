@@ -111,7 +111,11 @@ def _has_gotify_base_url(value: Optional[str]) -> bool:
 
 
 AGENT_MAX_STEPS_DEFAULT = 10
-FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT = 8.0
+# fundamental pipeline 超时：放宽以容纳带 fallback 的慢接口（realtime_quote ~4s、
+# 业绩报表 stock_yjbb_em 全量分页 ~5s）。正常环境（em 快）用不到额外时间，仅在
+# 接口慢/限流时生效，避免可达数据源因超时被误判「数据缺失」。
+FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT = 25.0
+FUNDAMENTAL_FETCH_TIMEOUT_SECONDS_DEFAULT = 10.0
 NEWS_STRATEGY_WINDOWS: Dict[str, int] = {
     "ultra_short": 1,
     "short": 3,
@@ -1037,7 +1041,7 @@ class Config:
     # 基本面阶段总预算（秒）
     fundamental_stage_timeout_seconds: float = FUNDAMENTAL_STAGE_TIMEOUT_SECONDS_DEFAULT
     # 单能力源调用超时（秒）
-    fundamental_fetch_timeout_seconds: float = 3.0
+    fundamental_fetch_timeout_seconds: float = FUNDAMENTAL_FETCH_TIMEOUT_SECONDS_DEFAULT
     # 单能力失败重试次数（已包含首次）
     fundamental_retry_max: int = 1
     # 基本面上下文短 TTL（秒）
@@ -1052,6 +1056,8 @@ class Config:
     bayesian_framework_enabled: bool = True
     # 启用产业链分析
     supply_chain_analysis_enabled: bool = True
+    # 深度投研报告：保留报告数量上限（超出删最旧，含 .md/.pdf 文件）
+    deep_research_max_reports: int = 200
     # 启用价值情景分析
     value_scenarios_enabled: bool = True
     # 启用 Agent 分析（可能较慢，建议关闭使用规则生成）
@@ -2097,7 +2103,7 @@ class Config:
             ),
             fundamental_fetch_timeout_seconds=parse_env_float(
                 os.getenv("FUNDAMENTAL_FETCH_TIMEOUT_SECONDS"),
-                3.0,
+                FUNDAMENTAL_FETCH_TIMEOUT_SECONDS_DEFAULT,
                 field_name="FUNDAMENTAL_FETCH_TIMEOUT_SECONDS",
                 minimum=0.0,
             ),
@@ -2132,6 +2138,12 @@ class Config:
                 "SUPPLY_CHAIN_ANALYSIS_ENABLED", "true"
             ).lower()
             == "true",
+            deep_research_max_reports=parse_env_int(
+                os.getenv("DEEP_RESEARCH_MAX_REPORTS", "200"),
+                200,
+                field_name="deep_research_max_reports",
+                minimum=0,
+            ),
             value_scenarios_enabled=os.getenv("VALUE_SCENARIOS_ENABLED", "true").lower()
             == "true",
             enable_agent_analysis=os.getenv("ENABLE_AGENT_ANALYSIS", "false").lower()

@@ -7,19 +7,111 @@ Tools:
 """
 
 import logging
+from datetime import date
 from typing import Optional
+
+import pandas as pd
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
 
 logger = logging.getLogger(__name__)
 
 
+def _merge_today_realtime_bar(stock_code: str, df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    """盘中将今日实时行情合并为 df 最后一根 bar，避免 current_price 用昨收。
+
+    背景：``load_history_df`` 的日线数据收盘后才落库。盘中生成报告时，df 最后一根
+    是昨日收盘，导致 ``StockTrendAnalyzer.current_price = 昨收``（如 58.93），而非
+    实时价（如 64.82）。本函数在 df 最后一根日期早于今天、且今天为交易日时，取
+    实时行情构造今日 bar 并 append，使技术分析（含 current_price/MA/bias）统一基于
+    含今日实时的数据。
+
+    守卫（任一不满足则原样返回 df，零行为变化）：
+      1. df 为空 / 无 date 列
+      2. df 最后一根日期 >= 今天（今日已入库 / 未来日，收盘后场景）
+      3. 今天非 A 股交易日（避免周末/假日 append 与昨收重复的 bar 污染 MA）
+      4. 实时行情获取失败 / price<=0（优雅降级，不阻塞分析）
+
+    Args:
+        stock_code: A 股代码，如 '600176'。
+        df: ``load_history_df`` 返回的历史日线 DataFrame。
+
+    Returns:
+        合并了今日实时 bar 的 df；不满足守卫时原样返回 df。
+    """
+    if df is None or df.empty or "date" not in df.columns:
+        return df
+
+    today = date.today()
+    try:
+        last_date = pd.Timestamp(df.iloc[-1]["date"]).date()
+    except (ValueError, TypeError):
+        return df
+    # 守卫 2：今日已入库（收盘后）或 df 含未来日期 → 无需合并
+    if last_date >= today:
+        return df
+
+    # 守卫 3：今天非 A 股交易日 → 不合并（避免污染）
+    try:
+        from src.core.trading_calendar import get_market_for_stock, is_market_open
+
+        market = get_market_for_stock(stock_code) or "cn"
+        if not is_market_open(market, today):
+            logger.debug(
+                "analyze_trend(%s): 今天非交易日，跳过实时 bar 合并", stock_code
+            )
+            return df
+    except Exception:
+        # 交易日历不可用时保守起见仍尝试合并（实时行情本身能反映是否有成交）
+        logger.debug("analyze_trend(%s): 交易日历判断失败，继续尝试实时合并", stock_code)
+
+    # 取实时行情（复用 data_tools 的 fetcher manager singleton）
+    try:
+        from src.agent.tools.data_tools import _get_fetcher_manager
+
+        quote = _get_fetcher_manager().get_realtime_quote(stock_code)
+    except Exception as exc:
+        logger.debug("analyze_trend(%s): 实时行情获取异常，回退历史: %s", stock_code, exc)
+        return df
+
+    if not quote or not quote.price or quote.price <= 0:
+        logger.debug("analyze_trend(%s): 实时行情不可用或价格无效，回退历史", stock_code)
+        return df
+
+    # 构造今日 bar：open/high/low/close/volume/amount/pct_chg 取自实时行情；
+    # 其余列（ma5/ma10/volume_ratio 等）留 NaN，由 StockTrendAnalyzer 内部重算。
+    new_row = {
+        "date": pd.Timestamp(today),
+        "open": float(quote.open_price or quote.price),
+        "high": float(quote.high or quote.price),
+        "low": float(quote.low or quote.price),
+        "close": float(quote.price),
+        "volume": float(quote.volume or 0),
+        "amount": float(quote.amount or 0),
+        "pct_chg": float(getattr(quote, "change_pct", None) or 0),
+    }
+    # 只填充 df 已有的列，缺失列自动 NaN
+    row_for_df = {k: v for k, v in new_row.items() if k in df.columns}
+    merged = pd.concat([df, pd.DataFrame([row_for_df])], ignore_index=True)
+    logger.info(
+        "analyze_trend(%s): 盘中合并今日实时 bar (price=%.2f, 昨收=%.2f)",
+        stock_code,
+        quote.price,
+        float(df.iloc[-1]["close"]),
+    )
+    return merged
+
+
 def _fetch_trend_data(stock_code: str):
-    """Fetch historical OHLCV (DataFrame) for trend analysis. DB first, then DataFetcher fallback."""
+    """Fetch historical OHLCV (DataFrame) for trend analysis. DB first, then DataFetcher fallback.
+
+    盘中会合并今日实时行情 bar（见 _merge_today_realtime_bar），避免 current_price
+    使用过时的昨收价。
+    """
     from src.services.history_loader import load_history_df
 
     df, _ = load_history_df(stock_code, days=60)
-    return df
+    return _merge_today_realtime_bar(stock_code, df)
 
 
 def _handle_analyze_trend(stock_code: str) -> dict:

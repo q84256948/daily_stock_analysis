@@ -368,12 +368,77 @@ get_daily_history_tool = ToolDefinition(
 # get_chip_distribution
 # ============================================================
 
+def _estimate_chip_from_history(
+    stock_code: str, df: Any, current_price: Optional[float]
+) -> Optional[Dict[str, Any]]:
+    """em 筹码源不可用时，用历史K线估算筹码核心指标（降级）。
+
+    akshare ``stock_cyq_em`` 是唯一筹码源，em 网络/代理不可达时全部失败（无 fallback）。
+    此函数用历史K线（tencent 等可用源）+ 当前价按成交量加权估算：
+    - ``avg_cost``: VWAP（成交量加权均价）
+    - ``profit_ratio``: 成交量加权获利盘比例（close ≤ 当前价的成交量占比）
+    - ``cost_70/90``: 价格 15/5% 与 85/95% 分位
+    - ``concentration``: 成本区间 / 均价
+
+    返回带 ``estimated=True`` 标记的 dict（供 LLM 标注精度有限）；数据不足返回 None。
+    """
+    if df is None or getattr(df, "empty", True) or len(df) < 10:
+        return None
+    if not current_price or current_price <= 0:
+        try:
+            current_price = float(df.iloc[-1]["close"])
+        except (KeyError, ValueError, TypeError):
+            return None
+    try:
+        close = df["close"].astype(float)
+        volume = df["volume"].astype(float)
+    except (KeyError, ValueError, TypeError):
+        return None
+    total_vol = float(volume.sum())
+    if total_vol <= 0:
+        return None
+    avg_cost = float((close * volume).sum() / total_vol)
+    profit_ratio = float(volume[close <= current_price].sum() / total_vol)
+    cost_70_low = float(close.quantile(0.15))
+    cost_70_high = float(close.quantile(0.85))
+    cost_90_low = float(close.quantile(0.05))
+    cost_90_high = float(close.quantile(0.95))
+    return {
+        "code": stock_code,
+        "date": str(df.iloc[-1].get("date", "")),
+        "source": "estimated_from_history",
+        "estimated": True,
+        "profit_ratio": profit_ratio,
+        "avg_cost": avg_cost,
+        "cost_90_low": cost_90_low,
+        "cost_90_high": cost_90_high,
+        "concentration_90": (cost_90_high - cost_90_low) / avg_cost,
+        "cost_70_low": cost_70_low,
+        "cost_70_high": cost_70_high,
+        "concentration_70": (cost_70_high - cost_70_low) / avg_cost,
+    }
+
+
 def _handle_get_chip_distribution(stock_code: str) -> dict:
     """Get chip distribution data."""
     manager = _get_fetcher_manager()
     chip = manager.get_chip_distribution(stock_code)
 
     if chip is None:
+        # fail-open：em 筹码源不可用时，用历史K线估算降级（标注 estimated）
+        try:
+            from src.services.history_loader import load_history_df
+
+            df, _ = load_history_df(stock_code, days=60)
+            quote = manager.get_realtime_quote(stock_code)
+            current_price = getattr(quote, "price", None) if quote else None
+            estimated = _estimate_chip_from_history(stock_code, df, current_price)
+        except Exception as exc:
+            logger.debug("get_chip_distribution(%s) 估算降级失败: %s", stock_code, exc)
+            estimated = None
+        if estimated:
+            logger.info("get_chip_distribution(%s): em 源不可用，历史K线估算降级", stock_code)
+            return estimated
         return {"error": f"No chip distribution data available for {stock_code}"}
 
     return {
@@ -453,6 +518,32 @@ get_analysis_context_tool = ToolDefinition(
 # get_stock_info
 # ============================================================
 
+def _fallback_valuation_from_quote(
+    manager: Any, stock_code: str, valuation: Dict[str, Any]
+) -> Dict[str, Any]:
+    """fundamental valuation 超时缺失时，用 ``get_realtime_quote`` 兜底 pe/pb/市值。
+
+    fundamental pipeline 的 valuation 受严格 fetch 超时（默认 3s）限制，而
+    ``get_realtime_quote`` 带 em→sina→tencent fallback 实测可达 4-5s，em 源失败时
+    易超时 → pe/pb/市值全 None（投研报告「数据缺失」）。估值是报告核心，此处用无
+    超时限制的 ``get_realtime_quote`` 兜底补全缺失字段；失败则保持原值，不阻塞。
+
+    只补缺失字段，fundamental 已拿到的非空值优先保留（不覆盖更优来源）。
+    """
+    try:
+        quote = manager.get_realtime_quote(stock_code)
+    except Exception as exc:
+        logger.debug("get_stock_info valuation fallback failed %s: %s", stock_code, exc)
+        return valuation
+    if not quote:
+        return valuation
+    merged = dict(valuation)
+    for field in ("pe_ratio", "pb_ratio", "total_mv", "circ_mv"):
+        if not merged.get(field):
+            merged[field] = getattr(quote, field, None)
+    return merged
+
+
 def _handle_get_stock_info(stock_code: str) -> dict:
     """Get stock fundamental information through unified fundamental context."""
     manager = _get_fetcher_manager()
@@ -464,6 +555,9 @@ def _handle_get_stock_info(stock_code: str) -> dict:
 
     compact_context = _compact_fundamental_context(fundamental_context)
     valuation = compact_context.get("valuation", {}).get("data", {})
+    # fail-open：fundamental valuation 受严格超时易缺失，用 get_realtime_quote 兜底估值
+    if not valuation.get("pe_ratio"):
+        valuation = _fallback_valuation_from_quote(manager, stock_code, valuation)
     sector_rankings = compact_context.get("boards", {}).get("data", {})
     belong_boards = manager.get_belong_boards(stock_code)
 
@@ -657,7 +751,16 @@ def _handle_get_capital_flow(stock_code: str) -> dict:
     sector_rankings = data.get("sector_rankings") or {}
     errors = ctx.get("errors") or []
 
-    return {
+    # failed（资金流源 stock_individual_fund_flow 走 push2his.eastmoney.com，代理/限流
+    # 环境下可能不可达且无 em 备份源）→ 加明确 note，避免 LLM 误判「数据缺失」而编造
+    note = None
+    if status == "failed":
+        note = (
+            "资金流数据源暂不可用（push2his 接口不可达/超时），本报告暂缺资金流分析，"
+            "请结合成交量/换手率等技术指标判断主力动向。"
+        )
+
+    result = {
         "stock_code": stock_code,
         "status": status,
         "main_net_inflow": stock_flow.get("main_net_inflow"),
@@ -669,6 +772,9 @@ def _handle_get_capital_flow(stock_code: str) -> dict:
         },
         "errors": errors,
     }
+    if note:
+        result["note"] = note
+    return result
 
 
 get_capital_flow_tool = ToolDefinition(
