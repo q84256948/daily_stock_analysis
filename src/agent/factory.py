@@ -477,3 +477,69 @@ def build_supply_chain_executor(config=None):
         max_steps=40,
         timeout_seconds=1200.0,
     )
+
+
+# 深度投研所需的精确工具集（去掉 backtest_tools + 冗余分析工具，减少 LLM 决策噪音）。
+# 对应五层穿透：宏观(get_market_indices/search_comprehensive_intel) +
+# 产业(get_sector_rankings/search_comprehensive_intel) + 财务(get_stock_info) +
+# 博弈(analyze_trend/get_chip_distribution/get_capital_flow) + 通用(行情/K线/新闻)。
+_DEEP_RESEARCH_TOOL_NAMES = {
+    "get_realtime_quote",
+    "get_daily_history",
+    "get_chip_distribution",
+    "get_stock_info",
+    "get_capital_flow",
+    "analyze_trend",
+    "search_stock_news",
+    "search_comprehensive_intel",
+    "get_market_indices",
+    "get_sector_rankings",
+}
+
+
+def build_deep_research_executor(config=None):
+    """构建深度投研报告专属 Executor（五层穿透框架）。
+
+    与问股/供应链的差异：
+    - **工具集**：从问股 ``get_tool_registry()`` 精确筛选 10 个工具（去掉 backtest_tools
+      与冗余分析工具 calculate_ma/get_volume_analysis/analyze_pattern，降低 LLM 决策噪音），
+      装入**独立 ToolRegistry 实例**（复制不污染问股单例）。
+    - **长任务**：``max_steps=30`` / ``wall_clock=1200s``（五层穿透 + 报告生成 2–5 分钟），
+      硬编码不读 ``config.agent_max_steps``，与问股(10)/供应链(40)互不影响。
+    - 返回 :class:`src.agent.deep_research_executor.DeepResearchExecutor`。
+    """
+    if config is None:
+        from src.config import get_config
+        config = get_config()
+
+    from src.agent.deep_research_executor import DeepResearchExecutor
+    from src.agent.llm_adapter import LLMToolAdapter
+    from src.agent.tools.registry import ToolRegistry
+
+    source_registry = get_tool_registry()
+    registry = ToolRegistry()
+    registered = 0
+    for tool in source_registry.list_tools():
+        if tool.name in _DEEP_RESEARCH_TOOL_NAMES:
+            registry.register(tool)
+            registered += 1
+
+    missing = _DEEP_RESEARCH_TOOL_NAMES - set(registry.list_names())
+    if missing:
+        logger.warning(
+            "[AgentFactory] DeepResearch 缺失工具: %s", sorted(missing)
+        )
+    logger.info(
+        "[AgentFactory] DeepResearch ToolRegistry built (%d/%d tools)",
+        registered,
+        len(_DEEP_RESEARCH_TOOL_NAMES),
+    )
+
+    llm_adapter = LLMToolAdapter(config)
+
+    return DeepResearchExecutor(
+        tool_registry=registry,
+        llm_adapter=llm_adapter,
+        max_steps=30,
+        timeout_seconds=1200.0,
+    )

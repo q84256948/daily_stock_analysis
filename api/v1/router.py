@@ -28,6 +28,7 @@ from api.v1.endpoints import (
     usage,
     zhengxi,
     supply_chain,
+    deep_research,
 )
 
 # 创建 v1 版本主路由。
@@ -63,6 +64,8 @@ router.include_router(
 router.include_router(zhengxi.router, prefix="/zhengxi", tags=["Zhengxi"])
 
 router.include_router(supply_chain.router, prefix="/supply-chain", tags=["SupplyChain"])
+
+router.include_router(deep_research.router, prefix="/deep-research", tags=["DeepResearch"])
 
 router.include_router(alphasift.router, prefix="/alphasift", tags=["AlphaSift"])
 

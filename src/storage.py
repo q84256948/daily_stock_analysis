@@ -49,6 +49,7 @@ from sqlalchemy import (
     and_,
     or_,
     delete,
+    asc,
     desc,
     event,
     func,
@@ -325,6 +326,59 @@ class AnalysisHistory(Base):
             "value_scenarios": self.value_scenarios,
             "investment_conclusion": self.investment_conclusion,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class DeepResearchReport(Base):
+    """深度投研报告记录模型（A股深度投研报告功能）。
+
+    与 ``AnalysisHistory`` 隔离：深度研报是独立产物（券商风格 Markdown 报告），
+    正文存文件（``reports/deep_research/``），元数据存本表，支持并发安全的
+    列表/详情/删除（SQLite + _run_write_transaction 重试，替代易损坏的 index.json）。
+    """
+
+    __tablename__ = "deep_research_reports"
+
+    id = Column(String(64), primary_key=True)  # {6位code}_{YYYYMMDDHHmm}
+
+    # 股票信息
+    stock_code = Column(String(10), nullable=False, index=True)
+    stock_name = Column(String(50))
+
+    # 时间
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    # 文件路径
+    md_path = Column(Text, nullable=False)
+    pdf_path = Column(Text)  # NULL = 尚未惰性生成
+
+    # 质量
+    status = Column(String(16))  # success | partial | failed
+    quality_score = Column(Integer)
+    missing_layers = Column(Text)  # JSON array
+
+    # 统计
+    total_steps = Column(Integer)
+    total_tokens = Column(Integer)
+    provider = Column(String(64))
+
+    __table_args__ = (Index("ix_deep_research_code_time", "stock_code", "created_at"),)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典（missing_layers 反序列化为 list）。"""
+        return {
+            "id": self.id,
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "md_path": self.md_path,
+            "pdf_path": self.pdf_path,
+            "status": self.status,
+            "quality_score": self.quality_score,
+            "missing_layers": json.loads(self.missing_layers) if self.missing_layers else [],
+            "total_steps": self.total_steps,
+            "total_tokens": self.total_tokens,
+            "provider": self.provider,
         }
 
 
@@ -2084,6 +2138,163 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 delete(AnalysisHistory).where(AnalysisHistory.id.in_(existing_ids))
             )
             return result.rowcount or 0
+
+    def save_deep_research_report(
+        self,
+        report_id: str,
+        stock_code: str,
+        stock_name: Optional[str],
+        md_path: str,
+        status: str,
+        quality_score: int = 0,
+        missing_layers: Optional[List[str]] = None,
+        total_steps: int = 0,
+        total_tokens: int = 0,
+        provider: str = "",
+    ) -> bool:
+        """保存/更新一条深度投研报告元数据。
+
+        ``report_id`` 重复则覆盖（SQLAlchemy merge）。失败返回 False。
+        """
+        def _write(session: Session) -> bool:
+            record = DeepResearchReport(
+                id=report_id,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                created_at=datetime.now(),
+                md_path=md_path,
+                pdf_path=None,
+                status=status,
+                quality_score=quality_score,
+                missing_layers=json.dumps(missing_layers or [], ensure_ascii=False),
+                total_steps=total_steps,
+                total_tokens=total_tokens,
+                provider=provider,
+            )
+            session.merge(record)
+            return True
+
+        try:
+            self._run_write_transaction(f"save_deep_research[{report_id}]", _write)
+            return True
+        except Exception as exc:
+            logger.error("save_deep_research_report failed [%s]: %s", report_id, exc)
+            return False
+
+    def set_deep_research_pdf_path(self, report_id: str, pdf_path: str) -> bool:
+        """PDF 惰性生成后，回填 pdf_path 到元数据。"""
+        def _write(session: Session) -> bool:
+            rec = session.execute(
+                select(DeepResearchReport).where(DeepResearchReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return False
+            rec.pdf_path = pdf_path
+            return True
+
+        try:
+            result = self._run_write_transaction(f"set_pdf_path[{report_id}]", _write)
+            return bool(result)
+        except Exception as exc:
+            logger.error("set_deep_research_pdf_path failed [%s]: %s", report_id, exc)
+            return False
+
+    def get_deep_research_reports(
+        self,
+        stock_code: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[DeepResearchReport], int]:
+        """分页查询深度投研报告列表（按时间倒序）。返回 (记录列表, 总数)。"""
+        with self.get_session() as session:
+            conditions = []
+            if stock_code:
+                conditions.append(DeepResearchReport.stock_code == stock_code)
+            where_clause = and_(*conditions) if conditions else True
+
+            total = session.execute(
+                select(func.count(DeepResearchReport.id)).where(where_clause)
+            ).scalar() or 0
+
+            rows = session.execute(
+                select(DeepResearchReport)
+                .where(where_clause)
+                .order_by(desc(DeepResearchReport.created_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
+
+    def get_deep_research_report(self, report_id: str) -> Optional[DeepResearchReport]:
+        """按主键查询单条报告。"""
+        with self.get_session() as session:
+            return session.execute(
+                select(DeepResearchReport).where(DeepResearchReport.id == report_id)
+            ).scalars().first()
+
+    def delete_deep_research_report(self, report_id: str) -> Optional[Dict[str, str]]:
+        """删除单条报告元数据，返回被删记录的 md_path/pdf_path（供调用方删文件）。"""
+        def _write(session: Session) -> Optional[Dict[str, str]]:
+            rec = session.execute(
+                select(DeepResearchReport).where(DeepResearchReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return None
+            paths = {"md_path": rec.md_path, "pdf_path": rec.pdf_path}
+            session.delete(rec)
+            return paths
+
+        try:
+            return self._run_write_transaction(f"delete_deep_research[{report_id}]", _write)
+        except Exception as exc:
+            logger.error("delete_deep_research_report failed [%s]: %s", report_id, exc)
+            return None
+
+    def prune_deep_research_reports(self, max_reports: int) -> List[Dict[str, str]]:
+        """清理超额报告（删最旧），返回被删记录的 md_path/pdf_path 列表（供调用方删文件）。
+
+        Args:
+            max_reports: 保留最新报告数量上限（>0 才执行）。
+
+        Returns:
+            被删记录的 {"md_path": ..., "pdf_path": ...} 列表（pdf_path 可能为 None）。
+        """
+        if max_reports <= 0:
+            return []
+
+        def _write(session: Session) -> List[Dict[str, str]]:
+            total = session.execute(
+                select(func.count(DeepResearchReport.id))
+            ).scalar() or 0
+            if total <= max_reports:
+                return []
+            excess = total - max_reports
+            # 取最旧的 N 条 id
+            old_ids = session.execute(
+                select(DeepResearchReport.id)
+                .order_by(asc(DeepResearchReport.created_at))
+                .limit(excess)
+            ).scalars().all()
+            if not old_ids:
+                return []
+            # 再查一次获取完整记录（for 文件路径）
+            old_recs = session.execute(
+                select(DeepResearchReport).where(DeepResearchReport.id.in_(old_ids))
+            ).scalars().all()
+            result_paths = [
+                {"md_path": r.md_path, "pdf_path": r.pdf_path} for r in old_recs
+            ]
+            # 删除
+            session.execute(
+                delete(DeepResearchReport).where(DeepResearchReport.id.in_(old_ids))
+            )
+            return result_paths
+
+        try:
+            return self._run_write_transaction("prune_deep_research_reports", _write)
+        except Exception as exc:
+            logger.error("prune_deep_research_reports failed: %s", exc)
+            return []
 
     def get_distinct_stocks_from_history(
         self,

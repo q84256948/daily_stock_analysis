@@ -1,0 +1,318 @@
+# -*- coding: utf-8 -*-
+"""深度投研报告编排服务（A股）。
+
+职责（编排层，不含 LLM/数据获取细节）：
+1. A 股代码校验与归一化（强制 cn 市场，拒绝港股/美股）。
+2. 调用 :class:`DeepResearchExecutor` 生成报告（五层穿透 + 质量校验 + 降级）。
+3. 报告存盘：Markdown 写文件（``reports/deep_research/``）+ 元数据写 SQLite
+   （并发安全，替代易损坏的 index.json）。
+4. 超额清理（删元数据同步删文件）。
+5. 列表/详情/删除代理 + PDF 惰性生成入口。
+
+不直接做 PDF 渲染（在 ``src/md2pdf.py``，P1 接入）；不直接跑 ReAct 循环（在 executor）。
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from src.config import get_config
+from src.services.stock_code_utils import normalize_code
+from src.storage import get_db
+
+logger = logging.getLogger(__name__)
+
+
+# 报告产物目录：项目根/reports/deep_research/（对齐 notification.py 的 reports/ 约定）
+_REPORTS_ROOT = Path(__file__).parent.parent.parent / "reports"
+_DEEP_RESEARCH_DIR = _REPORTS_ROOT / "deep_research"
+
+# report_id 格式：{6位A股代码}_{YYYYMMDDHHmm}（与下载白名单 ^\d{6}_\d{12}$ 对齐）
+_REPORT_ID_PATTERN = "{code}_{ts:%Y%m%d%H%M}"
+
+# executor 单例缓存（config 不常变；LLMToolAdapter/ToolRegistry 较重，避免每次重建）
+_executor_instance: Optional[Any] = None
+
+
+class DeepResearchInputError(ValueError):
+    """输入校验错误（非 A 股、格式非法等），endpoint 转 HTTP 400。"""
+
+
+def get_deep_research_dir() -> Path:
+    """返回深度投研报告目录，确保存在（Docker volume 子目录首次写入需 mkdir）。"""
+    _DEEP_RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
+    return _DEEP_RESEARCH_DIR
+
+
+def _max_reports() -> int:
+    """保留报告数量上限（默认 200，P1 从 config.deep_research_max_reports 读取）。"""
+    try:
+        return int(getattr(get_config(), "deep_research_max_reports", 200))
+    except Exception:
+        return 200
+
+
+def _lookup_stock_name(code: str) -> str:
+    """反查股票中文名（raw_name 缺省时用）。
+
+    复用 ``get_realtime_quote``（深度投研本就会调用，这里仅多一次轻量查询）。
+    失败返回空串，由调用方 fallback 到 code，不阻塞生成。
+    """
+    try:
+        from src.agent.tools.data_tools import _get_fetcher_manager
+
+        quote = _get_fetcher_manager().get_realtime_quote(code)
+        if quote and quote.name:
+            return str(quote.name).strip()
+    except Exception as exc:
+        logger.debug("[DeepResearch] 反查股票名称失败 %s: %s", code, exc)
+    return ""
+
+
+def _resolve_unique_report_id(base_id: str) -> str:
+    """确保 report_id 唯一：若 base_id 已存在于 DB，追加 _1/_2/... 序号后缀。
+
+    防同分钟同股票报告 id 冲突（save 用 merge 会覆盖旧记录，导致旧 .md/.pdf
+    文件成孤儿）。白名单 ``^\\d{6}_\\d{12}(_\\d+)?$`` 允许该后缀。
+    """
+    report_id = base_id
+    seq = 1
+    while get_db().get_deep_research_report(report_id) is not None:
+        report_id = f"{base_id}_{seq}"
+        seq += 1
+    return report_id
+
+
+def _get_executor() -> Any:
+    """获取（缓存的）DeepResearchExecutor 单例。"""
+    global _executor_instance
+    if _executor_instance is None:
+        from src.agent.factory import build_deep_research_executor
+
+        _executor_instance = build_deep_research_executor()
+    return _executor_instance
+
+
+def normalize_a_share(raw_code: str) -> str:
+    """归一化并校验为 A 股代码。
+
+    A 股 = 归一化后 6 位纯数字（沪深京：60xxxx/00xxxx/30xxxx/688xxx/920xxx/430xxx/83xxxx）。
+    非 A 股抛 ``DeepResearchInputError``（endpoint 转为 HTTP 400）。
+    """
+    if not raw_code or not str(raw_code).strip():
+        raise DeepResearchInputError("股票代码不能为空")
+
+    normalized = normalize_code(str(raw_code).strip())
+    if not normalized:
+        raise DeepResearchInputError(f"无法识别的股票代码：{raw_code}")
+
+    # A 股判定：6 位纯数字（HK 为 5 位，US 为字母）
+    if not (normalized.isdigit() and len(normalized) == 6):
+        raise DeepResearchInputError(
+            f"深度投研报告当前仅支持 A 股，代码 {raw_code}（归一化为 {normalized}）非 A 股"
+        )
+    return normalized
+
+
+class DeepResearchService:
+    """深度投研报告编排服务（无状态，方法可独立调用）。"""
+
+    # ------------------------------------------------------------------
+    # 生成
+    # ------------------------------------------------------------------
+
+    def generate_report(
+        self,
+        raw_code: str,
+        raw_name: Optional[str] = None,
+        report_type: str = "deep",
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+    ) -> Dict[str, Any]:
+        """生成一份深度投研报告并落盘。返回 {report_id, status, markdown, ...}。"""
+        code = normalize_a_share(raw_code)
+        name = (raw_name or "").strip()
+        if not name:
+            # 前端未传名称时反查真实中文名，避免元数据 stock_name 退化成代码
+            name = _lookup_stock_name(code) or code
+
+        report_id = _REPORT_ID_PATTERN.format(code=code, ts=datetime.now())
+        # 防同分钟同股票 id 冲突（save 用 merge 会覆盖旧记录导致文件孤儿）
+        report_id = _resolve_unique_report_id(report_id)
+        report_dir = get_deep_research_dir()
+        md_path = report_dir / f"{report_id}.md"
+
+        executor = _get_executor()
+        result = executor.generate(
+            stock_code=code,
+            stock_name=name,
+            report_type=report_type,
+            progress_callback=progress_callback,
+        )
+
+        # 写 Markdown 文件（即使 partial 也写，保证有产物）
+        markdown = result.markdown or ""
+        write_ok = False
+        if markdown:
+            try:
+                md_path.write_text(markdown, encoding="utf-8")
+                write_ok = True
+            except OSError as exc:
+                logger.error("[DeepResearch] 写报告文件失败 %s: %s", md_path, exc)
+
+        # 写元数据到 SQLite（md_path 用绝对路径字符串）
+        if write_ok:
+            get_db().save_deep_research_report(
+                report_id=report_id,
+                stock_code=code,
+                stock_name=name,
+                md_path=str(md_path),
+                status=result.status,
+                quality_score=result.quality_score,
+                missing_layers=result.missing_layers,
+                total_steps=result.total_steps,
+                total_tokens=result.total_tokens,
+                provider=result.provider,
+            )
+            # 清理超额（事务内删元数据，事务外删文件）
+            self._prune_and_clean_files(_max_reports())
+
+        if progress_callback:
+            progress_callback(
+                {
+                    "type": "done",
+                    "report_id": report_id if write_ok else None,
+                    "status": result.status,
+                    "quality_score": result.quality_score,
+                    "missing_layers": result.missing_layers,
+                    "markdown": markdown,
+                    "error": result.error if not result.success else None,
+                }
+            )
+
+        return {
+            "report_id": report_id if write_ok else None,
+            "stock_code": code,
+            "stock_name": name,
+            "status": result.status,
+            "quality_score": result.quality_score,
+            "missing_layers": result.missing_layers,
+            "markdown": markdown,
+            "md_path": str(md_path) if write_ok else None,
+            "total_steps": result.total_steps,
+            "total_tokens": result.total_tokens,
+            "provider": result.provider,
+            "error": result.error if not result.success else None,
+        }
+
+    # ------------------------------------------------------------------
+    # 查询
+    # ------------------------------------------------------------------
+
+    def list_reports(
+        self, limit: int = 50, offset: int = 0, stock_code: Optional[str] = None
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """分页列表（不含 Markdown 正文，仅元数据）。"""
+        rows, total = get_db().get_deep_research_reports(
+            stock_code=stock_code, offset=offset, limit=limit
+        )
+        return [r.to_dict() for r in rows], total
+
+    def get_report(self, report_id: str) -> Optional[Dict[str, Any]]:
+        """单条报告详情（含 Markdown 正文，从文件读取）。"""
+        record = get_db().get_deep_research_report(report_id)
+        if record is None:
+            return None
+        data = record.to_dict()
+        # 读取 Markdown 正文
+        markdown = ""
+        try:
+            md_path = Path(record.md_path)
+            if md_path.exists():
+                markdown = md_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("[DeepResearch] 读取报告正文失败 %s: %s", record.md_path, exc)
+        data["markdown"] = markdown
+        return data
+
+    # ------------------------------------------------------------------
+    # 删除
+    # ------------------------------------------------------------------
+
+    def delete_report(self, report_id: str) -> bool:
+        """删除报告（元数据 + .md + .pdf 文件）。返回是否删除成功。"""
+        paths = get_db().delete_deep_research_report(report_id)
+        if paths is None:
+            return False
+        # 删文件（事务外，失败只记日志不影响元数据删除）
+        for key in ("md_path", "pdf_path"):
+            p = paths.get(key)
+            if p:
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning("[DeepResearch] 删除文件失败 %s: %s", p, exc)
+        logger.info("[DeepResearch] 已删除报告 %s", report_id)
+        return True
+
+    # ------------------------------------------------------------------
+    # PDF（P1 接入 md2pdf 后实现）
+    # ------------------------------------------------------------------
+
+    def get_pdf_path(self, report_id: str) -> Optional[str]:
+        """返回报告 PDF 路径。若未生成则触发惰性生成（P1 实现）。"""
+        record = get_db().get_deep_research_report(report_id)
+        if record is None:
+            return None
+        if record.pdf_path:
+            # 已生成，校验文件存在
+            if Path(record.pdf_path).exists():
+                return record.pdf_path
+        # 惰性生成（P1 实现，当前返回 None）
+        return self._generate_pdf(record)
+
+    def _generate_pdf(self, record: Any) -> Optional[str]:
+        """惰性生成 PDF（P1 接入 src/md2pdf.py）。"""
+        try:
+            from src.md2pdf import markdown_to_pdf_file
+        except ImportError:
+            logger.warning("[DeepResearch] md2pdf 未就绪（P1），PDF 暂不可用")
+            return None
+
+        md_path = Path(record.md_path)
+        if not md_path.exists():
+            return None
+        markdown = md_path.read_text(encoding="utf-8")
+        pdf_path = str(md_path.with_suffix(".pdf"))
+
+        result_path = markdown_to_pdf_file(markdown, pdf_path)
+        if result_path:
+            get_db().set_deep_research_pdf_path(record.id, result_path)
+            return result_path
+        return None
+
+    # ------------------------------------------------------------------
+    # 清理
+    # ------------------------------------------------------------------
+
+    def _prune_and_clean_files(self, max_reports: int) -> None:
+        """清理超额报告：删元数据（事务内）+ 删文件（事务外）。"""
+        if max_reports <= 0:
+            return
+        pruned = get_db().prune_deep_research_reports(max_reports)
+        for paths in pruned:
+            for key in ("md_path", "pdf_path"):
+                p = paths.get(key)
+                if p:
+                    try:
+                        Path(p).unlink(missing_ok=True)
+                    except OSError as exc:
+                        logger.warning("[DeepResearch] 清理删除文件失败 %s: %s", p, exc)
+        if pruned:
+            logger.info("[DeepResearch] 清理超额报告 %d 份", len(pruned))
+
+
+# 模块级单例（与现有 service 风格一致）
+deep_research_service = DeepResearchService()

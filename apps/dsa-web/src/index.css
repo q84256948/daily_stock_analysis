@@ -1944,6 +1944,24 @@ textarea {
   padding: 0.5rem 1rem;
   color: var(--text-secondary-text);
 }
+
+/*
+ * 深度投研报告专用 prose scope（与 home-markdown-prose 并存于同一容器）。
+ * 定义在 home-markdown-prose 之后，同 specificity 下后者胜，从而覆盖表格 nowrap。
+ * 修复：复杂研报表格（SOTP/情景/敏感性）需要换行 + 数字右对齐。
+ */
+.deep-research-prose :where(table) {
+  white-space: normal; /* 覆盖 home-markdown-prose 的 nowrap，支持单元格换行 */
+}
+
+.deep-research-prose :where(td:nth-child(n + 2)) {
+  text-align: right;
+  font-variant-numeric: tabular-nums; /* 等宽数字，数值列对齐整齐 */
+}
+
+.deep-research-prose :where(blockquote) {
+  border-left: 3px solid hsl(var(--primary)); /* 结论前置/质量提示横幅视觉强调 */
+}
 .label-uppercase {
   display: inline-flex;
   align-items: center;

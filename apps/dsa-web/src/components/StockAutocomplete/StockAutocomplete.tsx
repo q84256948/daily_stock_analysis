@@ -3,6 +3,11 @@
  *
  * Stock code/name autocomplete input box
  * Supports keyboard navigation, IME input method, graceful degradation
+ *
+ * mode:
+ * - 'instant' (default): 选中联想项或回车即触发 onSubmit（HomePage 行为）
+ * - 'form': 选中联想项只填入输入框（onChange），不触发 onSubmit；
+ *           仅"无高亮项时回车"才 onSubmit（适配表单流：填入后点按钮提交）
  */
 
 import { Component, useRef, useEffect, useState } from 'react';
@@ -17,6 +22,8 @@ import { cn } from '../../utils/cn';
 const AUTOCOMPLETE_INPUT_CLASS =
   'input-surface input-focus-glow h-11 w-full rounded-xl border bg-transparent px-4 text-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-60';
 
+export type StockAutocompleteMode = 'instant' | 'form';
+
 export interface StockAutocompleteProps {
   /** Input value */
   value: string;
@@ -30,6 +37,13 @@ export interface StockAutocompleteProps {
   placeholder?: string;
   /** Additional CSS class name */
   className?: string;
+  /**
+   * Trigger mode:
+   * - 'instant' (default): select/enter submits immediately (HomePage behavior)
+   * - 'form': selecting a suggestion only fills the input; only Enter without
+   *   a highlighted item submits (for form flows where a button triggers submit)
+   */
+  mode?: StockAutocompleteMode;
 }
 
 function FallbackInput({
@@ -98,6 +112,7 @@ function StockAutocompleteInner({
   disabled = false,
   placeholder = '输入股票代码或名称',
   className,
+  mode = 'instant',
 }: StockAutocompleteProps) {
   const { index, loading, fallback } = useStockIndex();
   const {
@@ -173,6 +188,10 @@ function StockAutocompleteInner({
     console.error('Autocomplete runtime fallback activated.', autocompleteError);
   }, [autocompleteError]);
 
+  // Whether selecting a suggestion should immediately submit.
+  // 'instant' mode (default): yes (HomePage). 'form' mode: no (only fill input).
+  const submitOnSelect = mode === 'instant';
+
   // Keyboard event handling
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     // Skip if composing (IME)
@@ -194,9 +213,12 @@ function StockAutocompleteInner({
           const selected = suggestions[highlightedIndex];
           onChange(selected.displayCode);
           closeSuggestions();
-          onSubmit(selected.canonicalCode, selected.nameZh, 'autocomplete');
+          if (submitOnSelect) {
+            onSubmit(selected.canonicalCode, selected.nameZh, 'autocomplete');
+          }
+          // form mode: only fill input, let user click submit button
         } else {
-          // Submit directly
+          // No highlighted item: Enter submits the typed value (both modes)
           onSubmit(value);
         }
         break;
@@ -282,8 +304,10 @@ function StockAutocompleteInner({
             onChange(s.displayCode);
             // Close dropdown list
             closeSuggestions();
-            // Submit analysis
-            onSubmit(s.canonicalCode, s.nameZh, 'autocomplete');
+            // instant mode: submit immediately; form mode: only fill
+            if (submitOnSelect) {
+              onSubmit(s.canonicalCode, s.nameZh, 'autocomplete');
+            }
           }}
           onMouseEnter={(index) => setHighlightedIndex(index)}
           style={{ position: 'fixed', ...dropdownStyle }}

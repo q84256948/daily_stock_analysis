@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Award, Activity, BarChart3, Bell, BriefcaseBusiness, Gauge, Home, LogOut, MessageSquareQuote, Network, Search, Settings2 } from 'lucide-react';
+import { Award, Activity, BarChart3, Bell, BriefcaseBusiness, FileText, Gauge, Home, LogOut, MessageSquareQuote, Network, Search, Settings2 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { ALPHASIFT_CONFIG_CHANGED_EVENT, SYSTEM_CONFIG_CHANGED_EVENT, alphasiftApi } from '../../api/alphasift';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,6 +29,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { key: 'home', labelKey: 'layout.nav.home', to: '/', icon: Home, exact: true },
+  { key: 'deep-research', labelKey: 'layout.nav.deepResearch', to: '/deep-research', icon: FileText },
   { key: 'chat', labelKey: 'layout.nav.chat', to: '/chat', icon: MessageSquareQuote, badge: 'completion' },
   { key: 'zhengxi', labelKey: 'layout.nav.zhengxi', to: '/zhengxi', icon: Award },
   { key: 'supply-chain', labelKey: 'layout.nav.supplyChain', to: '/supply-chain', icon: Network },
