@@ -1,36 +1,42 @@
 # -*- coding: utf-8 -*-
 """Markdown 转 PDF 工具（深度投研报告专用）。
 
-用 **xhtml2pdf + reportlab CID 字体** 纯 Python 渲染，不依赖任何系统二进制
-（wkhtmltopdf/wkhtmltoimage 已于 2023 年停止维护，且 Homebrew 6.0+ 移除了
-``wkhtmltopdf`` formula，导致 macOS 本地 PDF 下载 404）。
+用 **WeasyPrint**（HTML/CSS → PDF，基于 Pango/Cairo）渲染。相比旧 xhtml2pdf +
+reportlab CID 字体方案，正确处理：
+- ``<ul><li>`` 项目符号（修复旧方案 bullet 渲染成 "煉" 的 CID CMap 错位）
+- ``<pre>`` 代码块（修复旧方案 CJK 代码块整片黑条的 ``<pre>`` 元素级 bug）
+- emoji / 箭头 / 表格（标准 CSS 兼容，旧方案多变为方框或错位汉字）
+
+依赖：
+- ``pip install weasyprint``
+- 系统库：pango / cairo / glib / gdk-pixbuf
+  - macOS：``brew install pango cairo gdk-pixbuf glib``（本模块自动探测 brew lib 路径，
+    用户无需手动配置 ``DYLD_FALLBACK_LIBRARY_PATH``）
+  - Linux/Debian：``apt-get install libpango-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+    libglib2.0-0 fonts-noto-cjk``
 
 设计要点：
-1. **纯 Python**：``pip install`` 即用，macOS / Linux / Docker 全平台一致，无需
-   安装系统级 Qt/WebKit 或字体文件。
-2. **CJK 零字体文件**：reportlab 内置 ``UnicodeCIDFont('STSong-Light')``（Adobe
-   Asian CID 字体），通过 ``pdfmetrics.registerFont`` 注册 + CSS ``font-family``
-   引用解决中文渲染。注意：xhtml2pdf 默认无 CJK（输出全是方块），``@font-face``
-   嵌入 ttf/ttc 对 CJK 不可靠——必须走 reportlab CID 注册路径。
-3. **模块级 ``threading.Semaphore(1)``** 限并发，保留原防 OOM 语义。
-4. ``markdown_to_pdf_file()`` → 文件路径（惰性生成），而非返回 bytes。
-
-失败语义：依赖缺失或渲染异常时返回 ``None``，不抛异常，由调用方（service 层）处理
-降级为 HTTP 404，不影响报告生成主流程。
+1. **接口契约不变**：``markdown_to_pdf_file(markdown_text, output_path) -> Optional[str]``，
+   成功返回 ``output_path``，失败/依赖缺失返回 ``None``（不抛异常），由 service 层降级为
+   HTTP 404，不影响报告生成主流程。
+2. **CJK 字体回退链**：跨平台 CSS font-family（macOS 苹方 / Linux Noto / 文泉 / 雅黑）。
+3. **模块级 ``threading.Semaphore(1)``** 限并发（WeasyPrint 渲染 CPU/内存密集），保留防 OOM 语义。
+4. 复用 ``formatters.markdown_to_html_document`` 生成 HTML，惰性生成 PDF 文件。
 
 用法（endpoint）：
     path = await asyncio.to_thread(markdown_to_pdf_file, markdown_text, output_path)
     if path:
         return FileResponse(path, ...)
 
-Security note: markdown_to_html_document 产出固定结构 HTML，经 xhtml2pdf 渲染为
-PDF（reportlab 输出），不执行外部脚本。输入为系统生成的投研报告，非原始用户输入。
+Security note: 输入为系统生成的投研报告 markdown，经 markdown2 → HTML → WeasyPrint 渲染，
+不执行外部脚本；构造 HTML 时不传 base_url，不加载远程资源。
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import platform
 import threading
 from typing import Optional
 
@@ -38,64 +44,87 @@ from src.formatters import markdown_to_html_document
 
 logger = logging.getLogger(__name__)
 
-# 单进程并发限流（保留原防 OOM 语义；xhtml2pdf 同步渲染，避免并发拖垮内存）
-# 注：同一时刻只有 1 个 PDF 在生成；其他请求排队（os.stat 不阻塞）。
+# 单进程并发限流（WeasyPrint 渲染 CPU/内存密集，同进程串行避免 OOM）。
+# 注：同一时刻只有 1 个 PDF 在生成；其他请求排队。
 _pdf_lock = threading.Semaphore(1)
 
-# reportlab 内置 Adobe CJK CID 字体（STSong-Light = 简体中文宋体）。
-# 零外部字体文件，跨平台一致；幂等注册（重复注册 reportlab 自动忽略）。
-_CJK_FONT_NAME = "STSong-Light"
-_font_registered = False
+# Semaphore 获取超时秒数（提为常量，便于测试注入小值覆盖超时分支）。
+_PDF_LOCK_TIMEOUT = 5.0
 
-# CJK 友好的 PDF 样式：全标签覆盖 CID 字体 + 表格边框 + 合理字号/行距。
-# 覆盖范围必须包含 td/th/li/blockquote 等所有文本节点，否则对应标签回退默认字体出方块。
+# macOS Homebrew glib 动态库候选路径（Apple Silicon / Intel）。
+_BREW_LIB_CANDIDATES = ("/opt/homebrew/lib", "/usr/local/lib")
+# 判定 brew glib 是否存在的标记文件（WeasyPrint 经 cffi 加载 libgobject）。
+_GOBJECT_MARKER = "libgobject-2.0.0.dylib"
+
+# CJK 字体回退链：macOS PingFang/Hiragino，Linux Noto/Source Han/文泉/雅黑，最后 sans-serif。
+# 保证不同平台都能正确渲染中文；PDF 嵌入字体子集后外观稳定。
+_PDF_FONT_STACK = (
+    '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", '
+    '"Source Han Sans SC", "WenQuanYi Micro Hei", "Microsoft YaHei", sans-serif'
+)
+
+# CJK 友好的 PDF 样式：全标签覆盖字体回退链 + 表格边框 + 合理字号/行距。
+# 覆盖范围包含 td/th/li/blockquote/pre/code 等所有文本节点。
+# CSS 的 { } 需转义为 {{ }} 以走 str.format。
 _PDF_CSS = """
 <style>
-body, p, td, th, li, h1, h2, h3, h4, h5, h6, blockquote, span, div, strong, em {
-    font-family: '%s';
+body, p, td, th, li, h1, h2, h3, h4, h5, h6, blockquote, span, div, strong, em, pre, code {{
+    font-family: {fonts};
     font-size: 11pt;
     line-height: 1.6;
-}
-h1 { font-size: 18pt; }
-h2 { font-size: 15pt; }
-h3 { font-size: 13pt; }
-table { border-collapse: collapse; width: 100%%; margin: 8px 0; }
-td, th { border: 1px solid #999; padding: 4px 8px; text-align: left; }
-th { background-color: #f0f0f0; font-weight: bold; }
-blockquote { border-left: 3px solid #ccc; padding-left: 10px; color: #555; }
-code, pre { font-family: 'STSong-Light'; }
+}}
+h1 {{ font-size: 18pt; }}
+h2 {{ font-size: 15pt; }}
+h3 {{ font-size: 13pt; }}
+table {{ border-collapse: collapse; width: 100%; margin: 8px 0; }}
+td, th {{ border: 1px solid #999; padding: 4px 8px; text-align: left; }}
+th {{ background-color: #f0f0f0; font-weight: bold; }}
+blockquote {{ border-left: 3px solid #ccc; padding-left: 10px; color: #555; }}
+pre {{ background-color: #f6f8fa; padding: 8px; border-radius: 3px; white-space: pre-wrap; word-wrap: break-word; }}
+code {{ font-family: {fonts}; }}
 </style>
-""" % _CJK_FONT_NAME
+""".format(fonts=_PDF_FONT_STACK)
 
 
-def _ensure_cjk_font() -> None:
-    """幂等注册 reportlab CID 字体（模块级只注册一次）。"""
-    global _font_registered
-    if _font_registered:
+def _prepare_weasyprint_env() -> None:
+    """macOS 下自动把 Homebrew 的 glib 动态库路径加入 dyld 搜索路径。
+
+    WeasyPrint 经 cffi 加载 ``libgobject-2.0-0``；macOS 上 brew 安装的库不在系统
+    dyld 默认搜索路径内，需 ``DYLD_FALLBACK_LIBRARY_PATH`` 指向 ``/opt/homebrew/lib``
+    （Apple Silicon）或 ``/usr/local/lib``（Intel），否则报
+    ``cannot load library 'libgobject-2.0-0'``。本函数幂等探测并设置，让用户免手动
+    配置环境变量；非 macOS 无副作用；找不到 brew 路径时静默返回（后续 import 给出明确错误）。
+    """
+    if platform.system() != "Darwin":
         return
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-
-    pdfmetrics.registerFont(UnicodeCIDFont(_CJK_FONT_NAME))
-    _font_registered = True
+    current = os.environ.get("DYLD_FALLBACK_LIBRARY_PATH", "")
+    existing = current.split(":") if current else []
+    for candidate in ("/opt/homebrew/lib", "/usr/local/lib"):
+        if not os.path.exists(os.path.join(candidate, "libgobject-2.0.0.dylib")):
+            continue
+        if candidate in existing:
+            return
+        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = (
+            f"{candidate}:{current}" if current else candidate
+        )
+        return
 
 
 def markdown_to_pdf_file(markdown_text: str, output_path: str) -> Optional[str]:
-    """将 Markdown 转为 PDF 文件（xhtml2pdf + reportlab CID 字体）。
+    """将 Markdown 转为 PDF 文件（WeasyPrint 渲染）。
 
     Args:
         markdown_text: Markdown 原文（utf-8）。
-        output_path: PDF 输出文件路径（完整路径，函数内部不创建目录）。
+        output_path: PDF 输出文件路径（完整路径；父目录不存在时自动创建）。
 
     Returns:
-        ``output_path``（成功）或 ``None``（失败/依赖缺失）。
-        失败时返回 None，不抛异常，调用方处理降级。
+        ``output_path``（成功）或 ``None``（空输入 / 依赖缺失 / 渲染失败）。
+        失败时不抛异常，调用方（service 层）处理降级为 HTTP 404。
     """
     if not markdown_text or not markdown_text.strip():
         logger.warning("[md2pdf] 空 Markdown，跳过")
         return None
 
-    # 确保父目录存在（reports/deep_research/ 子目录首次写入）
     parent = os.path.dirname(output_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -107,12 +136,12 @@ def markdown_to_pdf_file(markdown_text: str, output_path: str) -> Optional[str]:
         return None
 
     try:
-        # ---------- lazy import xhtml2pdf / reportlab ----------
+        # ---------- macOS 环境自适应 + lazy import weasyprint ----------
+        _prepare_weasyprint_env()
         try:
-            _ensure_cjk_font()
-            from xhtml2pdf import pisa
-        except ImportError:
-            logger.warning("[md2pdf] xhtml2pdf/reportlab 未安装，PDF 生成跳过")
+            from weasyprint import HTML
+        except Exception as exc:  # ImportError / cffi 加载 libgobject 失败的 OSError 等
+            logger.warning("[md2pdf] weasyprint 未就绪（%s），PDF 生成跳过", exc)
             return None
 
         # ---------- Markdown → HTML（复用 md2img 同源格式化器）→ 注入 CJK CSS ----------
@@ -122,11 +151,10 @@ def markdown_to_pdf_file(markdown_text: str, output_path: str) -> Optional[str]:
         else:
             html = _PDF_CSS + html
 
-        # ---------- 渲染 ----------
-        with open(output_path, "wb") as f:
-            result = pisa.CreatePDF(html, dest=f, encoding="utf-8")
+        # ---------- 渲染（不传 base_url，避免加载远程资源） ----------
+        HTML(string=html).write_pdf(output_path)
 
-        if not result.err and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             logger.info(
                 "[md2pdf] 生成成功: %s (%.1f KB)",
                 output_path,
@@ -134,13 +162,7 @@ def markdown_to_pdf_file(markdown_text: str, output_path: str) -> Optional[str]:
             )
             return output_path
 
-        logger.warning("[md2pdf] xhtml2pdf 渲染失败或输出无效: err=%s", getattr(result, "err", "?"))
-        # 清理可能产生的空/坏文件，避免后续误判已生成
-        try:
-            if os.path.exists(output_path) and os.path.getsize(output_path) == 0:
-                os.remove(output_path)
-        except OSError:
-            pass
+        logger.warning("[md2pdf] WeasyPrint 渲染输出无效（空文件）")
         return None
 
     except Exception as exc:

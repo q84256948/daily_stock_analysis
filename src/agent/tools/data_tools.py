@@ -15,6 +15,9 @@ from threading import Lock
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
+from data_provider.cross_source_validator import AnchorReading
+from data_provider.capital_flow_provider import get_main_inflow_cumulative
+from src.agent.tools.cross_validation_helpers import build_cross_validation_block
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +139,111 @@ def _compact_fundamental_context(fundamental_context: dict) -> dict:
     return compact
 
 
+def _latest_annual_period(today: Optional[date] = None) -> str:
+    """推导最新已披露 A 股年报报告期（"YYYY年报"）。
+
+    年报 N 须于 N+1 年 4/30 前披露：5 月起上年度年报可获取，否则取再上一年。
+    用于驱动 iFinD 财务类查询（需报告期）；MX 取不到指期会自动回退最新（见 mx 适配器）。
+    ``today`` 可注入便于单测。
+    """
+    today = today or date.today()
+    year = today.year - 1 if today.month >= 5 else today.year - 2
+    return f"{year}年报"
+
+
+# growth 块字段 → 交叉验证锚点名：akshare 失败时从 CV 回填这些 None 字段。
+# net_profit_yoy 无对应 CV 锚点，故不在此列（无法兜底）。
+_GROWTH_CV_FIELDS = ("revenue_yoy", "gross_margin", "roe")
+
+
+def _backfill_growth_from_validation(
+    growth_block: Optional[Dict[str, Any]], cv_block: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """用交叉验证结果回填 growth 块中的 None 字段（akshare 失败兜底）。
+
+    仅回填 ``data`` 中为 None 的 ``revenue_yoy/gross_margin/roe``，从
+    ``cv_block["anchors"][field]["v"]`` 取值（v 非 None 才填）；已有非空值不覆盖。
+    回填补到值且原 data 为空 → ``status`` 置 "partial"（诚实：CV 兜底，非完整 bundle）。
+    无 cv_block / 无锚点 / 无值可填 → 原样返回新副本。返回**新 dict**（不可变）。
+    """
+    block = dict(growth_block or {})
+    data = dict(block.get("data") or {})
+    original_had_value = any(v is not None for v in data.values())
+    anchors = cv_block.get("anchors") if isinstance(cv_block, dict) else None
+    backfilled_any = False
+    if isinstance(anchors, dict):
+        for field in _GROWTH_CV_FIELDS:
+            if data.get(field) is not None:
+                continue
+            anchor = anchors.get(field)
+            value = anchor.get("v") if isinstance(anchor, dict) else None
+            if value is not None:
+                data[field] = value
+                backfilled_any = True
+    if not backfilled_any:
+        return block
+    if not original_had_value:  # 原数据全 None/空 → 提升到 partial（CV 兜底，非完整 bundle）
+        block["status"] = "partial"
+    block["data"] = data
+    return block
+
+
+def _backfill_capital_flow(
+    result: Optional[Dict[str, Any]],
+    cv_block: Optional[Dict[str, Any]],
+    ifind_cumulative: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """用交叉验证 + iFinD 多日累计回填资金流缺失字段（akshare push2his 不可达兜底）。
+
+    - ``main_net_inflow`` 缺失 ← 优先 ``cv_block["anchors"]["main_inflow"]["v"]``
+      （MX+iFinD 双源方向验证值），否则 ``ifind_cumulative["main_net_inflow"]``（iFinD 单日）。
+    - ``inflow_5d`` / ``inflow_10d`` 缺失 ← ``ifind_cumulative``（iFinD 多日序列累计；
+      MX 无多日、akshare 不可达 → 累计仅 iFinD 单源）。
+    - 已有非空值不覆盖；回填补到值且原 status 非 ``ok`` → status 提升到 ``partial``，
+      并移除原 ``failed`` note（「暂缺资金流分析」已不准确，避免误导 LLM）。
+    - 附 ``capital_flow_fallback={"source","daily_series"}`` 透明标注来源。
+    无值可填 / 无源 → 原样返回新副本。返回**新 dict**（不可变）。
+    """
+    out = dict(result or {})
+    cumulative = ifind_cumulative if isinstance(ifind_cumulative, dict) else {}
+    anchors = cv_block.get("anchors") if isinstance(cv_block, dict) else None
+    backfilled = False
+    fallback_source = None
+
+    # main_net_inflow：优先双源 CV（方向验证），否则 iFinD 单日序列首值
+    if out.get("main_net_inflow") is None:
+        value = None
+        if isinstance(anchors, dict):
+            anchor = anchors.get("main_inflow")
+            value = anchor.get("v") if isinstance(anchor, dict) else None
+            if value is not None:
+                fallback_source = "mx+ifind"
+        if value is None and cumulative.get("main_net_inflow") is not None:
+            value = cumulative["main_net_inflow"]
+            fallback_source = cumulative.get("source", "ifind")
+        if value is not None:
+            out["main_net_inflow"] = value
+            backfilled = True
+
+    # inflow_5d / inflow_10d：仅 iFinD 多日序列可提供（累计为单源，诚实标注）
+    for field in ("inflow_5d", "inflow_10d"):
+        if out.get(field) is None and cumulative.get(field) is not None:
+            out[field] = cumulative[field]
+            backfilled = True
+            fallback_source = fallback_source or cumulative.get("source", "ifind")
+
+    if not backfilled:
+        return out
+    if (result or {}).get("status") != "ok":
+        out["status"] = "partial"
+        out.pop("note", None)  # 原 failed note 已不准确
+    out["capital_flow_fallback"] = {
+        "source": fallback_source or "ifind",
+        "daily_series": cumulative.get("daily_series") or [],
+    }
+    return out
+
+
 def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False, top_n: int = 5) -> dict:
     """Shrink portfolio snapshot payload for default tool responses."""
     if not isinstance(snapshot, dict):
@@ -243,7 +351,7 @@ def _handle_get_realtime_quote(stock_code: str) -> dict:
             "note": "All data sources unavailable (network or circuit-breaker). Skip this tool and proceed with historical data only.",
         }
 
-    return {
+    response = {
         "code": quote.code,
         "name": quote.name,
         "price": quote.price,
@@ -265,6 +373,19 @@ def _handle_get_realtime_quote(stock_code: str) -> dict:
         "change_60d": quote.change_60d,
         "source": quote.source.value if hasattr(quote.source, 'value') else str(quote.source),
     }
+    # opt-in 交叉验证：当前价主源=realtime（盘中实时），MX/iFinD 验证（开关关→无此字段）
+    # quote.price 可能为 None（盘前/停牌/数据缺口），此时不注入 primary_reading，
+    # validator 仍可用 MX/iFinD 单源验证 current_price（fail-open，不静默丢锚点）
+    _cv = build_cross_validation_block(
+        stock_code, ["current_price"],
+        primary_readings=(
+            {"current_price": AnchorReading(source="realtime", value=quote.price)}
+            if quote.price is not None else None
+        ),
+    )
+    if _cv:
+        response["cross_validation"] = _cv
+    return response
 
 
 get_realtime_quote_tool = ToolDefinition(
@@ -558,6 +679,24 @@ def _handle_get_stock_info(stock_code: str) -> dict:
     # fail-open：fundamental valuation 受严格超时易缺失，用 get_realtime_quote 兜底估值
     if not valuation.get("pe_ratio"):
         valuation = _fallback_valuation_from_quote(manager, stock_code, valuation)
+
+    # opt-in 交叉验证：估值/财务/增长锚点。period 驱动 iFinD 财务类查询返回数据；
+    # 快照类锚点（行情/估值）不受 period 影响。开关关 → None（零回归）。
+    _cv = build_cross_validation_block(
+        stock_code,
+        [
+            "pe_ratio", "pb_ratio", "total_mv", "circ_mv",
+            "revenue", "net_profit", "roe", "gross_margin", "revenue_yoy",
+        ],
+        period=_latest_annual_period(),
+    )
+    # akshare growth 失败时用 CV 回填毛利率/营收增速/ROE，避免报告「数据缺失」
+    if _cv:
+        compact_context = {
+            **compact_context,
+            "growth": _backfill_growth_from_validation(compact_context.get("growth"), _cv),
+        }
+
     sector_rankings = compact_context.get("boards", {}).get("data", {})
     belong_boards = manager.get_belong_boards(stock_code)
 
@@ -567,7 +706,7 @@ def _handle_get_stock_info(stock_code: str) -> dict:
     except Exception:
         pass
 
-    return {
+    response = {
         "code": stock_code.upper(),
         "name": stock_name,
         "pe_ratio": valuation.get("pe_ratio"),
@@ -581,6 +720,9 @@ def _handle_get_stock_info(stock_code: str) -> dict:
         "boards": belong_boards,
         "sector_rankings": sector_rankings,
     }
+    if _cv:
+        response["cross_validation"] = _cv
+    return response
 
 
 get_stock_info_tool = ToolDefinition(
@@ -774,6 +916,14 @@ def _handle_get_capital_flow(stock_code: str) -> dict:
     }
     if note:
         result["note"] = note
+    # opt-in 交叉验证：主力净流入/融资余额 MX↔iFinD 双源验证（方向+量级）；开关关 → _cv None，零回归。
+    _cv = build_cross_validation_block(stock_code, ["main_inflow", "margin_balance"])
+    if _cv:
+        # iFinD 多日累计（稳定源）：akshare push2his 不可达 → 主力净流入/5d/10d 回填
+        result = _backfill_capital_flow(
+            result, _cv, get_main_inflow_cumulative(stock_code)
+        )
+        result["cross_validation"] = _cv
     return result
 
 

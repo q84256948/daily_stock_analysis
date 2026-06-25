@@ -91,6 +91,18 @@ class TestDeepResearchValidator:
         result = DeepResearchValidator().validate(None, None)  # type: ignore[arg-type]
         assert result.score == 0
 
+    def test_validation_markers_counted_in_details(self):
+        from src.agent.deep_research_validator import _count_validation_markers
+        assert _count_validation_markers("PE 30.5 ✓ 冲突 ⚠") == (1, 1)
+        assert _count_validation_markers("无标记") == (0, 0)
+        md = GOOD_MD + "\nPE 30.5 ✓（双源验证）\nROE ⚠ 冲突\n"
+        result = DeepResearchValidator().validate(md, FULL_TOOLS)
+        assert any("双源验证标注" in d for d in result.details)
+
+    def test_no_markers_omits_detail(self):
+        result = DeepResearchValidator().validate(GOOD_MD, FULL_TOOLS)
+        assert not any("双源验证标注" in d for d in result.details)
+
 
 class TestNormalizeAShare:
     @pytest.mark.parametrize(

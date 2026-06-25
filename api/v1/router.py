@@ -23,6 +23,7 @@ from api.v1.endpoints import (
     history,
     portfolio,
     research_framework,
+    schedule,
     stocks,
     system_config,
     usage,
@@ -72,3 +73,5 @@ router.include_router(alphasift.router, prefix="/alphasift", tags=["AlphaSift"])
 router.include_router(
     decision_signals.router, prefix="/decision-signals", tags=["DecisionSignals"]
 )
+
+router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])

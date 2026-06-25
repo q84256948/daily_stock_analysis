@@ -1306,15 +1306,61 @@ def main() -> int:
             if watchlist_analysis_time:
 
                 def watchlist_analysis_task():
-                    runtime_config = _reload_runtime_config()
-                    # 创建修改后的 args，跳过大盘复盘（由独立的 market_review_task 执行）
-                    import copy
-
-                    watchlist_args = copy.copy(args)
-                    watchlist_args.no_market_review = True
-                    run_full_analysis(
-                        runtime_config, watchlist_args, scheduled_stock_codes
+                    from src.core.scheduled_task_lock import (
+                        acquire_task_lock,
+                        release_task_lock,
                     )
+                    from src.repositories.scheduled_task_log_repo import (
+                        ScheduledTaskLogRepository,
+                    )
+
+                    runtime_config = _reload_runtime_config()
+                    lock_token = acquire_task_lock(
+                        runtime_config, "watchlist_analysis"
+                    )
+                    if lock_token is None:
+                        logger.info(
+                            "watchlist_analysis 已在运行中，跳过本次执行。"
+                        )
+                        return
+
+                    task_repo = ScheduledTaskLogRepository()
+                    scheduled_at = datetime.now()
+                    task_repo.save(
+                        task_name="watchlist_analysis",
+                        scheduled_at=scheduled_at,
+                        status="running",
+                        started_at=scheduled_at,
+                    )
+                    try:
+                        import copy
+
+                        watchlist_args = copy.copy(args)
+                        watchlist_args.no_market_review = True
+                        run_full_analysis(
+                            runtime_config, watchlist_args, scheduled_stock_codes
+                        )
+                        task_repo.save(
+                            task_name="watchlist_analysis",
+                            scheduled_at=scheduled_at,
+                            status="success",
+                            started_at=scheduled_at,
+                            finished_at=datetime.now(),
+                        )
+                    except Exception as exc:
+                        logger.exception(
+                            "watchlist_analysis 定时任务执行失败: %s", exc
+                        )
+                        task_repo.save(
+                            task_name="watchlist_analysis",
+                            scheduled_at=scheduled_at,
+                            status="failed",
+                            started_at=scheduled_at,
+                            finished_at=datetime.now(),
+                            detail={"error": str(exc)},
+                        )
+                    finally:
+                        release_task_lock(lock_token)
 
                 daily_tasks.append(
                     {
@@ -1335,20 +1381,66 @@ def main() -> int:
                     from src.core.market_review_runtime import (
                         build_market_review_runtime,
                     )
+                    from src.core.scheduled_task_lock import (
+                        acquire_task_lock,
+                        release_task_lock,
+                    )
+                    from src.repositories.scheduled_task_log_repo import (
+                        ScheduledTaskLogRepository,
+                    )
 
                     runtime_config = _reload_runtime_config()
-                    notifier, analyzer, search_service = build_market_review_runtime(
-                        runtime_config
+                    lock_token = acquire_task_lock(
+                        runtime_config, "market_review"
                     )
-                    _run_market_review_with_shared_lock(
-                        runtime_config,
-                        run_market_review,
-                        notifier=notifier,
-                        analyzer=analyzer,
-                        search_service=search_service,
-                        send_notification=not args.no_notify,
-                        merge_notification=False,
+                    if lock_token is None:
+                        logger.info(
+                            "market_review 已在运行中，跳过本次执行。"
+                        )
+                        return
+
+                    task_repo = ScheduledTaskLogRepository()
+                    scheduled_at = datetime.now()
+                    task_repo.save(
+                        task_name="market_review",
+                        scheduled_at=scheduled_at,
+                        status="running",
+                        started_at=scheduled_at,
                     )
+                    try:
+                        notifier, analyzer, search_service = (
+                            build_market_review_runtime(runtime_config)
+                        )
+                        _run_market_review_with_shared_lock(
+                            runtime_config,
+                            run_market_review,
+                            notifier=notifier,
+                            analyzer=analyzer,
+                            search_service=search_service,
+                            send_notification=not args.no_notify,
+                            merge_notification=False,
+                        )
+                        task_repo.save(
+                            task_name="market_review",
+                            scheduled_at=scheduled_at,
+                            status="success",
+                            started_at=scheduled_at,
+                            finished_at=datetime.now(),
+                        )
+                    except Exception as exc:
+                        logger.exception(
+                            "market_review 定时任务执行失败: %s", exc
+                        )
+                        task_repo.save(
+                            task_name="market_review",
+                            scheduled_at=scheduled_at,
+                            status="failed",
+                            started_at=scheduled_at,
+                            finished_at=datetime.now(),
+                            detail={"error": str(exc)},
+                        )
+                    finally:
+                        release_task_lock(lock_token)
 
                 daily_tasks.append(
                     {
@@ -1360,12 +1452,20 @@ def main() -> int:
                 )
                 logger.info("已注册大盘复盘定时任务，执行时间: %s", market_review_time)
 
+            heartbeat_path = (
+                Path(
+                    getattr(config, "database_path", "./data/stock_analysis.db")
+                ).parent
+                / "scheduler_heartbeat"
+            )
+
             if daily_tasks:
                 # 多任务调度模式
                 run_with_schedule(
                     daily_tasks=daily_tasks,
                     background_tasks=background_tasks,
                     schedule_time_provider=schedule_time_provider,
+                    heartbeat_path=heartbeat_path,
                 )
             else:
                 # 单任务模式（向后兼容）
@@ -1375,6 +1475,7 @@ def main() -> int:
                     run_immediately=should_run_immediately,
                     background_tasks=background_tasks,
                     schedule_time_provider=schedule_time_provider,
+                    heartbeat_path=heartbeat_path,
                 )
             return 0
 

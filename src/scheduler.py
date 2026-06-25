@@ -13,12 +13,15 @@
 - schedule: 轻量级定时任务库
 """
 
+import json
 import logging
+import os
 import re
 import signal
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -67,6 +70,7 @@ class Scheduler:
         self,
         schedule_time: str = "18:00",
         schedule_time_provider: Optional[Callable[[], str]] = None,
+        heartbeat_path: Optional[Path] = None,
     ):
         """
         初始化调度器
@@ -84,6 +88,7 @@ class Scheduler:
 
         self.schedule_time = schedule_time
         self._schedule_time_provider = schedule_time_provider
+        self._heartbeat_path = heartbeat_path
         self.shutdown_handler = GracefulShutdown()
         self._task_callback: Optional[Callable] = None
         self._daily_job: Optional[Any] = None
@@ -380,6 +385,7 @@ class Scheduler:
             self._refresh_daily_schedule_if_needed()
             self.schedule.run_pending()
             self._run_background_tasks()
+            self._write_heartbeat()
             time.sleep(30)  # 每30秒检查一次
 
             # 每小时打印一次心跳
@@ -387,6 +393,28 @@ class Scheduler:
                 logger.info(f"调度器运行中... 下次执行: {self._get_next_run_time()}")
 
         logger.info("调度器已停止")
+
+    def _write_heartbeat(self) -> None:
+        """Write a heartbeat file so external monitors can detect liveness."""
+        if not self._heartbeat_path:
+            return
+        try:
+            self._heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+            jobs_info = {}
+            for name, cb in self._daily_task_callbacks.items():
+                jobs_info[name] = getattr(cb, "__name__", name)
+            content = json.dumps(
+                {
+                    "timestamp": datetime.now().isoformat(),
+                    "pid": os.getpid(),
+                    "registered_tasks": jobs_info,
+                    "next_run": self._get_next_run_time(),
+                },
+                ensure_ascii=False,
+            )
+            self._heartbeat_path.write_text(content, encoding="utf-8")
+        except Exception as exc:
+            logger.debug("写入 heartbeat 失败: %s", exc)
 
     def _get_next_run_time(self) -> str:
         """获取下次执行时间"""
@@ -408,6 +436,7 @@ def run_with_schedule(
     background_tasks: Optional[List[Dict[str, Any]]] = None,
     schedule_time_provider: Optional[Callable[[], str]] = None,
     daily_tasks: Optional[List[Dict[str, Any]]] = None,
+    heartbeat_path: Optional[Path] = None,
 ):
     """
     便捷函数：使用定时调度运行任务
@@ -426,10 +455,12 @@ def run_with_schedule(
             - task: 要执行的任务函数
             - schedule_time: 执行时间（HH:MM 格式）
             - run_immediately: 是否立即执行一次（可选，默认 False）
+        heartbeat_path: 可选的 heartbeat 文件路径；调度器每轮写入时间戳。
     """
     scheduler = Scheduler(
         schedule_time=schedule_time,
         schedule_time_provider=schedule_time_provider,
+        heartbeat_path=heartbeat_path,
     )
     for entry in background_tasks or []:
         scheduler.add_background_task(

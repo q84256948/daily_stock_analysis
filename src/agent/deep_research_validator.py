@@ -113,6 +113,16 @@ def _count_conclusions(markdown: str) -> int:
     return len(re.findall(r"【结论】", markdown))
 
 
+def _count_validation_markers(markdown: str) -> tuple:
+    """统计双源验证标注：返回 (verified✓, conflict⚠)。
+
+    温和信息性统计，不参与 passed/score 判定（避免 LLM 未严格遵循格式时误判）。
+    """
+    verified = len(re.findall(r"✓", markdown))
+    conflict = len(re.findall(r"⚠", markdown))
+    return verified, conflict
+
+
 def _check_probability_sum(markdown: str) -> float:
     """提取三情景概率并求和。
 
@@ -217,6 +227,11 @@ class DeepResearchValidator:
             details.append(f"结论前置标记仅 {conclusion_count} 个（期望 ≥7）")
         if probability_sum > 0 and not (95.0 <= probability_sum <= 105.0):
             details.append(f"三情景概率和为 {probability_sum:.0f}%（期望 100%）")
+
+        # 双源验证标注统计（信息性，不扣分；LLM 按 system_prompt 标 ✓/⚠）
+        verified, conflict = _count_validation_markers(markdown)
+        if verified or conflict:
+            details.append(f"双源验证标注：✓×{verified}（验证通过）/ ⚠×{conflict}（冲突已披露）")
 
         return ValidationResult(
             passed=passed,

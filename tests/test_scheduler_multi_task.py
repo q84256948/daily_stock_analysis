@@ -214,7 +214,7 @@ class RunWithScheduleMultiTaskTestCase(unittest.TestCase):
             order = []
 
             class FakeScheduler:
-                def __init__(self, schedule_time="18:00", schedule_time_provider=None):
+                def __init__(self, schedule_time="18:00", schedule_time_provider=None, heartbeat_path=None):
                     order.append(("init", schedule_time))
 
                 def add_background_task(self, **kwargs):
@@ -272,7 +272,7 @@ class RunWithScheduleMultiTaskTestCase(unittest.TestCase):
             order = []
 
             class FakeScheduler:
-                def __init__(self, schedule_time="18:00", schedule_time_provider=None):
+                def __init__(self, schedule_time="18:00", schedule_time_provider=None, heartbeat_path=None):
                     order.append(("init", schedule_time))
 
                 def add_background_task(self, **kwargs):

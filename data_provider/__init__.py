@@ -41,6 +41,15 @@ from .yfinance_fetcher import YfinanceFetcher
 from .longbridge_fetcher import LongbridgeFetcher
 from .finnhub_fetcher import FinnhubFetcher
 from .alphavantage_fetcher import AlphaVantageFetcher
+from .cross_source_validator import (
+    ANCHOR_SPECS,
+    AnchorReading,
+    AnchorVerification,
+    CrossSourceValidator,
+    SourceAdapter,
+)
+from .mx_data_adapter import MXClient, MXSource
+from .ifind_fundamental_adapter import IfindFetcher, IfindSource
 from .us_index_mapping import is_us_index_code, is_us_stock_code, get_us_index_yf_symbol, US_INDEX_MAPPING
 
 __all__ = [
@@ -56,6 +65,15 @@ __all__ = [
     'LongbridgeFetcher',
     'FinnhubFetcher',
     'AlphaVantageFetcher',
+    'CrossSourceValidator',
+    'AnchorVerification',
+    'AnchorReading',
+    'SourceAdapter',
+    'ANCHOR_SPECS',
+    'MXClient',
+    'MXSource',
+    'IfindFetcher',
+    'IfindSource',
     'is_us_index_code',
     'is_us_stock_code',
     'is_hk_stock_code',

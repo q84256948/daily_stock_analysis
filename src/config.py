@@ -682,6 +682,14 @@ class Config:
     longbridge_oauth_client_id: Optional[str] = None
     stock_index_remote_update_enabled: bool = True
 
+    # === 深度投研多源交叉验证（MX Data 主源 + iFinD 验证；opt-in，默认关）===
+    mx_apikey: Optional[str] = None  # 东财妙想 API key（MX_APIKEY）
+    ifind_mcp_endpoint: Optional[str] = None  # 同花顺 iFinD MCP endpoint
+    ifind_mcp_token: Optional[str] = None  # iFinD MCP Authorization token
+    ifind_mcp_timeout_seconds: float = 8.0  # iFinD MCP 调用超时
+    deep_research_cross_validate: bool = False  # 深度投研锚点双源验证开关
+    mx_call_budget: int = 50  # 单次报告 MX 调用上限（控配额）
+
     # === AlphaSift optional stock screening integration ===
     alphasift_enabled: bool = False
     alphasift_install_spec: str = DEFAULT_ALPHASIFT_INSTALL_SPEC
@@ -1597,6 +1605,14 @@ class Config:
             longbridge_app_secret=os.getenv("LONGBRIDGE_APP_SECRET") or None,
             longbridge_access_token=os.getenv("LONGBRIDGE_ACCESS_TOKEN") or None,
             longbridge_oauth_client_id=os.getenv("LONGBRIDGE_OAUTH_CLIENT_ID") or None,
+            mx_apikey=os.getenv("MX_APIKEY") or None,
+            ifind_mcp_endpoint=os.getenv("IFIND_MCP_ENDPOINT") or None,
+            ifind_mcp_token=os.getenv("IFIND_MCP_TOKEN") or None,
+            ifind_mcp_timeout_seconds=float(os.getenv("IFIND_MCP_TIMEOUT_SECONDS") or "8.0"),
+            deep_research_cross_validate=parse_env_bool(
+                os.getenv("DEEP_RESEARCH_CROSS_VALIDATE"), default=False
+            ),
+            mx_call_budget=int(os.getenv("MX_CALL_BUDGET") or "50"),
             stock_index_remote_update_enabled=parse_env_bool(
                 os.getenv("STOCK_INDEX_REMOTE_UPDATE_ENABLED"),
                 default=True,
