@@ -59,7 +59,9 @@ class SkillPromptState:
     technical_skill_policy: str
 
 
-def _coerce_config_int(raw_value: object, default: int, *, field_name: str | None = None) -> int:
+def _coerce_config_int(
+    raw_value: object, default: int, *, field_name: str | None = None
+) -> int:
     """Coerce optional numeric config values to int with a fallback default.
 
     This protects test doubles and incomplete config objects from propagating
@@ -187,11 +189,20 @@ def get_tool_registry():
     from src.agent.tools.backtest_tools import ALL_BACKTEST_TOOLS
 
     registry = ToolRegistry()
-    for tool_fn in ALL_DATA_TOOLS + ALL_ANALYSIS_TOOLS + ALL_SEARCH_TOOLS + ALL_MARKET_TOOLS + ALL_BACKTEST_TOOLS:
+    for tool_fn in (
+        ALL_DATA_TOOLS
+        + ALL_ANALYSIS_TOOLS
+        + ALL_SEARCH_TOOLS
+        + ALL_MARKET_TOOLS
+        + ALL_BACKTEST_TOOLS
+    ):
         registry.register(tool_fn)
 
     _TOOL_REGISTRY = registry
-    logger.info("[AgentFactory] ToolRegistry cached (%d tools)", len(registry._tools) if hasattr(registry, "_tools") else -1)
+    logger.info(
+        "[AgentFactory] ToolRegistry cached (%d tools)",
+        len(registry._tools) if hasattr(registry, "_tools") else -1,
+    )
     return _TOOL_REGISTRY
 
 
@@ -210,17 +221,24 @@ def get_skill_manager(config=None):
 
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     current_custom_dir = getattr(config, "agent_skill_dir", None)
-    if _SKILL_MANAGER_PROTOTYPE is not None and current_custom_dir == _SKILL_MANAGER_CUSTOM_DIR:
+    if (
+        _SKILL_MANAGER_PROTOTYPE is not None
+        and current_custom_dir == _SKILL_MANAGER_CUSTOM_DIR
+    ):
         return copy.deepcopy(_SKILL_MANAGER_PROTOTYPE)
 
     from src.agent.skills.base import SkillManager
 
     if _SKILL_MANAGER_PROTOTYPE is not None:
-        logger.info("[AgentFactory] SkillManager prototype invalidated (agent_skill_dir changed: %r -> %r)",
-                    _SKILL_MANAGER_CUSTOM_DIR, current_custom_dir)
+        logger.info(
+            "[AgentFactory] SkillManager prototype invalidated (agent_skill_dir changed: %r -> %r)",
+            _SKILL_MANAGER_CUSTOM_DIR,
+            current_custom_dir,
+        )
 
     skill_manager = SkillManager()
     skill_manager.load_builtin_skills()
@@ -229,18 +247,28 @@ def get_skill_manager(config=None):
         try:
             skill_manager.load_custom_skills(current_custom_dir)
         except Exception as exc:
-            logger.warning("[AgentFactory] Failed to load custom skills from %s: %s", current_custom_dir, exc)
+            logger.warning(
+                "[AgentFactory] Failed to load custom skills from %s: %s",
+                current_custom_dir,
+                exc,
+            )
 
     _SKILL_MANAGER_PROTOTYPE = skill_manager
     _SKILL_MANAGER_CUSTOM_DIR = current_custom_dir
-    logger.info("[AgentFactory] SkillManager prototype cached (%d skills)", len(skill_manager._skills))
+    logger.info(
+        "[AgentFactory] SkillManager prototype cached (%d skills)",
+        len(skill_manager._skills),
+    )
     return copy.deepcopy(_SKILL_MANAGER_PROTOTYPE)
 
 
-def resolve_skill_prompt_state(config=None, skills: Optional[List[str]] = None) -> SkillPromptState:
+def resolve_skill_prompt_state(
+    config=None, skills: Optional[List[str]] = None
+) -> SkillPromptState:
     """Resolve active skills and prompt fragments for analyzer / agent entrypoints."""
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     from src.agent.skills.defaults import (
@@ -313,6 +341,7 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
     """
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     arch = getattr(config, "agent_arch", "single")
@@ -342,6 +371,7 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
         )
 
     from src.agent.executor import AgentExecutor
+
     # Intentionally do not mutate config routing fields here. We only coerce
     # execution params (max_steps/timeout_seconds) from config values; provider,
     # model, base URL and channel routes stay unchanged and are consumed by
@@ -365,7 +395,9 @@ def build_agent_executor(config=None, skills: Optional[List[str]] = None):
     )
 
 
-def _build_orchestrator(config, registry, llm_adapter, skill_manager, *, technical_skill_policy: str = ""):
+def _build_orchestrator(
+    config, registry, llm_adapter, skill_manager, *, technical_skill_policy: str = ""
+):
     """Build and return an :class:`AgentOrchestrator` (multi-agent mode).
 
     The orchestrator presents the same ``run()`` / ``chat()`` interface as
@@ -406,6 +438,7 @@ def build_zhengxi_executor(config=None):
     """
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     from src.agent.llm_adapter import LLMToolAdapter
@@ -448,6 +481,7 @@ def build_supply_chain_executor(config=None):
     """
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     from src.agent.llm_adapter import LLMToolAdapter
@@ -510,6 +544,7 @@ def build_deep_research_executor(config=None):
     """
     if config is None:
         from src.config import get_config
+
         config = get_config()
 
     from src.agent.deep_research_executor import DeepResearchExecutor
@@ -526,9 +561,7 @@ def build_deep_research_executor(config=None):
 
     missing = _DEEP_RESEARCH_TOOL_NAMES - set(registry.list_names())
     if missing:
-        logger.warning(
-            "[AgentFactory] DeepResearch 缺失工具: %s", sorted(missing)
-        )
+        logger.warning("[AgentFactory] DeepResearch 缺失工具: %s", sorted(missing))
     logger.info(
         "[AgentFactory] DeepResearch ToolRegistry built (%d/%d tools)",
         registered,
@@ -542,4 +575,38 @@ def build_deep_research_executor(config=None):
         llm_adapter=llm_adapter,
         max_steps=30,
         timeout_seconds=1200.0,
+    )
+
+
+def build_chanlun_executor(config=None):
+    """构建缠论分析专属 Executor。
+
+    与问股/郑希/供应链的关键差异：
+    - **工具集**：只注册 1 个缠论分析工具 ``analyze_chanlun``
+    - **短任务**：``max_steps=10`` / ``wall_clock=180s``
+    """
+    if config is None:
+        from src.config import get_config
+
+        config = get_config()
+
+    from src.agent.llm_adapter import LLMToolAdapter
+    from src.agent.tools.registry import ToolRegistry
+    from src.agent.tools.chanlun_tools import ALL_CHANLUN_TOOLS
+    from src.agent.chanlun_executor import ChanlunExecutor
+
+    registry = ToolRegistry()
+    for tool in ALL_CHANLUN_TOOLS:
+        registry.register(tool)
+    logger.info(
+        "[AgentFactory] Chanlun ToolRegistry built (1 tool: analyze_chanlun)",
+    )
+
+    llm_adapter = LLMToolAdapter(config)
+
+    return ChanlunExecutor(
+        tool_registry=registry,
+        llm_adapter=llm_adapter,
+        max_steps=10,
+        timeout_seconds=180.0,
     )

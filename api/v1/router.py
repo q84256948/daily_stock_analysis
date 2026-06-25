@@ -18,6 +18,7 @@ from api.v1.endpoints import (
     analysis,
     auth,
     backtest,
+    chanlun,
     decision_signals,
     health,
     history,
@@ -66,7 +67,11 @@ router.include_router(zhengxi.router, prefix="/zhengxi", tags=["Zhengxi"])
 
 router.include_router(supply_chain.router, prefix="/supply-chain", tags=["SupplyChain"])
 
-router.include_router(deep_research.router, prefix="/deep-research", tags=["DeepResearch"])
+router.include_router(
+    deep_research.router, prefix="/deep-research", tags=["DeepResearch"]
+)
+
+router.include_router(chanlun.router, prefix="/chanlun", tags=["Chanlun"])
 
 router.include_router(alphasift.router, prefix="/alphasift", tags=["AlphaSift"])
 
