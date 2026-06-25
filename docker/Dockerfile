@@ -23,7 +23,7 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 安装系统依赖（wkhtmltopdf 含 wkhtmltoimage，用于 Markdown 转图片 Issue #289）
+# 系统依赖：wkhtmltopdf（md2img 转图片，Issue #289）+ pango/cairo/glib/noto-cjk（WeasyPrint md2pdf 与中文字体渲染）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
@@ -34,6 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg62-turbo \
     libxrender1 \
     libxext6 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz0b \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    libglib2.0-0 \
+    fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户 (UID 1000)
