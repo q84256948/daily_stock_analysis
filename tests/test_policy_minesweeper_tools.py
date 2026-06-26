@@ -13,7 +13,12 @@ from src.agent.tools import policy_minesweeper_tools as pmt
 from src.agent.tools.policy_minesweeper_tools import (
     ALL_POLICY_MINESWEEPER_TOOLS,
     DIMENSION_HINTS,
+    _build_announcement_query,
+    _get_announcement_search_service,
     _handle_score_policy_minesweeper,
+    _handle_search_company_announcements,
+    _is_official_announcement_source,
+    _pick_search_provider,
 )
 
 
@@ -131,11 +136,18 @@ class TestErrorPath:
 # ============================================================
 
 class TestToolMetadata:
-    def test_single_tool(self):
-        assert len(ALL_POLICY_MINESWEEPER_TOOLS) == 1
-        tool = ALL_POLICY_MINESWEEPER_TOOLS[0]
-        assert tool.name == "score_policy_minesweeper"
-        assert tool.category == "analysis"
+    def test_two_tools(self):
+        assert len(ALL_POLICY_MINESWEEPER_TOOLS) == 2
+        names = {t.name for t in ALL_POLICY_MINESWEEPER_TOOLS}
+        assert names == {"score_policy_minesweeper", "search_company_announcements"}
+
+    def test_announcement_tool_metadata(self):
+        tool = next(
+            t for t in ALL_POLICY_MINESWEEPER_TOOLS if t.name == "search_company_announcements"
+        )
+        assert tool.category == "search"
+        params = {p.name for p in tool.parameters}
+        assert {"stock_code", "stock_name"} <= params
 
     def test_required_params_present(self):
         tool = ALL_POLICY_MINESWEEPER_TOOLS[0]
@@ -151,3 +163,193 @@ class TestToolMetadata:
         from src.services.policy_minesweeper_scorecard import DIMENSION_KEYS
 
         assert set(DIMENSION_HINTS) == set(DIMENSION_KEYS)
+
+
+# ============================================================
+# 证据原文地址（公司公告 url）端到端
+# ============================================================
+
+class TestEvidenceUrl:
+    def test_announcement_url_passes_through_to_markdown(self):
+        # 公司公告类证据带 url → 工具输出的 score_report_markdown 含 [原文](url) 链接
+        result = _handle_score_policy_minesweeper(**_full(
+            evidence=[{
+                "claim": "签订重大合同",
+                "source": "巨潮公告",
+                "date": "2026-06-20",
+                "strength": "primary",
+                "url": "http://www.cninfo.com.cn/ann/x.html",
+            }],
+        ))
+        assert "error" not in result
+        assert "[原文](http://www.cninfo.com.cn/ann/x.html)" in result["score_report_markdown"]
+
+    def test_evidence_param_documents_url(self):
+        # score 工具 evidence 参数描述必须文档化 url 字段（提示 Ω 传公告原文地址）
+        tool = ALL_POLICY_MINESWEEPER_TOOLS[0]
+        evidence_param = next(p for p in tool.parameters if p.name == "evidence")
+        assert "url" in evidence_param.description
+        assert "原文地址" in evidence_param.description
+
+
+# ============================================================
+# 公司公告检索（search_company_announcements，DI 搜索服务，无网络）
+# ============================================================
+
+class _FakeResult:
+    """鸭子类型 SearchResult（title/snippet/url/source/published_date）。"""
+
+    def __init__(self, title, url, source, snippet="", published_date=""):
+        self.title = title
+        self.url = url
+        self.source = source
+        self.snippet = snippet
+        self.published_date = published_date
+
+
+class _FakeSearchResponse:
+    """鸭子类型 SearchResponse。"""
+
+    def __init__(self, results, success=True, error_message="", provider="Tavily"):
+        self.results = results
+        self.success = success
+        self.error_message = error_message
+        self.provider = provider
+
+
+class _FakeProvider:
+    """鸭子类型 search provider：记录原生 .search() 调用，可控 is_available/结果/抛错。"""
+
+    def __init__(self, *, available=True, response=None, raise_exc=None, name="Tavily"):
+        self.is_available = available
+        self.name = name
+        self._response = response
+        self._raise = raise_exc
+        self.calls = []
+
+    def search(self, query, max_results=5, days=30):
+        self.calls.append({"query": query, "max_results": max_results, "days": days})
+        if self._raise:
+            raise self._raise
+        return self._response
+
+
+class _FakeSearchService:
+    """鸭子类型 SearchService：仅持有 _providers 列表。"""
+
+    def __init__(self, providers):
+        self._providers = providers
+
+
+def _patch_service(monkeypatch, provider):
+    """把 _get_announcement_search_service 替换为含单个 provider 的 fake service。"""
+    svc = _FakeSearchService([provider])
+    monkeypatch.setattr(pmt, "_get_announcement_search_service", lambda: svc)
+    return provider
+
+
+class TestBuildAnnouncementQuery:
+    def test_includes_name_code_and_announcement_terms(self):
+        q = _build_announcement_query("贵州茅台", "600519")
+        assert "贵州茅台" in q and "600519" in q and "公告" in q
+
+    def test_falls_back_to_code_when_name_missing(self):
+        q = _build_announcement_query("", "300750")
+        assert "300750" in q and "公告" in q
+
+
+class TestPickSearchProvider:
+    def test_returns_none_for_none_service(self):
+        assert _pick_search_provider(None) is None
+
+    def test_returns_none_when_no_available_provider(self):
+        svc = _FakeSearchService([_FakeProvider(available=False)])
+        assert _pick_search_provider(svc) is None
+
+    def test_returns_first_available_provider(self):
+        available = _FakeProvider(available=True)
+        svc = _FakeSearchService([_FakeProvider(available=False), available])
+        assert _pick_search_provider(svc) is available
+
+
+class TestIsOfficialAnnouncementSource:
+    def test_official_sources_are_true(self):
+        assert _is_official_announcement_source("http://www.cninfo.com.cn/x", "巨潮") is True
+        assert _is_official_announcement_source("https://szse.cn/ann", "深交所") is True
+
+    def test_media_sources_are_false(self):
+        assert _is_official_announcement_source("http://finance.sina.com.cn/x", "新浪") is False
+        assert _is_official_announcement_source("http://finance.qq.com/x", "腾讯") is False
+
+    def test_empty_is_false(self):
+        assert _is_official_announcement_source("", "") is False
+
+
+class TestAnnouncementSearchServiceAccessor:
+    def test_real_accessor_returns_shared_service(self):
+        # 不 monkeypatch：走真实 lazy import + get_search_service()，覆盖函数体
+        svc = _get_announcement_search_service()
+        assert svc is not None
+        assert hasattr(svc, "is_available")  # SearchService 单例契约
+
+
+class TestSearchCompanyAnnouncementsHandler:
+    def test_returns_error_when_no_available_provider(self, monkeypatch):
+        _patch_service(monkeypatch, _FakeProvider(available=False))
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+        assert "error" in result and "不可用" in result["error"]
+        assert result["stock_code"] == "600519"
+
+    def test_returns_error_when_service_none(self, monkeypatch):
+        monkeypatch.setattr(pmt, "_get_announcement_search_service", lambda: None)
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+        assert "error" in result and "不可用" in result["error"]
+
+    def test_maps_results_and_marks_official_flag(self, monkeypatch):
+        response = _FakeSearchResponse(results=[
+            _FakeResult("重大合同公告", "http://www.cninfo.com.cn/ann/x", "巨潮资讯网", "摘要A", "2026-06-20"),
+            _FakeResult("腾讯证券报道", "http://finance.qq.com/x", "腾讯证券", "摘要B", "2026-06-19"),
+        ])
+        provider = _FakeProvider(available=True, response=response)
+        _patch_service(monkeypatch, provider)
+
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+
+        assert "error" not in result
+        assert result["count"] == 2
+        assert result["announcements"][0]["url"] == "http://www.cninfo.com.cn/ann/x"
+        assert result["announcements"][0]["is_official"] is True
+        assert result["announcements"][1]["is_official"] is False
+        assert result["announcements"][0]["date"] == "2026-06-20"
+        assert result["provider"] == "Tavily"
+        # 公告导向 query + 30 天窗口透传给 provider 原生 .search()
+        assert provider.calls[0]["days"] == 30
+        assert "公告" in provider.calls[0]["query"]
+        assert provider.calls[0]["max_results"] == 8
+
+    def test_returns_error_on_search_failure(self, monkeypatch):
+        response = _FakeSearchResponse(results=[], success=False, error_message="quota exceeded")
+        _patch_service(monkeypatch, _FakeProvider(available=True, response=response))
+
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+
+        assert "error" in result and "quota exceeded" in result["error"]
+        assert result["query"].startswith("贵州茅台")
+
+    def test_returns_error_on_search_exception(self, monkeypatch):
+        _patch_service(monkeypatch, _FakeProvider(available=True, raise_exc=RuntimeError("boom")))
+
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+
+        assert "error" in result and "boom" in result["error"]
+
+    def test_truncates_long_snippet(self, monkeypatch):
+        long_text = "x" * 1000
+        response = _FakeSearchResponse(
+            results=[_FakeResult("t", "http://www.cninfo.com.cn/a", "巨潮", long_text)],
+        )
+        _patch_service(monkeypatch, _FakeProvider(available=True, response=response))
+
+        result = _handle_search_company_announcements("600519", "贵州茅台")
+
+        assert result["announcements"][0]["snippet"] == "x" * 500

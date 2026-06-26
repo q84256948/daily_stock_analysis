@@ -1066,6 +1066,8 @@ class Config:
     supply_chain_analysis_enabled: bool = True
     # 深度投研报告：保留报告数量上限（超出删最旧，含 .md/.pdf 文件）
     deep_research_max_reports: int = 200
+    # 政策与公告排雷报告：保留报告数量上限（超出删最旧，含 .md/.pdf 文件，0=不清理）
+    policy_minesweeper_max_reports: int = 200
     # 启用价值情景分析
     value_scenarios_enabled: bool = True
     # 启用 Agent 分析（可能较慢，建议关闭使用规则生成）
@@ -2158,6 +2160,12 @@ class Config:
                 os.getenv("DEEP_RESEARCH_MAX_REPORTS", "200"),
                 200,
                 field_name="deep_research_max_reports",
+                minimum=0,
+            ),
+            policy_minesweeper_max_reports=parse_env_int(
+                os.getenv("POLICY_MINESWEEPER_MAX_REPORTS", "200"),
+                200,
+                field_name="policy_minesweeper_max_reports",
                 minimum=0,
             ),
             value_scenarios_enabled=os.getenv("VALUE_SCENARIOS_ENABLED", "true").lower()

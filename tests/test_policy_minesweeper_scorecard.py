@@ -298,3 +298,69 @@ class TestDefensiveBranches:
         result["alpha_score"] = "garbage"
         md = to_markdown(result)
         assert isinstance(md, str)
+
+
+# ============================================================
+# 证据原文地址渲染（公司公告 url，作为可核验证据）
+# ============================================================
+
+class TestEvidenceUrlRendering:
+    def test_evidence_with_url_renders_original_link(self):
+        result = score(
+            _payload(
+                evidence=[
+                    {
+                        "claim": "签订重大合同",
+                        "source": "巨潮公告",
+                        "date": "2026-06-20",
+                        "strength": "primary",
+                        "url": "http://www.cninfo.com.cn/ann/x.html",
+                    }
+                ]
+            ),
+            "medium",
+        )
+        md = to_markdown(result)
+        # 原文地址作为 markdown 链接渲染（可点击核验）
+        assert "[原文](http://www.cninfo.com.cn/ann/x.html)" in md
+
+    def test_evidence_without_url_omits_original_link(self):
+        # 向后兼容：无 url 时渲染与改动前完全一致，不出现 [原文]
+        result = score(
+            _payload(
+                evidence=[
+                    {"claim": "签订重大合同", "source": "巨潮公告", "date": "2026-06-20", "strength": "primary"}
+                ]
+            ),
+            "medium",
+        )
+        md = to_markdown(result)
+        assert "[原文]" not in md
+        assert "巨潮公告" in md  # 来源仍正常渲染
+
+    def test_evidence_blank_url_omits_original_link(self):
+        # url 为空串/纯空白时也不渲染 [原文]
+        result = score(
+            _payload(
+                evidence=[
+                    {"claim": "政策吹风", "source": "新闻", "date": "2026-06-20", "strength": "media", "url": "   "}
+                ]
+            ),
+            "medium",
+        )
+        md = to_markdown(result)
+        assert "[原文]" not in md
+
+    def test_mixed_evidence_only_url_ones_get_link(self):
+        result = score(
+            _payload(
+                evidence=[
+                    {"claim": "公告A", "source": "巨潮", "date": "2026-06-20", "strength": "primary", "url": "http://a.cn/1"},
+                    {"claim": "分析B", "source": "券商研报", "date": "2026-06-19", "strength": "analysis"},
+                ]
+            ),
+            "medium",
+        )
+        md = to_markdown(result)
+        assert "[原文](http://a.cn/1)" in md  # 带 url 的那条有链接
+        assert md.count("[原文]") == 1  # 仅一条带 url

@@ -20,7 +20,9 @@
 
 事件性质 / 超预期程度 / 盈利影响 / 合规风险（一票否决）/ 股东行为 / 资本运作 / 行业地位 / 历史可比。产出 `micro_score`（-100~+100）+ 关键事件 + 证据。
 
-数据工具：`search_stock_news`、`search_comprehensive_intel`（announcements/risk_check 维度）、`get_stock_info`、`get_realtime_quote`。
+**公司公告类证据必须带原文地址 `url`**：优先调用 `search_company_announcements`（结果每条都含 `url` 与 `is_official`），也可用 `search_stock_news` / `search_comprehensive_intel`——把对应公告的 `url` 原样填入证据的 `url`（`is_official=True` 的巨潮/交易所/官网等一手地址优先，腾讯/新浪等二手转述次之）。拿不到原文地址的，`source` 标注"待核验"，**不得编造链接**。
+
+数据工具：`search_company_announcements`（**首选**，专门检索公司公告，返回带原文地址 `url` + `is_official` 标注）、`search_stock_news`、`search_comprehensive_intel`（announcements/risk_check 维度）、`get_stock_info`、`get_realtime_quote`。
 
 ## 3. β-国家政策与产业互动（宏观 6 维）
 
@@ -49,7 +51,7 @@
 
 ## 6. 诚实与合规红线（强制）
 
-- 所有结论用**证据锚定**：来源（链接/文件）+ 日期；无法核验的标注"待核验"。
+- 所有结论用**证据锚定**：来源（链接/文件）+ 日期；无法核验的标注"待核验"。**公司公告类证据必须附公告原文地址 `url`**（取自检索工具结果，非编造）。
 - 不编造数据、价格、政策文号、合同金额。
 - 报告末尾**必须**包含免责声明：本分析基于公开信息，历史表现不代表未来，**不构成投资建议**，买卖由你自己决定。
 - 预期冲击区间标注"历史经验区间，非精确预测"。

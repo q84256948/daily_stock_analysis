@@ -21,6 +21,7 @@ const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ZhengxiChatPage = lazy(() => import('./pages/ZhengxiChatPage'));
 const SupplyChainChatPage = lazy(() => import('./pages/SupplyChainChatPage'));
 const DeepResearchPage = lazy(() => import('./pages/DeepResearchPage'));
+const PolicyMinesweeperPage = lazy(() => import('./pages/PolicyMinesweeperPage'));
 
 const ChanlunChatPage = lazy(() => import('./pages/ChanlunChatPage'));
 const PortfolioPage = lazy(() => import('./pages/PortfolioPage'));
@@ -86,6 +87,7 @@ const AppContent: React.FC = () => {
       >
         <Route path="/" element={<HomePage />} />
         <Route path="/deep-research" element={<DeepResearchPage />} />
+        <Route path="/policy-minesweeper" element={<PolicyMinesweeperPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/zhengxi" element={<ZhengxiChatPage />} />
         <Route path="/chanlun" element={<ChanlunChatPage />} />

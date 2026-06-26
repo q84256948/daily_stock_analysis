@@ -115,7 +115,9 @@ score_policy_minesweeper_tool = ToolDefinition(
         ),
         ToolParameter(
             name="evidence", type="array",
-            description="证据列表，每项 {claim, source, date, strength(primary/media/analysis/social/rumor)}，可选",
+            description="证据列表，每项 {claim, source, date, strength(primary/media/analysis/social/rumor), url}；"
+                        "公司公告类证据的 url 必须为公告原文地址（取自检索工具结果，非编造），"
+                        "取不到则 source 标注「待核验」",
             required=False, default=None,
         ),
     ],
@@ -124,4 +126,131 @@ score_policy_minesweeper_tool = ToolDefinition(
 )
 
 
-ALL_POLICY_MINESWEEPER_TOOLS = [score_policy_minesweeper_tool]
+# ============================================================
+# 公司公告检索（复用共享 SearchService，返回带原文地址的结果）
+# ============================================================
+
+# 一手公告源：交易所/巨潮/港交所/SEC 等（is_official=True）；媒体（腾讯/新浪/东财）返回 False
+_OFFICIAL_ANNOUNCEMENT_DOMAINS = (
+    "cninfo.com.cn",       # 巨潮资讯网（沪深公告法定披露平台）
+    "sse.com", "sse.com.cn",  # 上交所
+    "szse.cn",             # 深交所
+    "hkexnews.hk",         # 港交所
+    "sec.gov", "nasdaq.com", "nyse.com",  # 美股监管/交易所
+)
+
+
+def _get_announcement_search_service():
+    """Lazy 共享 SearchService 访问器（测试可 monkeypatch 替换为 fake，避免真实网络）。"""
+    from src.search_service import get_search_service
+
+    return get_search_service()
+
+
+def _build_announcement_query(stock_name: Any, stock_code: Any) -> str:
+    """构造公告导向检索 query（覆盖重大事项，巨潮/官网/证券媒体一并命中）。"""
+    name = str(stock_name or "").strip()
+    code = str(stock_code or "").strip()
+    prefix = f"{name} {code}".strip() or code or name
+    return f"{prefix} 公司公告 巨潮资讯"
+
+
+def _pick_search_provider(service: Any) -> Any:
+    """返回共享 SearchService 上首个可用 provider（或 None）。
+
+    走 provider 原生 ``.search()``（绕过 ``search_stock_news`` 面向新闻的过滤/再排序），
+    保留一手公告源（巨潮/交易所/官网）。SearchService 内部本就用 ``_providers`` 列表
+    迭代，此处沿用同一稳定结构。
+    """
+    if service is None:
+        return None
+    for provider in getattr(service, "_providers", None) or []:
+        if getattr(provider, "is_available", False):
+            return provider
+    return None
+
+
+def _is_official_announcement_source(url: Any, source: Any) -> bool:
+    """判断结果是否来自一手公告源（交易所/巨潮/官网）。媒体源（腾讯/新浪等）返回 False。"""
+    text = f"{url or ''} {source or ''}".lower()
+    return any(domain in text for domain in _OFFICIAL_ANNOUNCEMENT_DOMAINS)
+
+
+def _handle_search_company_announcements(
+    stock_code: str,
+    stock_name: str,
+    max_results: int = 8,
+) -> Dict[str, Any]:
+    """检索公司公告（腾讯证券/新浪证券/巨潮/交易所/公司官网），返回带原文地址的结果。
+
+    复用共享 ``SearchService`` 的 provider（配置 ``TAVILY_API_KEYS`` 等后可用），走其
+    原生 ``.search()`` 保留一手公告源；每条结果含 ``url``（公告原文地址，可直接填入
+    证据）与 ``is_official`` 标注。服务不可用或检索失败时返回 ``error``，α 据此标注
+    「待核验」而非编造。
+    """
+    provider = _pick_search_provider(_get_announcement_search_service())
+    if provider is None:
+        return {
+            "error": "搜索引擎不可用（未配置 TAVILY_API_KEYS 等），无法检索公司公告，请将相关判断标注「待核验」",
+            "stock_code": stock_code,
+        }
+
+    query = _build_announcement_query(stock_name, stock_code)
+    try:
+        response = provider.search(query, max_results=max_results, days=30)
+    except Exception as exc:  # noqa: BLE001 - 检索异常不得拖垮 agent
+        logger.error("[PolicyMinesweeper] 公司公告检索异常 (%s): %s", stock_code, exc)
+        return {"error": f"公司公告检索异常: {exc}", "stock_code": stock_code, "query": query}
+
+    if not getattr(response, "success", False):
+        return {
+            "error": getattr(response, "error_message", None) or "公司公告搜索失败",
+            "stock_code": stock_code,
+            "query": query,
+        }
+
+    items = [
+        {
+            "title": getattr(r, "title", ""),
+            "snippet": (getattr(r, "snippet", "") or "")[:500],
+            "url": getattr(r, "url", ""),
+            "source": getattr(r, "source", ""),
+            "date": getattr(r, "published_date", ""),
+            "is_official": _is_official_announcement_source(
+                getattr(r, "url", ""), getattr(r, "source", "")
+            ),
+        }
+        for r in (getattr(response, "results", None) or [])[:max_results]
+    ]
+    return {
+        "stock_code": stock_code,
+        "stock_name": stock_name,
+        "query": query,
+        "provider": getattr(response, "provider", ""),
+        "count": len(items),
+        "announcements": items,
+    }
+
+
+search_company_announcements_tool = ToolDefinition(
+    name="search_company_announcements",
+    description=(
+        "检索一只 A 股的公司公告（来自腾讯证券/新浪证券/巨潮资讯/交易所/公司官网等），"
+        "返回标题/摘要/**公告原文地址 url**/来源/日期，并标注是否一手披露源（is_official）。"
+        "用于『排雷 300750』『查 XX 最近公告/增发/回购/业绩预告』。配置 TAVILY_API_KEYS 后可用。"
+    ),
+    parameters=[
+        ToolParameter(name="stock_code", type="string",
+                      description="A 股代码（如 300750）", required=True),
+        ToolParameter(name="stock_name", type="string",
+                      description="公司名称", required=True),
+    ],
+    handler=_handle_search_company_announcements,
+    category="search",
+)
+
+
+ALL_POLICY_MINESWEEPER_TOOLS = [
+    score_policy_minesweeper_tool,
+    search_company_announcements_tool,
+]

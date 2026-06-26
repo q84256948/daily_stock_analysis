@@ -610,3 +610,67 @@ def build_chanlun_executor(config=None):
         max_steps=10,
         timeout_seconds=180.0,
     )
+
+
+# 政策与公告双维度排雷所需的精确工具集（α 公告扫描 + β 政策分析 共享）。
+# 严格对齐 executor 三角色 system prompt 引用的工具，去掉 backtest/技术博弈类工具，
+# 降低 LLM 在「政策/公告/基本面」语境下的决策噪音。Ω 的 score_policy_minesweeper
+# 单独通过 ALL_POLICY_MINESWEEPER_TOOLS 注册（见 build_policy_minesweeper_executor）。
+_POLICY_MINESWEEPER_TOOL_NAMES = {
+    "search_stock_news",          # α：公司公告/新闻
+    "search_comprehensive_intel", # α/β：综合情报（含政策）
+    "get_stock_info",             # α/β：基本面（盈利/估值影响）
+    "get_realtime_quote",         # α：行情（价格敏感度）
+    "get_sector_rankings",        # β：板块/产业（政策暴露度）
+}
+
+
+def build_policy_minesweeper_executor(config=None):
+    """构建政策与公告双维度排雷专属 Executor（α/β 并行 → Ω 综合）。
+
+    与深度投研/供应链的差异：
+    - **工具集**：从问股 ``get_tool_registry()`` 精确筛选 5 个工具（公告/新闻 + 综合情报 +
+      基本面 + 行情 + 板块，覆盖 α 公告扫描与 β 政策分析），装入**独立 ToolRegistry 实例**
+      （复制不污染问股单例），再注册 1 个排雷打分工具 ``score_policy_minesweeper``（Ω 用）。
+    - **三 Agent 边界**：``max_steps_ab=10`` / ``max_steps_omega=6``；``wall_ab=300s`` /
+      ``wall_omega=240s``（α/β 并行 + Ω 串行，总时长约 9 分钟，低于 SSE 960s 超时），
+      硬编码在 executor 默认值，不读 ``config.agent_max_steps``，与问股/郑希/供应链互不影响。
+    - 返回 :class:`src.agent.policy_minesweeper_executor.PolicyMinesweeperExecutor`。
+    """
+    if config is None:
+        from src.config import get_config
+
+        config = get_config()
+
+    from src.agent.llm_adapter import LLMToolAdapter
+    from src.agent.policy_minesweeper_executor import PolicyMinesweeperExecutor
+    from src.agent.tools.policy_minesweeper_tools import ALL_POLICY_MINESWEEPER_TOOLS
+    from src.agent.tools.registry import ToolRegistry
+
+    source_registry = get_tool_registry()
+    registry = ToolRegistry()
+    registered = 0
+    for tool in source_registry.list_tools():
+        if tool.name in _POLICY_MINESWEEPER_TOOL_NAMES:
+            registry.register(tool)
+            registered += 1
+
+    for tool in ALL_POLICY_MINESWEEPER_TOOLS:
+        registry.register(tool)
+
+    missing = _POLICY_MINESWEEPER_TOOL_NAMES - set(registry.list_names())
+    if missing:
+        logger.warning("[AgentFactory] PolicyMinesweeper 缺失工具: %s", sorted(missing))
+    logger.info(
+        "[AgentFactory] PolicyMinesweeper ToolRegistry built (%d wengu + %d score = %d tools)",
+        registered,
+        len(ALL_POLICY_MINESWEEPER_TOOLS),
+        len(registry.list_tools()),
+    )
+
+    llm_adapter = LLMToolAdapter(config)
+
+    return PolicyMinesweeperExecutor(
+        tool_registry=registry,
+        llm_adapter=llm_adapter,
+    )
