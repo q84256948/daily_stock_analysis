@@ -28,7 +28,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, cast
 
 import pandas as pd
 import requests  # 引入 requests 以捕获异常
@@ -391,7 +391,9 @@ class EfinanceFetcher(BaseFetcher):
         else:
             return self._fetch_stock_data(stock_code, start_date, end_date)
     
-    def _fetch_stock_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def _fetch_stock_data(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """
         获取普通 A 股历史数据
         
@@ -405,75 +407,62 @@ class EfinanceFetcher(BaseFetcher):
         - fqt: 复权方式，1=前复权
         """
         import efinance as ef
-        
+
         # 防封禁策略 1: 随机 User-Agent
         self._set_random_user_agent()
-        
+
         # 防封禁策略 2: 强制休眠
         self._enforce_rate_limit()
-        
+
         # 格式化日期（efinance 使用 YYYYMMDD 格式）
         beg_date = start_date.replace('-', '')
         end_date_fmt = end_date.replace('-', '')
-        
-        logger.info(f"[API调用] ef.stock.get_quote_history(stock_codes={stock_code}, "
-                   f"beg={beg_date}, end={end_date_fmt}, klt=101, fqt=1)")
-        
+
+        logger.info(
+            f"[API调用] ef.stock.get_quote_history(stock_codes={stock_code}, "
+            f"beg={beg_date}, end={end_date_fmt}, klt=101, fqt=1)"
+        )
+
         api_start = time.time()
-        try:
-            # 调用 efinance 获取 A 股日线数据
-            # klt=101 获取日线数据
-            # fqt=1 获取前复权数据
-            df = _ef_call_with_timeout(
-                ef.stock.get_quote_history,
-                stock_codes=stock_code,
-                beg=beg_date,
-                end=end_date_fmt,
-                klt=101,  # 日线
-                fqt=1,    # 前复权
-                timeout=60,
+        # 调用 efinance 获取 A 股日线数据
+        # klt=101 获取日线数据
+        # fqt=1 获取前复权数据
+        df = _ef_call_with_timeout(
+            ef.stock.get_quote_history,
+            stock_codes=stock_code,
+            beg=beg_date,
+            end=end_date_fmt,
+            klt=101,  # 日线
+            fqt=1,  # 前复权
+            timeout=60,
+        )
+
+        api_elapsed = time.time() - api_start
+
+        # 记录返回数据摘要
+        if df is not None and not df.empty:
+            logger.info(
+                "[API返回] Eastmoney 历史K线成功: "
+                f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, "
+                f"range={beg_date}~{end_date_fmt}, rows={len(df)}, elapsed={api_elapsed:.2f}s"
             )
-            
-            api_elapsed = time.time() - api_start
-            
-            # 记录返回数据摘要
-            if df is not None and not df.empty:
+            logger.info(f"[API返回] 列名: {list(df.columns)}")
+            if '日期' in df.columns:
                 logger.info(
-                    "[API返回] Eastmoney 历史K线成功: "
-                    f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, "
-                    f"range={beg_date}~{end_date_fmt}, rows={len(df)}, elapsed={api_elapsed:.2f}s"
+                    f"[API返回] 日期范围: {df['日期'].iloc[0]} ~ {df['日期'].iloc[-1]}"
                 )
-                logger.info(f"[API返回] 列名: {list(df.columns)}")
-                if '日期' in df.columns:
-                    logger.info(f"[API返回] 日期范围: {df['日期'].iloc[0]} ~ {df['日期'].iloc[-1]}")
-                logger.debug(f"[API返回] 最新3条数据:\n{df.tail(3).to_string()}")
-            else:
-                logger.warning(
-                    "[API返回] Eastmoney 历史K线为空: "
-                    f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, "
-                    f"range={beg_date}~{end_date_fmt}, elapsed={api_elapsed:.2f}s"
-                )
-            
-            return df
-            
-        except Exception as e:
-            api_elapsed = time.time() - api_start
-            category, failure_message = self._build_history_failure_message(
-                stock_code=stock_code,
-                beg_date=beg_date,
-                end_date=end_date_fmt,
-                exc=e,
-                elapsed=api_elapsed,
+            logger.debug(f"[API返回] 最新3条数据:\n{df.tail(3).to_string()}")
+        else:
+            logger.warning(
+                "[API返回] Eastmoney 历史K线为空: "
+                f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, "
+                f"range={beg_date}~{end_date_fmt}, elapsed={api_elapsed:.2f}s"
             )
+        return cast(pd.DataFrame, df)
 
-            if category == "rate_limit_or_anti_bot":
-                logger.warning(failure_message)
-                raise RateLimitError(f"efinance 可能被限流: {failure_message}") from e
-
-            logger.error(failure_message)
-            raise DataFetchError(f"efinance 获取数据失败: {failure_message}") from e
-    
-    def _fetch_etf_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    def _fetch_etf_data(
+        self, stock_code: str, start_date: str, end_date: str
+    ) -> pd.DataFrame:
         """
         获取 ETF 基金历史数据
 
@@ -514,59 +503,41 @@ class EfinanceFetcher(BaseFetcher):
         )
 
         api_start = time.time()
-        try:
-            # ETFs are exchange-traded securities; use the stock API to get full OHLCV data
-            df = _ef_call_with_timeout(
-                ef.stock.get_quote_history,
-                stock_codes=secid,
-                beg=beg_date,
-                end=end_date_fmt,
-                klt=101,  # daily
-                fqt=1,    # forward-adjusted
-                quote_id_mode=True,
-                use_id_cache=False,
-                timeout=60,
+        # ETFs are exchange-traded securities; use the stock API to get full OHLCV data
+        df = _ef_call_with_timeout(
+            ef.stock.get_quote_history,
+            stock_codes=secid,
+            beg=beg_date,
+            end=end_date_fmt,
+            klt=101,  # daily
+            fqt=1,  # forward-adjusted
+            quote_id_mode=True,
+            use_id_cache=False,
+            timeout=60,
+        )
+
+        api_elapsed = time.time() - api_start
+
+        if df is not None and not df.empty:
+            logger.info(
+                "[API返回] Eastmoney 历史K线成功 [ETF]: "
+                f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, secid={secid}, "
+                f"range={beg_date}~{end_date_fmt}, rows={len(df)}, elapsed={api_elapsed:.2f}s"
             )
-
-            api_elapsed = time.time() - api_start
-
-            if df is not None and not df.empty:
+            logger.info(f"[API返回] 列名: {list(df.columns)}")
+            if '日期' in df.columns:
                 logger.info(
-                    "[API返回] Eastmoney 历史K线成功 [ETF]: "
-                    f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, secid={secid}, "
-                    f"range={beg_date}~{end_date_fmt}, rows={len(df)}, elapsed={api_elapsed:.2f}s"
+                    f"[API返回] 日期范围: {df['日期'].iloc[0]} ~ {df['日期'].iloc[-1]}"
                 )
-                logger.info(f"[API返回] 列名: {list(df.columns)}")
-                if '日期' in df.columns:
-                    logger.info(f"[API返回] 日期范围: {df['日期'].iloc[0]} ~ {df['日期'].iloc[-1]}")
-                logger.debug(f"[API返回] 最新3条数据:\n{df.tail(3).to_string()}")
-            else:
-                logger.warning(
-                    "[API返回] Eastmoney 历史K线为空 [ETF]: "
-                    f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, secid={secid}, "
-                    f"range={beg_date}~{end_date_fmt}, elapsed={api_elapsed:.2f}s"
-                )
-
-            return df
-
-        except Exception as e:
-            api_elapsed = time.time() - api_start
-            category, failure_message = self._build_history_failure_message(
-                stock_code=stock_code,
-                beg_date=beg_date,
-                end_date=end_date_fmt,
-                exc=e,
-                elapsed=api_elapsed,
-                is_etf=True,
+            logger.debug(f"[API返回] 最新3条数据:\n{df.tail(3).to_string()}")
+        else:
+            logger.warning(
+                "[API返回] Eastmoney 历史K线为空 [ETF]: "
+                f"endpoint={EASTMONEY_HISTORY_ENDPOINT}, stock_code={stock_code}, secid={secid}, "
+                f"range={beg_date}~{end_date_fmt}, elapsed={api_elapsed:.2f}s"
             )
+        return cast(pd.DataFrame, df)
 
-            if category == "rate_limit_or_anti_bot":
-                logger.warning(failure_message)
-                raise RateLimitError(f"efinance 可能被限流: {failure_message}") from e
-
-            logger.error(failure_message)
-            raise DataFetchError(f"efinance 获取 ETF 数据失败: {failure_message}") from e
-    
     def _normalize_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         """
         标准化 efinance 数据
@@ -616,8 +587,8 @@ class EfinanceFetcher(BaseFetcher):
         # 只保留需要的列
         keep_cols = ['code'] + STANDARD_COLUMNS
         existing_cols = [col for col in keep_cols if col in df.columns]
-        df = df[existing_cols]
-        
+        df = cast(pd.DataFrame, df[existing_cols])
+
         return df
     
     def get_realtime_quote(self, stock_code: str) -> Optional[UnifiedRealtimeQuote]:
@@ -890,11 +861,11 @@ class EfinanceFetcher(BaseFetcher):
                 open_price = 0.0
                 for column in open_cols:
                     candidate = safe_float(item.get(column), default=None)
-                    if candidate not in (None, 0.0):
+                    if candidate is not None and candidate != 0.0:
                         open_price = candidate
                         break
                 if open_price == 0.0 and open_cols:
-                    open_price = safe_float(item.get(open_cols[0], 0), 0)
+                    open_price = safe_float(item.get(open_cols[0], 0), 0) or 0.0
 
                 results.append({
                     'code': full_code,
@@ -905,7 +876,11 @@ class EfinanceFetcher(BaseFetcher):
                     'open': open_price,
                     'high': safe_float(item.get(high_col, 0)),
                     'low': safe_float(item.get(low_col, 0)),
-                    'prev_close': current - change_amount if current or change_amount else 0,
+                    'prev_close': (
+                        (current - change_amount)
+                        if current is not None and change_amount is not None
+                        else 0.0
+                    ),
                     'volume': safe_float(item.get(vol_col, 0)),
                     'amount': safe_float(item.get(amt_col, 0)),
                     'amplitude': safe_float(item.get(amp_col, 0)),
@@ -1060,7 +1035,9 @@ class EfinanceFetcher(BaseFetcher):
             
         return stats
 
-    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+    def get_sector_rankings(
+        self, n: int = 5
+    ) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
         """
         获取板块涨跌榜 (efinance)
         """
@@ -1087,11 +1064,17 @@ class EfinanceFetcher(BaseFetcher):
             bottom = df.nsmallest(n, change_col)
 
             top_sectors = [
-                {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                {
+                    'name': str(row[name_col]),
+                    'change_pct': float(cast(Any, row[change_col])),
+                }
                 for _, row in top.iterrows()
             ]
             bottom_sectors = [
-                {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                {
+                    'name': str(row[name_col]),
+                    'change_pct': float(cast(Any, row[change_col])),
+                }
                 for _, row in bottom.iterrows()
             ]
             return top_sectors, bottom_sectors
@@ -1134,11 +1117,11 @@ class EfinanceFetcher(BaseFetcher):
             
             # 转换为字典
             if isinstance(info, pd.Series):
-                return info.to_dict()
+                return cast(Dict[str, Any], info.to_dict())
             elif isinstance(info, pd.DataFrame):
                 if not info.empty:
-                    return info.iloc[0].to_dict()
-            
+                    return cast(Dict[str, Any], info.iloc[0].to_dict())
+
             return None
             
         except Exception as e:
@@ -1197,7 +1180,7 @@ class EfinanceFetcher(BaseFetcher):
         Returns:
             包含所有数据的字典
         """
-        result = {
+        result: Dict[str, Any] = {
             'code': stock_code,
             'daily_data': None,
             'realtime_quote': None,

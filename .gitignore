@@ -58,6 +58,8 @@ env/
 !/data/fund_manager_views/
 # 例外:供应链分析 skill(Serenity 方法论+评分卡+示例,来自 serenity-skill MIT)
 !/data/supply_chain_skill/
+# 例外:政策与公告双维度排雷 system prompt(α/β/Ω 三角色共享方法论)
+!/data/policy_minesweeper/
 /.llm_usage_hmac_secret
 **/.llm_usage_hmac_secret
 logs/

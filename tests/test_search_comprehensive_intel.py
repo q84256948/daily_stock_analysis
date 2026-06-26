@@ -1,0 +1,207 @@
+# -*- coding: utf-8 -*-
+"""
+Tests for SearchService.search_comprehensive_intel behavior.
+
+Covers:
+- Dimension result presence and max_searches limiting
+- Provider rotation across dimensions
+- Per-dimension failure isolation
+- Elapsed time baseline for future parallelization work
+"""
+
+import os
+import sys
+import time
+import unittest
+from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+# Mock newspaper before search_service import (optional dependency)
+if "newspaper" not in sys.modules:
+    mock_np = MagicMock()
+    mock_np.Article = MagicMock()
+    mock_np.Config = MagicMock()
+    sys.modules["newspaper"] = mock_np
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from src.search_service import SearchResponse, SearchResult, SearchService
+
+
+class _DummyProvider:
+    def __init__(self, name="DummyProvider"):
+        self.name = name
+        self.is_available = True
+        self.calls = []
+
+    def search(self, query, max_results=5, days=7, **kwargs):
+        self.calls.append((query, max_results, days, kwargs))
+        return SearchResponse(
+            query=query,
+            results=[
+                SearchResult(
+                    title=f"[{self.name}] {query}",
+                    snippet="snippet",
+                    url=f"https://example.com/{self.name}",
+                    source="example.com",
+                    published_date=datetime.now().date().isoformat(),
+                )
+            ],
+            provider=self.name,
+            success=True,
+        )
+
+
+class _FailingProvider:
+    def __init__(self, name="FailingProvider"):
+        self.name = name
+        self.is_available = True
+
+    def search(self, query, max_results=5, days=7, **kwargs):
+        return SearchResponse(
+            query=query,
+            results=[],
+            provider=self.name,
+            success=False,
+            error_message="forced failure",
+        )
+
+
+class TestSearchComprehensiveIntel(unittest.TestCase):
+    def _build_service(self, providers=None):
+        service = SearchService(
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        service._providers = providers or []
+        return service
+
+    def test_returns_expected_dimensions_for_cn_stock(self):
+        provider = _DummyProvider()
+        service = self._build_service([provider])
+
+        results = service.search_comprehensive_intel(
+            stock_code="600519",
+            stock_name="贵州茅台",
+            max_searches=6,
+        )
+
+        self.assertIn("latest_news", results)
+        self.assertIn("market_analysis", results)
+        self.assertIn("risk_check", results)
+        self.assertIn("announcements", results)
+        self.assertIn("earnings", results)
+        self.assertIn("industry", results)
+        self.assertTrue(all(r.success for r in results.values()))
+
+    def test_max_searches_limits_dimension_count(self):
+        provider = _DummyProvider()
+        service = self._build_service([provider])
+
+        results = service.search_comprehensive_intel(
+            stock_code="600519",
+            stock_name="贵州茅台",
+            max_searches=3,
+        )
+
+        self.assertEqual(len(results), 3)
+        self.assertEqual(len(provider.calls), 3)
+
+    def test_provider_rotation_across_dimensions(self):
+        p1 = _DummyProvider("P1")
+        p2 = _DummyProvider("P2")
+        service = self._build_service([p1, p2])
+
+        service.search_comprehensive_intel(
+            stock_code="600519",
+            stock_name="贵州茅台",
+            max_searches=4,
+        )
+
+        # Round-robin: dimensions 0,2 -> P1; dimensions 1,3 -> P2
+        self.assertEqual(len(p1.calls), 2)
+        self.assertEqual(len(p2.calls), 2)
+
+    def test_single_dimension_failure_does_not_break_others(self):
+        working = _DummyProvider("Working")
+        failing = _FailingProvider("Failing")
+        service = self._build_service([working, failing])
+
+        results = service.search_comprehensive_intel(
+            stock_code="600519",
+            stock_name="贵州茅台",
+            max_searches=3,
+        )
+
+        # Round-robin: dim 0,2 use working provider; dim 1 uses failing provider
+        dim_names = list(results.keys())
+        self.assertTrue(results[dim_names[0]].success)
+        self.assertFalse(results[dim_names[1]].success)
+        self.assertTrue(results[dim_names[2]].success)
+
+    def test_strict_freshness_filtering_is_applied(self):
+        provider = _DummyProvider()
+        service = self._build_service([provider])
+
+        with patch.object(service, "_filter_news_response") as mock_filter:
+            mock_filter.side_effect = lambda response, **kwargs: SearchResponse(
+                query=response.query,
+                results=[],
+                provider=response.provider,
+                success=True,
+            )
+            service.search_comprehensive_intel(
+                stock_code="600519",
+                stock_name="贵州茅台",
+                max_searches=1,
+            )
+
+        # Only latest_news is requested and it has strict_freshness=True
+        self.assertEqual(mock_filter.call_count, 1)
+
+    def test_foreign_stock_uses_different_dimension_set(self):
+        provider = _DummyProvider()
+        service = self._build_service([provider])
+
+        results = service.search_comprehensive_intel(
+            stock_code="AAPL",
+            stock_name="Apple",
+            max_searches=6,
+        )
+
+        # Foreign set does not include "announcements"
+        self.assertIn("latest_news", results)
+        self.assertIn("risk_check", results)
+        self.assertNotIn("announcements", results)
+
+
+class TestSearchComprehensiveIntelBenchmark(unittest.TestCase):
+    @pytest.mark.benchmark
+    def test_serial_dimensions_elapsed_baseline(self):
+        """Record baseline latency of serial dimension execution."""
+        provider = _DummyProvider()
+        service = SearchService(
+            searxng_public_instances_enabled=False,
+            news_max_age_days=3,
+            news_strategy_profile="short",
+        )
+        service._providers = [provider]
+
+        start = time.monotonic()
+        service.search_comprehensive_intel(
+            stock_code="600519",
+            stock_name="贵州茅台",
+            max_searches=5,
+        )
+        elapsed = time.monotonic() - start
+
+        # 5 dimensions * 0.5s sleep = 2.5s minimum; allow overhead
+        self.assertGreaterEqual(elapsed, 2.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

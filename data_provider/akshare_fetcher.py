@@ -30,7 +30,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List, Tuple, cast
 
 import pandas as pd
 import requests
@@ -318,7 +318,7 @@ def _akshare_call_with_timeout(
     multiprocessing.freeze_support()
     ctx = multiprocessing.get_context(_AKSHARE_TIMEOUT_PROCESS_START_METHOD)
     parent_conn, child_conn = ctx.Pipe(duplex=False)
-    process = ctx.Process(
+    process = multiprocessing.Process(
         target=_akshare_timeout_worker,
         args=(child_conn, func, args, kwargs),
         name=f"akshare-{call_name}",
@@ -761,14 +761,16 @@ class AkshareFetcher(BaseFetcher):
                 df = df[(df['date'] >= start_dt) & (df['date'] <= end_dt)]
                 
                 if not df.empty:
-                    logger.info(f"[API返回] 过滤后日期范围: {df['date'].iloc[0].strftime('%Y-%m-%d')} ~ {df['date'].iloc[-1].strftime('%Y-%m-%d')}")
+                    first_date = cast(pd.Series, df['date']).iloc[0]
+                    last_date = cast(pd.Series, df['date']).iloc[-1]
+                    logger.info(f"[API返回] 过滤后日期范围: {first_date.strftime('%Y-%m-%d')} ~ {last_date.strftime('%Y-%m-%d')}")
                     logger.debug(f"[API返回] 最新3条数据:\n{df.tail(3).to_string()}")
                 else:
                     logger.warning(f"[API返回] 过滤后数据为空，日期范围 {start_date} ~ {end_date} 无数据")
-                
+
                 # 转换列名为中文格式以匹配 _normalize_data
                 # stock_us_daily 返回: date, open, high, low, close, volume
-                rename_map = {
+                rename_map: Dict[str, str] = {
                     'date': '日期',
                     'open': '开盘',
                     'high': '最高',
@@ -776,8 +778,8 @@ class AkshareFetcher(BaseFetcher):
                     'close': '收盘',
                     'volume': '成交量',
                 }
-                df = df.rename(columns=rename_map)
-                
+                df = df.rename(columns=rename_map)  # type: ignore[call-overload]
+
                 # 计算涨跌幅（美股接口不直接返回）
                 if '收盘' in df.columns:
                     df['涨跌幅'] = df['收盘'].pct_change() * 100
@@ -894,15 +896,15 @@ class AkshareFetcher(BaseFetcher):
         
         # 重命名列
         df = df.rename(columns=column_mapping)
-        
+
         # 添加股票代码列
         df['code'] = stock_code
-        
+
         # 只保留需要的列
         keep_cols = ['code'] + STANDARD_COLUMNS
         existing_cols = [col for col in keep_cols if col in df.columns]
-        df = df[existing_cols]
-        
+        df = cast(pd.DataFrame, df[existing_cols])
+
         return df
     
     def get_realtime_quote(self, stock_code: str, source: str = "em") -> Optional[UnifiedRealtimeQuote]:
@@ -1326,8 +1328,8 @@ class AkshareFetcher(BaseFetcher):
                 volume_ratio=safe_float(fields[49]) if len(fields) > 49 else None,  # 量比
                 pe_ratio=safe_float(fields[39]) if len(fields) > 39 else None,  # 市盈率
                 pb_ratio=safe_float(fields[46]) if len(fields) > 46 else None,  # 市净率
-                circ_mv=safe_float(fields[44]) * 100000000 if len(fields) > 44 and fields[44] else None,  # 流通市值(亿->元)
-                total_mv=safe_float(fields[45]) * 100000000 if len(fields) > 45 and fields[45] else None,  # 总市值(亿->元)
+                circ_mv=(safe_float(fields[44]) or 0.0) * 100000000 if len(fields) > 44 and fields[44] else None,  # 流通市值(亿->元)
+                total_mv=(safe_float(fields[45]) or 0.0) * 100000000 if len(fields) > 45 and fields[45] else None,  # 总市值(亿->元)
             )
             
             logger.info(
@@ -1626,19 +1628,46 @@ class AkshareFetcher(BaseFetcher):
             
             # 取最新一天的数据
             latest = df.iloc[-1]
-            
+
             # 使用 realtime_types.py 中的统一转换函数
+            profit_ratio = safe_float(latest.get('获利比例'))
+            avg_cost = safe_float(latest.get('平均成本'))
+            cost_90_low = safe_float(latest.get('90成本-低'))
+            cost_90_high = safe_float(latest.get('90成本-高'))
+            concentration_90 = safe_float(latest.get('90集中度'))
+            cost_70_low = safe_float(latest.get('70成本-低'))
+            cost_70_high = safe_float(latest.get('70成本-高'))
+            concentration_70 = safe_float(latest.get('70集中度'))
+
+            if any(
+                v is None
+                for v in [
+                    profit_ratio,
+                    avg_cost,
+                    cost_90_low,
+                    cost_90_high,
+                    concentration_90,
+                    cost_70_low,
+                    cost_70_high,
+                    concentration_70,
+                ]
+            ):
+                logger.warning(
+                    f"[筹码分布] {stock_code} 字段缺失，跳过本次筹码分布构建"
+                )
+                return None
+
             chip = ChipDistribution(
                 code=stock_code,
                 date=str(latest.get('日期', '')),
-                profit_ratio=safe_float(latest.get('获利比例')),
-                avg_cost=safe_float(latest.get('平均成本')),
-                cost_90_low=safe_float(latest.get('90成本-低')),
-                cost_90_high=safe_float(latest.get('90成本-高')),
-                concentration_90=safe_float(latest.get('90集中度')),
-                cost_70_low=safe_float(latest.get('70成本-低')),
-                cost_70_high=safe_float(latest.get('70成本-高')),
-                concentration_70=safe_float(latest.get('70集中度')),
+                profit_ratio=profit_ratio,  # type: ignore[arg-type]
+                avg_cost=avg_cost,  # type: ignore[arg-type]
+                cost_90_low=cost_90_low,  # type: ignore[arg-type]
+                cost_90_high=cost_90_high,  # type: ignore[arg-type]
+                concentration_90=concentration_90,  # type: ignore[arg-type]
+                cost_70_low=cost_70_low,  # type: ignore[arg-type]
+                cost_70_high=cost_70_high,  # type: ignore[arg-type]
+                concentration_70=concentration_70,  # type: ignore[arg-type]
             )
             
             logger.info(f"[筹码分布] {stock_code} 日期={chip.date}: 获利比例={chip.profit_ratio:.1%}, "
@@ -1661,7 +1690,7 @@ class AkshareFetcher(BaseFetcher):
         Returns:
             包含所有数据的字典
         """
-        result = {
+        result: Dict[str, Any] = {
             'code': stock_code,
             'daily_data': None,
             'realtime_quote': None,
@@ -1726,8 +1755,10 @@ class AkshareFetcher(BaseFetcher):
 
                         # 计算振幅
                         amplitude = 0.0
-                        if prev_close > 0:
-                            amplitude = (high - low) / prev_close * 100
+                        if prev_close is not None and prev_close > 0:
+                            amplitude = (
+                                ((high or 0.0) - (low or 0.0)) / prev_close * 100
+                            )
 
                         results.append({
                             'code': code,
@@ -1910,7 +1941,9 @@ class AkshareFetcher(BaseFetcher):
             
         return stats
 
-    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+    def get_sector_rankings(
+        self, n: int = 5
+    ) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
         """
         获取行业板块涨跌榜
 
@@ -1920,7 +1953,9 @@ class AkshareFetcher(BaseFetcher):
         """
         import akshare as ak
 
-        def _get_rank_top_n(df: pd.DataFrame, change_col: str, industry_name: str, n: int) -> Tuple[list, list]:
+        def _get_rank_top_n(
+            df: pd.DataFrame, change_col: str, industry_name: str, n: int
+        ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
             df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
             df = df.dropna(subset=[change_col])
 
@@ -1970,7 +2005,9 @@ class AkshareFetcher(BaseFetcher):
             logger.error(f"[Akshare] 新浪接口获取板块排行也失败: {e}")
             return None
 
-    def get_concept_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+    def get_concept_rankings(
+        self, n: int = 5
+    ) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
         """获取概念/题材涨跌榜。"""
         import akshare as ak
 
@@ -1995,11 +2032,17 @@ class AkshareFetcher(BaseFetcher):
             bottom = df.nsmallest(n, change_col)
             return (
                 [
-                    {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                    {
+                        'name': str(row[name_col]),
+                        'change_pct': float(cast(Any, row[change_col])),
+                    }
                     for _, row in top.iterrows()
                 ],
                 [
-                    {'name': str(row[name_col]), 'change_pct': float(row[change_col])}
+                    {
+                        'name': str(row[name_col]),
+                        'change_pct': float(cast(Any, row[change_col])),
+                    }
                     for _, row in bottom.iterrows()
                 ],
             )
@@ -2215,7 +2258,7 @@ class AkshareFetcher(BaseFetcher):
         for col in df.columns:
             col_text = str(col)
             if all(keyword in col_text for keyword in keywords):
-                return col
+                return str(col)
         return None
 
 

@@ -4,3 +4,18 @@
 # Test and lint tooling used by backend-gate.
 flake8
 pytest
+pytest-cov
+pytest-mock
+pytest-benchmark
+mypy
+pyright
+
+# Optional runtime dependency required by tests/test_md2pdf.py.
+pypdf
+
+# Type stubs for mypy/pyright
+types-requests
+types-python-dateutil
+types-pytz
+types-PyYAML
+types-setuptools

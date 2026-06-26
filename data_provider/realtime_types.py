@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Union
 from enum import Enum
 
+from icontract import require, ensure
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,33 +33,37 @@ logger = logging.getLogger(__name__)
 # 各数据源返回的原始数据类型不一致（str/float/int/NaN），
 # 使用这些函数统一转换，避免在各 Fetcher 中重复定义。
 
+@require(lambda default: default is None or isinstance(default, (int, float)),
+         "default must be a numeric scalar or None")
+@ensure(lambda result: result is None or isinstance(result, float),
+        "result must be a float or None")
 def safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
     """
     安全转换为浮点数
-    
+
     处理场景：
     - None / 空字符串 → default
     - pandas NaN / numpy NaN → default
     - 数值字符串 → float
     - 已是数值 → float
-    
+
     Args:
         val: 待转换的值
         default: 转换失败时的默认值
-        
+
     Returns:
         转换后的浮点数，或默认值
     """
     try:
         if val is None:
             return default
-        
+
         # 处理字符串
         if isinstance(val, str):
             val = val.strip()
             if val == "" or val == "-" or val == "--":
                 return default
-        
+
         # 处理 pandas/numpy NaN
         # 使用 math.isnan 而不是 pd.isna，避免强制依赖 pandas
         import math
@@ -66,22 +72,26 @@ def safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
                 return default
         except (ValueError, TypeError):
             pass
-        
+
         return float(val)
     except (ValueError, TypeError):
         return default
 
 
+@require(lambda default: default is None or isinstance(default, int),
+         "default must be an int or None")
+@ensure(lambda result: result is None or isinstance(result, int),
+        "result must be an int or None")
 def safe_int(val: Any, default: Optional[int] = None) -> Optional[int]:
     """
     安全转换为整数
-    
+
     先转换为 float，再取整，处理 "123.0" 这类情况
-    
+
     Args:
         val: 待转换的值
         default: 转换失败时的默认值
-        
+
     Returns:
         转换后的整数，或默认值
     """
@@ -225,13 +235,21 @@ class ChipDistribution:
             'concentration_70': self.concentration_70,
         }
     
+    @require(lambda self: 0.0 <= self.profit_ratio <= 1.0,
+             "profit_ratio must be in [0, 1]")
+    @require(lambda self: self.avg_cost >= 0,
+             "avg_cost must be non-negative")
+    @require(lambda current_price: current_price >= 0,
+             "current_price must be non-negative")
+    @ensure(lambda result: len(result) > 0,
+            "status description must not be empty")
     def get_chip_status(self, current_price: float) -> str:
         """
         获取筹码状态描述
-        
+
         Args:
             current_price: 当前股价
-            
+
         Returns:
             筹码状态描述
         """

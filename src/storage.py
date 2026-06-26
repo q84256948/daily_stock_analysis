@@ -18,7 +18,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, date, timedelta, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 from typing import (
     Optional,
     List,
@@ -29,6 +29,7 @@ from typing import (
     Callable,
     TypeVar,
     Union,
+    cast,
 )
 
 import pandas as pd
@@ -56,8 +57,11 @@ from sqlalchemy import (
     inspect,
 )
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import (
-    declarative_base,
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
     sessionmaker,
     Session,
 )
@@ -72,7 +76,8 @@ T = TypeVar("T")
 CURRENT_SCHEMA_VERSION = "2026-06-05-create-all-baseline"
 
 # SQLAlchemy ORM 基类
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 if TYPE_CHECKING:
     from src.search_service import SearchResponse
@@ -114,37 +119,41 @@ class StockDaily(Base):
     __tablename__ = "stock_daily"
 
     # 主键
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # 股票代码（如 600519, 000001）
-    code = Column(String(10), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
 
     # 交易日期
-    date = Column(Date, nullable=False, index=True)
+    date: Mapped[date_type] = mapped_column("date", Date, nullable=False, index=True)
 
     # OHLC 数据
-    open = Column(Float)
-    high = Column(Float)
-    low = Column(Float)
-    close = Column(Float)
+    open: Mapped[Optional[float]] = mapped_column(Float)
+    high: Mapped[Optional[float]] = mapped_column(Float)
+    low: Mapped[Optional[float]] = mapped_column(Float)
+    close: Mapped[Optional[float]] = mapped_column(Float)
 
     # 成交数据
-    volume = Column(Float)  # 成交量（股）
-    amount = Column(Float)  # 成交额（元）
-    pct_chg = Column(Float)  # 涨跌幅（%）
+    volume: Mapped[Optional[float]] = mapped_column(Float)  # 成交量（股）
+    amount: Mapped[Optional[float]] = mapped_column(Float)  # 成交额（元）
+    pct_chg: Mapped[Optional[float]] = mapped_column(Float)  # 涨跌幅（%）
 
     # 技术指标
-    ma5 = Column(Float)
-    ma10 = Column(Float)
-    ma20 = Column(Float)
-    volume_ratio = Column(Float)  # 量比
+    ma5: Mapped[Optional[float]] = mapped_column(Float)
+    ma10: Mapped[Optional[float]] = mapped_column(Float)
+    ma20: Mapped[Optional[float]] = mapped_column(Float)
+    volume_ratio: Mapped[Optional[float]] = mapped_column(Float)  # 量比
 
     # 数据来源
-    data_source = Column(String(50))  # 记录数据来源（如 AkshareFetcher）
+    data_source: Mapped[Optional[str]] = mapped_column(
+        String(50)
+    )  # 记录数据来源（如 AkshareFetcher）
 
     # 更新时间
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
 
     # 唯一约束：同一股票同一日期只能有一条数据
     __table_args__ = (
@@ -184,38 +193,42 @@ class NewsIntel(Base):
 
     __tablename__ = "news_intel"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # 关联用户查询操作
-    query_id = Column(String(64), index=True)
+    query_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
 
     # 股票信息
-    code = Column(String(10), nullable=False, index=True)
-    name = Column(String(50))
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(50))
 
     # 搜索上下文
-    dimension = Column(
+    dimension: Mapped[Optional[str]] = mapped_column(
         String(32), index=True
     )  # latest_news / risk_check / earnings / market_analysis / industry
-    query = Column(String(255))
-    provider = Column(String(32), index=True)
+    query: Mapped[Optional[str]] = mapped_column(String(255))
+    provider: Mapped[Optional[str]] = mapped_column(String(32), index=True)
 
     # 新闻内容
-    title = Column(String(300), nullable=False)
-    snippet = Column(Text)
-    url = Column(String(1000), nullable=False)
-    source = Column(String(100))
-    published_date = Column(DateTime, index=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    snippet: Mapped[Optional[str]] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String(100))
+    published_date: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
 
     # 入库时间
-    fetched_at = Column(DateTime, default=datetime.now, index=True)
-    query_source = Column(String(32), index=True)  # bot/web/cli/system
-    requester_platform = Column(String(20))
-    requester_user_id = Column(String(64))
-    requester_user_name = Column(String(64))
-    requester_chat_id = Column(String(64))
-    requester_message_id = Column(String(64))
-    requester_query = Column(String(255))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
+    query_source: Mapped[Optional[str]] = mapped_column(
+        String(32), index=True
+    )  # bot/web/cli/system
+    requester_platform: Mapped[Optional[str]] = mapped_column(String(20))
+    requester_user_id: Mapped[Optional[str]] = mapped_column(String(64))
+    requester_user_name: Mapped[Optional[str]] = mapped_column(String(64))
+    requester_chat_id: Mapped[Optional[str]] = mapped_column(String(64))
+    requester_message_id: Mapped[Optional[str]] = mapped_column(String(64))
+    requester_query: Mapped[Optional[str]] = mapped_column(String(255))
 
     __table_args__ = (
         UniqueConstraint("url", name="uix_news_url"),
@@ -261,43 +274,43 @@ class AnalysisHistory(Base):
 
     __tablename__ = "analysis_history"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # 关联查询链路
-    query_id = Column(String(64), index=True)
+    query_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
 
     # 股票信息
-    code = Column(String(10), nullable=False, index=True)
-    name = Column(String(50))
-    report_type = Column(String(16), index=True)
+    code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(50))
+    report_type: Mapped[Optional[str]] = mapped_column(String(16), index=True)
 
     # 核心结论
-    sentiment_score = Column(Integer)
-    operation_advice = Column(String(20))
-    trend_prediction = Column(String(50))
-    analysis_summary = Column(Text)
+    sentiment_score: Mapped[Optional[int]] = mapped_column(Integer)
+    operation_advice: Mapped[Optional[str]] = mapped_column(String(20))
+    trend_prediction: Mapped[Optional[str]] = mapped_column(String(50))
+    analysis_summary: Mapped[Optional[str]] = mapped_column(Text)
 
     # 详细数据
-    raw_result = Column(Text)
-    news_content = Column(Text)
-    context_snapshot = Column(Text)
+    raw_result: Mapped[Optional[str]] = mapped_column(Text)
+    news_content: Mapped[Optional[str]] = mapped_column(Text)
+    context_snapshot: Mapped[Optional[str]] = mapped_column(Text)
 
     # 狙击点位（用于回测）
-    ideal_buy = Column(Float)
-    secondary_buy = Column(Float)
-    stop_loss = Column(Float)
-    take_profit = Column(Float)
+    ideal_buy: Mapped[Optional[float]] = mapped_column(Float)
+    secondary_buy: Mapped[Optional[float]] = mapped_column(Float)
+    stop_loss: Mapped[Optional[float]] = mapped_column(Float)
+    take_profit: Mapped[Optional[float]] = mapped_column(Float)
 
     # 长线投研框架（P1 新增）
-    research_framework = Column(Text)
+    research_framework: Mapped[Optional[str]] = mapped_column(Text)
 
     # 五段式长线投研报告（P1-P2 新增）
-    bayesian_framework = Column(Text)
-    supply_chain = Column(Text)
-    value_scenarios = Column(Text)
-    investment_conclusion = Column(Text)
+    bayesian_framework: Mapped[Optional[str]] = mapped_column(Text)
+    supply_chain: Mapped[Optional[str]] = mapped_column(Text)
+    value_scenarios: Mapped[Optional[str]] = mapped_column(Text)
+    investment_conclusion: Mapped[Optional[str]] = mapped_column(Text)
 
-    created_at = Column(DateTime, default=datetime.now, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (Index("ix_analysis_code_time", "code", "created_at"),)
 
@@ -339,28 +352,36 @@ class DeepResearchReport(Base):
 
     __tablename__ = "deep_research_reports"
 
-    id = Column(String(64), primary_key=True)  # {6位code}_{YYYYMMDDHHmm}
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True
+    )  # {6位code}_{YYYYMMDDHHmm}
 
     # 股票信息
-    stock_code = Column(String(10), nullable=False, index=True)
-    stock_name = Column(String(50))
+    stock_code: Mapped[str] = mapped_column(
+        String(10), nullable=False, index=True
+    )
+    stock_name: Mapped[Optional[str]] = mapped_column(String(50))
 
     # 时间
-    created_at = Column(DateTime, default=datetime.now, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
 
     # 文件路径
-    md_path = Column(Text, nullable=False)
-    pdf_path = Column(Text)  # NULL = 尚未惰性生成
+    md_path: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_path: Mapped[Optional[str]] = mapped_column(Text)  # NULL = 尚未惰性生成
 
     # 质量
-    status = Column(String(16))  # success | partial | failed
-    quality_score = Column(Integer)
-    missing_layers = Column(Text)  # JSON array
+    status: Mapped[Optional[str]] = mapped_column(
+        String(16)
+    )  # success | partial | failed
+    quality_score: Mapped[Optional[int]] = mapped_column(Integer)
+    missing_layers: Mapped[Optional[str]] = mapped_column(Text)  # JSON array
 
     # 统计
-    total_steps = Column(Integer)
-    total_tokens = Column(Integer)
-    provider = Column(String(64))
+    total_steps: Mapped[Optional[int]] = mapped_column(Integer)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    provider: Mapped[Optional[str]] = mapped_column(String(64))
 
     __table_args__ = (Index("ix_deep_research_code_time", "stock_code", "created_at"),)
 
@@ -382,6 +403,68 @@ class DeepResearchReport(Base):
         }
 
 
+class PolicyMinesweeperReport(Base):
+    """政策与公告双维度排雷报告记录模型。
+
+    与 ``DeepResearchReport`` 同理：正文存文件（``reports/policy_minesweeper/``），
+    元数据存本表，支持并发安全的列表/详情/删除（SQLite + _run_write_transaction 重试）。
+    composite_score/verdict/confidence 为 best-effort 从报告正文解析（可能为 NULL）。
+    """
+
+    __tablename__ = "policy_minesweeper_reports"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True
+    )  # {6位code}_{YYYYMMDDHHmm}(_\d+)?
+
+    stock_code: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    stock_name: Mapped[Optional[str]] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
+
+    md_path: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_path: Mapped[Optional[str]] = mapped_column(Text)  # NULL = 尚未惰性生成
+
+    status: Mapped[Optional[str]] = mapped_column(String(16))   # success | partial | failed
+    horizon: Mapped[Optional[str]] = mapped_column(String(16))  # short | medium | long
+    alpha_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    beta_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    omega_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+
+    # best-effort 从正文解析（scorecard banner）；解析不到则为 NULL
+    composite_score: Mapped[Optional[int]] = mapped_column(Integer)  # -100~100
+    verdict: Mapped[Optional[str]] = mapped_column(String(32))       # 如 "中等利空"
+    confidence: Mapped[Optional[int]] = mapped_column(Integer)       # 0~100 百分比
+
+    total_steps: Mapped[Optional[int]] = mapped_column(Integer)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    provider: Mapped[Optional[str]] = mapped_column(String(64))
+
+    __table_args__ = (Index("ix_policy_minesweeper_code_time", "stock_code", "created_at"),)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "stock_code": self.stock_code,
+            "stock_name": self.stock_name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "md_path": self.md_path,
+            "pdf_path": self.pdf_path,
+            "status": self.status,
+            "horizon": self.horizon,
+            "alpha_ok": self.alpha_ok,
+            "beta_ok": self.beta_ok,
+            "omega_ok": self.omega_ok,
+            "composite_score": self.composite_score,
+            "verdict": self.verdict,
+            "confidence": self.confidence,
+            "total_steps": self.total_steps,
+            "total_tokens": self.total_tokens,
+            "provider": self.provider,
+        }
+
+
 class ScheduledTaskLog(Base):
     """Scheduled task execution log.
 
@@ -391,15 +474,15 @@ class ScheduledTaskLog(Base):
 
     __tablename__ = "scheduled_task_log"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    task_name = Column(String(32), nullable=False, index=True)
-    scheduled_at = Column(DateTime, nullable=False)
-    started_at = Column(DateTime, nullable=True)
-    finished_at = Column(DateTime, nullable=True)
-    status = Column(String(16), nullable=False, index=True)
-    detail = Column(Text)
-    report_path = Column(Text)
-    created_at = Column(DateTime, default=datetime.now, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_name: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    detail: Mapped[Optional[str]] = mapped_column(Text)
+    report_path: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
 
     __table_args__ = (
         Index("ix_sched_task_name_time", "task_name", "scheduled_at"),
@@ -768,11 +851,17 @@ class ConversationMessage(Base):
 
     __tablename__ = "conversation_messages"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), index=True, nullable=False)
-    role = Column(String(20), nullable=False)  # user, assistant, system
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.now, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(100), index=True, nullable=False
+    )
+    role: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # user, assistant, system
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
 
 
 class ConversationSummary(Base):
@@ -780,14 +869,24 @@ class ConversationSummary(Base):
 
     __tablename__ = "conversation_summaries"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), nullable=False, unique=True, index=True)
-    summary = Column(Text, nullable=False)
-    covered_message_id = Column(Integer, nullable=False, default=0)
-    source_message_count = Column(Integer, nullable=False, default=0)
-    estimated_tokens = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=datetime.now, index=True)
-    updated_at = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True, index=True
+    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    covered_message_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    source_message_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    estimated_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.now, onupdate=datetime.now, index=True
     )
 
@@ -797,20 +896,38 @@ class AgentProviderTurn(Base):
 
     __tablename__ = "agent_provider_turns"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    session_id = Column(String(100), nullable=False, index=True)
-    run_id = Column(String(64), nullable=False, index=True)
-    provider = Column(String(64), nullable=False, index=True)
-    model = Column(String(160), nullable=False, index=True)
-    anchor_user_message_id = Column(Integer, nullable=False, index=True)
-    anchor_assistant_message_id = Column(Integer, nullable=False, index=True)
-    messages_json = Column(Text, nullable=False)
-    contains_reasoning = Column(Boolean, nullable=False, default=False)
-    contains_tool_calls = Column(Boolean, nullable=False, default=False)
-    contains_thinking_blocks = Column(Boolean, nullable=False, default=False)
-    must_roundtrip = Column(Boolean, nullable=False, default=False, index=True)
-    estimated_tokens = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime, default=datetime.now, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(100), nullable=False, index=True
+    )
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    model: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    anchor_user_message_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, index=True
+    )
+    anchor_assistant_message_id: Mapped[int] = mapped_column(
+        Integer, nullable=False, index=True
+    )
+    messages_json: Mapped[str] = mapped_column(Text, nullable=False)
+    contains_reasoning: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    contains_tool_calls: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    contains_thinking_blocks: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    must_roundtrip: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+    estimated_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
 
     __table_args__ = (
         Index(
@@ -1098,7 +1215,9 @@ class DecisionSignalRecord(Base):
 class _DatabaseManagerMeta(type):
     """Serialize DatabaseManager construction across __new__ and __init__."""
 
-    def __call__(cls, *args, **kwargs):
+    _init_lock: threading.RLock = threading.RLock()
+
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         with cls._init_lock:
             return super().__call__(*args, **kwargs)
 
@@ -1116,8 +1235,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
     _instance: Optional["DatabaseManager"] = None
     _init_lock = threading.RLock()
     _initialized: bool = False
+    _engine: Optional[Engine] = None
+    _SessionLocal: Optional[sessionmaker[Session]] = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, *args: Any, **kwargs: Any) -> "DatabaseManager":
         """单例模式实现"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -1147,7 +1268,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             self._sqlite_write_retry_max = config.sqlite_write_retry_max
             self._sqlite_write_retry_base_delay = config.sqlite_write_retry_base_delay
 
-            engine_kwargs = {
+            engine_kwargs: Dict[str, Any] = {
                 "echo": False,
                 "pool_pre_ping": True,
             }
@@ -1203,6 +1324,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             raise
 
     def _ensure_schema_migration_record(self) -> None:
+        if self._SessionLocal is None:
+            raise RuntimeError("DatabaseManager 未正确初始化")
         session = self._SessionLocal()
         values = {
             "version": CURRENT_SCHEMA_VERSION,
@@ -1215,7 +1338,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 session.execute(statement)
             else:
                 session.execute(
-                    DatabaseSchemaMigration.__table__.insert().values(**values)
+                    DatabaseSchemaMigration.__table__.insert().values(**values)  # type: ignore[attr-defined]
                 )
             session.commit()
         except IntegrityError:
@@ -1234,7 +1357,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
     def _ensure_llm_usage_telemetry_columns(self) -> None:
         """Add nullable P0a usage telemetry columns to existing SQLite DBs."""
-        if not self._is_sqlite_engine:
+        if not self._is_sqlite_engine or self._engine is None:
             return
         try:
             existing = {
@@ -1286,7 +1409,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         """获取单例实例"""
         with cls._init_lock:
             if cls._instance is None:
-                cls()
+                instance = cls()
+                if cls._instance is None:
+                    cls._instance = instance
+            assert cls._instance is not None
             return cls._instance
 
     @classmethod
@@ -1303,7 +1429,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 cls._instance = None
 
     @classmethod
-    def _cleanup_engine(cls, engine) -> None:
+    def _cleanup_engine(cls, engine: Optional[Engine]) -> None:
         """
         清理数据库引擎（atexit 钩子）
 
@@ -1321,11 +1447,13 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
 
     def _install_sqlite_pragma_handler(self) -> None:
         """为 SQLite 连接安装竞争保护参数。"""
-        if not self._is_sqlite_engine:
+        if not self._is_sqlite_engine or self._engine is None:
             return
 
         @event.listens_for(self._engine, "connect")
-        def _configure_sqlite_connection(dbapi_connection, _connection_record) -> None:
+        def _configure_sqlite_connection(
+            dbapi_connection: Any, _connection_record: Any
+        ) -> None:
             cursor = dbapi_connection.cursor()
             try:
                 cursor.execute(
@@ -1339,6 +1467,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 cursor.close()
 
     def _is_file_sqlite_database(self) -> bool:
+        if self._engine is None:
+            return False
         database = (self._engine.url.database or "").strip()
         return bool(database) and database.lower() != ":memory:"
 
@@ -1385,6 +1515,9 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             finally:
                 session.close()
 
+        # 循环内每次尝试要么成功返回，要么 raise；走到此处为不可达路径。
+        raise RuntimeError(f"{operation_name}: 写入事务未返回预期结果")
+
     @staticmethod
     def _is_sqlite_locked_error(exc: OperationalError) -> bool:
         err_text = str(getattr(exc, "orig", exc)).lower()
@@ -1425,9 +1558,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 # 执行查询
                 session.commit()  # 如果需要
         """
-        if not getattr(self, "_initialized", False) or not hasattr(
-            self, "_SessionLocal"
-        ):
+        if not getattr(self, "_initialized", False) or self._SessionLocal is None:
             raise RuntimeError(
                 "DatabaseManager 未正确初始化。"
                 "请确保通过 DatabaseManager.get_instance() 获取实例。"
@@ -1452,7 +1583,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         finally:
             session.close()
 
-    def has_today_data(self, code: str, target_date: Optional[date] = None) -> bool:
+    def has_today_data(self, code: str, target_date: Optional[date_type] = None) -> bool:
         """
         检查是否已有指定日期的数据
 
@@ -1466,7 +1597,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             是否存在数据
         """
         if target_date is None:
-            target_date = date.today()
+            target_date = date_type.today()
         # 注意：这里的 target_date 语义是“自然日”，而不是“最新交易日”。
         # 在周末/节假日/非交易日运行时，即使数据库已有最新交易日数据，这里也会返回 False。
         # 该行为目前保留（按需求不改逻辑）。
@@ -1718,7 +1849,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             if row is None:
                 return None
             try:
-                payload = json.loads(row.payload or "{}")
+                payload = json.loads(cast(str, row.payload) or "{}")
                 return payload if isinstance(payload, dict) else None
             except Exception:
                 return None
@@ -2037,8 +2168,8 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         self,
         code: Optional[Union[str, List[str]]] = None,
         report_type: Optional[str] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: Optional[date_type] = None,
+        end_date: Optional[date_type] = None,
         offset: int = 0,
         limit: int = 20,
     ) -> Tuple[List[AnalysisHistory], int]:
@@ -2059,7 +2190,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         from sqlalchemy import func
 
         with self.get_session() as session:
-            conditions = []
+            conditions: List[Any] = []
 
             if code:
                 if isinstance(code, list):
@@ -2086,7 +2217,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 )
 
             # 构建 where 子句
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
 
             # 查询总数
             total_query = select(func.count(AnalysisHistory.id)).where(where_clause)
@@ -2174,7 +2305,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             result = session.execute(
                 delete(AnalysisHistory).where(AnalysisHistory.id.in_(existing_ids))
             )
-            return result.rowcount or 0
+            return int(getattr(result, "rowcount", None) or 0)
 
     def save_deep_research_report(
         self,
@@ -2244,10 +2375,10 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
     ) -> Tuple[List[DeepResearchReport], int]:
         """分页查询深度投研报告列表（按时间倒序）。返回 (记录列表, 总数)。"""
         with self.get_session() as session:
-            conditions = []
+            conditions: List[Any] = []
             if stock_code:
                 conditions.append(DeepResearchReport.stock_code == stock_code)
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
 
             total = session.execute(
                 select(func.count(DeepResearchReport.id)).where(where_clause)
@@ -2269,15 +2400,20 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 select(DeepResearchReport).where(DeepResearchReport.id == report_id)
             ).scalars().first()
 
-    def delete_deep_research_report(self, report_id: str) -> Optional[Dict[str, str]]:
+    def delete_deep_research_report(
+        self, report_id: str
+    ) -> Optional[Dict[str, Optional[str]]]:
         """删除单条报告元数据，返回被删记录的 md_path/pdf_path（供调用方删文件）。"""
-        def _write(session: Session) -> Optional[Dict[str, str]]:
+        def _write(session: Session) -> Optional[Dict[str, Optional[str]]]:
             rec = session.execute(
                 select(DeepResearchReport).where(DeepResearchReport.id == report_id)
             ).scalars().first()
             if rec is None:
                 return None
-            paths = {"md_path": rec.md_path, "pdf_path": rec.pdf_path}
+            paths = {
+                "md_path": rec.md_path,
+                "pdf_path": rec.pdf_path,
+            }
             session.delete(rec)
             return paths
 
@@ -2287,7 +2423,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             logger.error("delete_deep_research_report failed [%s]: %s", report_id, exc)
             return None
 
-    def prune_deep_research_reports(self, max_reports: int) -> List[Dict[str, str]]:
+    def prune_deep_research_reports(self, max_reports: int) -> List[Dict[str, Optional[str]]]:
         """清理超额报告（删最旧），返回被删记录的 md_path/pdf_path 列表（供调用方删文件）。
 
         Args:
@@ -2299,7 +2435,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         if max_reports <= 0:
             return []
 
-        def _write(session: Session) -> List[Dict[str, str]]:
+        def _write(session: Session) -> List[Dict[str, Optional[str]]]:
             total = session.execute(
                 select(func.count(DeepResearchReport.id))
             ).scalar() or 0
@@ -2319,7 +2455,11 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 select(DeepResearchReport).where(DeepResearchReport.id.in_(old_ids))
             ).scalars().all()
             result_paths = [
-                {"md_path": r.md_path, "pdf_path": r.pdf_path} for r in old_recs
+                {
+                    "md_path": r.md_path,
+                    "pdf_path": r.pdf_path,
+                }
+                for r in old_recs
             ]
             # 删除
             session.execute(
@@ -2333,10 +2473,182 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             logger.error("prune_deep_research_reports failed: %s", exc)
             return []
 
+
+    # ==================================================================
+    # 政策与公告双维度排雷（PolicyMinesweeper）CRUD
+    # ==================================================================
+
+    def save_policy_minesweeper_report(
+        self,
+        report_id: str,
+        stock_code: str,
+        stock_name: Optional[str],
+        md_path: str,
+        status: str,
+        horizon: str = "medium",
+        alpha_ok: Optional[bool] = None,
+        beta_ok: Optional[bool] = None,
+        omega_ok: Optional[bool] = None,
+        composite_score: Optional[int] = None,
+        verdict: Optional[str] = None,
+        confidence: Optional[int] = None,
+        total_steps: int = 0,
+        total_tokens: int = 0,
+        provider: str = "",
+    ) -> bool:
+        """保存/更新一条政策与公告排雷报告元数据（report_id 重复则 merge 覆盖）。"""
+        def _write(session: Session) -> bool:
+            record = PolicyMinesweeperReport(
+                id=report_id,
+                stock_code=stock_code,
+                stock_name=stock_name,
+                created_at=datetime.now(),
+                md_path=md_path,
+                pdf_path=None,
+                status=status,
+                horizon=horizon,
+                alpha_ok=alpha_ok,
+                beta_ok=beta_ok,
+                omega_ok=omega_ok,
+                composite_score=composite_score,
+                verdict=verdict,
+                confidence=confidence,
+                total_steps=total_steps,
+                total_tokens=total_tokens,
+                provider=provider,
+            )
+            session.merge(record)
+            return True
+
+        try:
+            self._run_write_transaction(f"save_policy_minesweeper[{report_id}]", _write)
+            return True
+        except Exception as exc:
+            logger.error("save_policy_minesweeper_report failed [%s]: %s", report_id, exc)
+            return False
+
+    def set_policy_minesweeper_pdf_path(self, report_id: str, pdf_path: str) -> bool:
+        """PDF 惰性生成后，回填 pdf_path 到元数据。"""
+        def _write(session: Session) -> bool:
+            rec = session.execute(
+                select(PolicyMinesweeperReport).where(PolicyMinesweeperReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return False
+            rec.pdf_path = pdf_path  # type: ignore[assignment]
+            return True
+
+        try:
+            result = self._run_write_transaction(
+                f"set_policy_minesweeper_pdf_path[{report_id}]", _write
+            )
+            return bool(result)
+        except Exception as exc:
+            logger.error("set_policy_minesweeper_pdf_path failed [%s]: %s", report_id, exc)
+            return False
+
+    def get_policy_minesweeper_reports(
+        self,
+        stock_code: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> Tuple[List[PolicyMinesweeperReport], int]:
+        """分页查询排雷报告列表（按时间倒序）。返回 (记录列表, 总数)。"""
+        with self.get_session() as session:
+            conditions: List[Any] = []
+            if stock_code:
+                conditions.append(PolicyMinesweeperReport.stock_code == stock_code)
+            where_clause: Any = and_(*conditions) if conditions else True
+
+            total = session.execute(
+                select(func.count(PolicyMinesweeperReport.id)).where(where_clause)
+            ).scalar() or 0
+
+            rows = session.execute(
+                select(PolicyMinesweeperReport)
+                .where(where_clause)
+                .order_by(desc(PolicyMinesweeperReport.created_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
+
+    def get_policy_minesweeper_report(self, report_id: str) -> Optional[PolicyMinesweeperReport]:
+        """按主键查询单条报告。"""
+        with self.get_session() as session:
+            return session.execute(
+                select(PolicyMinesweeperReport).where(PolicyMinesweeperReport.id == report_id)
+            ).scalars().first()
+
+    def delete_policy_minesweeper_report(
+        self, report_id: str
+    ) -> Optional[Dict[str, Optional[str]]]:
+        """删除单条报告元数据，返回被删记录的 md_path/pdf_path（供调用方删文件）。"""
+        def _write(session: Session) -> Optional[Dict[str, Optional[str]]]:
+            rec = session.execute(
+                select(PolicyMinesweeperReport).where(PolicyMinesweeperReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return None
+            paths = {
+                "md_path": cast(str, rec.md_path),
+                "pdf_path": cast(Optional[str], rec.pdf_path),
+            }
+            session.delete(rec)
+            return paths
+
+        try:
+            return self._run_write_transaction(
+                f"delete_policy_minesweeper[{report_id}]", _write
+            )
+        except Exception as exc:
+            logger.error("delete_policy_minesweeper_report failed [%s]: %s", report_id, exc)
+            return None
+
+    def prune_policy_minesweeper_reports(
+        self, max_reports: int
+    ) -> List[Dict[str, Optional[str]]]:
+        """清理超额排雷报告（删最旧），返回被删记录的 md_path/pdf_path 列表。"""
+        if max_reports <= 0:
+            return []
+
+        def _write(session: Session) -> List[Dict[str, Optional[str]]]:
+            total = session.execute(
+                select(func.count(PolicyMinesweeperReport.id))
+            ).scalar() or 0
+            if total <= max_reports:
+                return []
+            excess = total - max_reports
+            old_ids = session.execute(
+                select(PolicyMinesweeperReport.id)
+                .order_by(asc(PolicyMinesweeperReport.created_at))
+                .limit(excess)
+            ).scalars().all()
+            old_recs = session.execute(
+                select(PolicyMinesweeperReport).where(PolicyMinesweeperReport.id.in_(old_ids))
+            ).scalars().all()
+            result_paths = [
+                {
+                    "md_path": cast(str, r.md_path),
+                    "pdf_path": cast(Optional[str], r.pdf_path),
+                }
+                for r in old_recs
+            ]
+            session.execute(
+                delete(PolicyMinesweeperReport).where(PolicyMinesweeperReport.id.in_(old_ids))
+            )
+            return result_paths
+
+        try:
+            return self._run_write_transaction("prune_policy_minesweeper_reports", _write)
+        except Exception as exc:
+            logger.error("prune_policy_minesweeper_reports failed: %s", exc)
+            return []
+
     def get_distinct_stocks_from_history(
         self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: Optional[date_type] = None,
+        end_date: Optional[date_type] = None,
         limit: int = 200,
         include_market_review: bool = False,
     ) -> List[AnalysisHistory]:
@@ -2356,7 +2668,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             每条股票最新一条 AnalysisHistory 记录列表
         """
         with self.get_session() as session:
-            subq = select(
+            subq: Any = select(
                 AnalysisHistory.code,
                 func.max(AnalysisHistory.id).label("max_id"),
             )
@@ -2438,7 +2750,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return result
 
     def get_data_range(
-        self, code: str, start_date: date, end_date: date
+        self, code: str, start_date: date_type, end_date: date_type
     ) -> List[StockDaily]:
         """
         获取指定日期范围的数据
@@ -2494,7 +2806,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return 0
 
         now = datetime.now()
-        records_by_date: Dict[date, Dict[str, Any]] = {}
+        records_by_date: Dict[date_type, Dict[str, Any]] = {}
         for row in df.to_dict(orient="records"):
             row_date = self._normalize_daily_date(row.get("date"))
             records_by_date[row_date] = {
@@ -2530,7 +2842,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 # `_run_write_transaction()` opens SQLite writes with
                 # `BEGIN IMMEDIATE`, so existence checks and upsert execute
                 # within one stable write window.
-                existing_dates = set()
+                existing_dates: set[Any] = set()
                 _COUNT_CHUNK = 500
                 for j in range(0, len(batch_dates), _COUNT_CHUNK):
                     chunk_dates = batch_dates[j : j + _COUNT_CHUNK]
@@ -2624,7 +2936,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             raise
 
     def get_analysis_context(
-        self, code: str, target_date: Optional[date] = None
+        self, code: str, target_date: Optional[date_type] = None
     ) -> Optional[Dict[str, Any]]:
         """
         获取分析所需的上下文数据
@@ -2639,7 +2951,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             包含今日数据、昨日对比等信息的字典
         """
         if target_date is None:
-            target_date = date.today()
+            target_date = date_type.today()
         # 注意：尽管入参提供了 target_date，但当前实现实际使用的是“最新两天数据”（get_latest_data），
         # 并不会按 target_date 精确取当日/前一交易日的上下文。
         # 因此若未来需要支持“按历史某天复盘/重算”的可解释性，这里需要调整。
@@ -2655,7 +2967,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         today_data = recent_data[0]
         yesterday_data = recent_data[1] if len(recent_data) > 1 else None
 
-        context = {
+        context: Dict[str, Any] = {
             "code": code,
             "date": today_data.date.isoformat(),
             "today": today_data.to_dict(),
@@ -2665,17 +2977,26 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             context["yesterday"] = yesterday_data.to_dict()
 
             # 计算相比昨日的变化
-            if yesterday_data.volume and yesterday_data.volume > 0:
-                context["volume_change_ratio"] = round(
-                    today_data.volume / yesterday_data.volume, 2
+            if (
+                yesterday_data.volume is not None
+                and yesterday_data.volume > 0
+                and today_data.volume is not None
+            ):
+                context["volume_change_ratio"] = (
+                    float(today_data.volume / yesterday_data.volume)
                 )
 
-            if yesterday_data.close and yesterday_data.close > 0:
-                context["price_change_ratio"] = round(
-                    (today_data.close - yesterday_data.close)
-                    / yesterday_data.close
-                    * 100,
-                    2,
+            if (
+                yesterday_data.close is not None
+                and yesterday_data.close > 0
+                and today_data.close is not None
+            ):
+                context["price_change_ratio"] = (
+                    float(
+                        (today_data.close - yesterday_data.close)
+                        / yesterday_data.close
+                        * 100
+                    )
                 )
 
             # 均线形态判断
@@ -3013,7 +3334,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         result = session.execute(
             delete(AgentProviderTurn).where(AgentProviderTurn.id.in_(old_ids))
         )
-        return int(result.rowcount or 0)
+        return int(getattr(result, "rowcount", None) or 0)
 
     def upsert_conversation_summary(
         self,
@@ -3188,7 +3509,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     ConversationMessage.session_id == session_id
                 )
             )
-            return result.rowcount
+            return int(getattr(result, "rowcount", None) or 0)
 
     # ------------------------------------------------------------------
     # LLM usage tracking
@@ -3487,7 +3808,7 @@ if __name__ == "__main__":
     # 测试保存数据
     test_df = pd.DataFrame(
         {
-            "date": [date.today()],
+            "date": [date_type.today()],
             "open": [1800.0],
             "high": [1850.0],
             "low": [1780.0],

@@ -24,6 +24,7 @@ from typing import Callable, Optional, List, Tuple, Dict, Any
 
 import pandas as pd
 import numpy as np
+from icontract import require, ensure
 from src.data.stock_index_loader import get_index_stock_name
 from src.data.stock_mapping import STOCK_NAME_MAP, is_meaningful_stock_name
 from src.services.run_diagnostics import record_provider_run, record_provider_run_started
@@ -66,6 +67,10 @@ def summarize_exception(exc: Exception) -> Tuple[str, str]:
     return error_type, " ".join(message.split())
 
 
+@require(lambda stock_code: isinstance(stock_code, str) and len(stock_code.strip()) > 0,
+         "stock_code must be a non-empty string")
+@ensure(lambda result: isinstance(result, str) and len(result) > 0,
+        "normalized code must be a non-empty string")
 def normalize_stock_code(stock_code: str) -> str:
     """
     Normalize stock code by stripping exchange prefixes/suffixes.
@@ -175,6 +180,8 @@ def _is_etf_code(code: str) -> bool:
     )
 
 
+@ensure(lambda result: result is None or isinstance(result, float),
+        "result must be a float or None")
 def _coerce_chip_metric(value: Any) -> Optional[float]:
     try:
         if value is None:
@@ -187,6 +194,7 @@ def _coerce_chip_metric(value: Any) -> Optional[float]:
         return None
 
 
+@ensure(lambda result: isinstance(result, bool), "result must be a boolean")
 def _is_meaningful_chip_distribution(chip: Any) -> bool:
     """Validate that a provider returned usable core chip metrics."""
     if chip is None:
@@ -213,6 +221,8 @@ def _market_tag(code: str) -> str:
     return "cn"
 
 
+@require(lambda code: isinstance(code, str), "code must be a string")
+@ensure(lambda result: isinstance(result, bool), "result must be a boolean")
 def is_bse_code(code: str) -> bool:
     """
     Check if the code is a Beijing Stock Exchange (BSE) A-share code.
@@ -233,6 +243,9 @@ def is_bse_code(code: str) -> bool:
 
     return c.startswith(("92", "43", "81", "82", "83", "87", "88"))
 
+
+@require(lambda name: isinstance(name, str), "name must be a string")
+@ensure(lambda result: isinstance(result, bool), "result must be a boolean")
 def is_st_stock(name: str) -> bool:
     """
     Check if the stock is an ST or *ST stock based on its name.
@@ -242,6 +255,9 @@ def is_st_stock(name: str) -> bool:
     n = (name or "").upper()
     return 'ST' in n
 
+
+@require(lambda code: isinstance(code, str), "code must be a string")
+@ensure(lambda result: isinstance(result, bool), "result must be a boolean")
 def is_kc_cy_stock(code: str) -> bool:
     """
     Check if the stock is a STAR Market (科创板) or ChiNext (创业板) stock based on its code.
