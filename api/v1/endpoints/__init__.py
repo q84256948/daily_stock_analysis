@@ -25,6 +25,7 @@ from api.v1.endpoints import (
     zhengxi,
     supply_chain,
     deep_research,
+    policy_minesweeper,
 )
 __all__ = [
     "health",
@@ -43,4 +44,5 @@ __all__ = [
     "zhengxi",
     "supply_chain",
     "deep_research",
+    "policy_minesweeper",
 ]

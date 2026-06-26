@@ -31,6 +31,7 @@ from api.v1.endpoints import (
     zhengxi,
     supply_chain,
     deep_research,
+    policy_minesweeper,
 )
 
 # 创建 v1 版本主路由。
@@ -69,6 +70,12 @@ router.include_router(supply_chain.router, prefix="/supply-chain", tags=["Supply
 
 router.include_router(
     deep_research.router, prefix="/deep-research", tags=["DeepResearch"]
+)
+
+router.include_router(
+    policy_minesweeper.router,
+    prefix="/policy-minesweeper",
+    tags=["PolicyMinesweeper"],
 )
 
 router.include_router(chanlun.router, prefix="/chanlun", tags=["Chanlun"])
