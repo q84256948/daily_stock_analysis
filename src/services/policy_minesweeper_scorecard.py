@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 # 常量（单一真源）
 # ============================================================
 
-DIMENSION_KEYS: tuple = (
+DIMENSION_KEYS: tuple[str, ...] = (
     "event_importance",      # 事件重要性
     "policy_exposure",       # 政策相关度/暴露度
     "earnings_impact",       # 盈利影响
@@ -47,7 +47,7 @@ DIMENSION_LABELS_ZH: Dict[str, str] = {
 }
 
 # horizon → (alpha 权重, beta 权重)；短期公司公告主导，长期宏观政策主导
-HORIZON_BLEND: Dict[str, tuple] = {
+HORIZON_BLEND: Dict[str, tuple[float, float]] = {
     "short": (0.70, 0.30),
     "medium": (0.50, 0.50),
     "long": (0.30, 0.70),
@@ -152,12 +152,14 @@ def score(payload: Dict[str, Any], horizon: str) -> Dict[str, Any]:
     # 2) α/β 头条分按 horizon 再权重 → horizon_blend（缺失走降级）
     alpha = _coerce_optional(payload.get("alpha_score"))
     beta = _coerce_optional(payload.get("beta_score"))
+    horizon_blend: float
     if alpha is None and beta is None:
         horizon_blend = dimension_composite
     elif alpha is None:
-        horizon_blend = beta
+        # beta 在此分支必然非 None（两者皆 None 已由上一分支处理）
+        horizon_blend = beta if beta is not None else dimension_composite
     elif beta is None:
-        horizon_blend = alpha
+        horizon_blend = alpha if alpha is not None else dimension_composite
     else:
         horizon_blend = int(_clamp_unit(round(wa * alpha + wb * beta)))
 
