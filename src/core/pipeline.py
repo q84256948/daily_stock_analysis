@@ -3328,7 +3328,7 @@ class StockAnalysisPipeline:
                         use_image = self.notifier._should_use_image_for_channel(
                             NotificationChannel.WECHAT, wechat_image_bytes
                         )
-                        if use_image:
+                        if use_image and wechat_image_bytes:
                             return self.notifier._send_wechat_image(wechat_image_bytes)
                         return self.notifier.send_to_wechat(dashboard_content)
 
@@ -3367,7 +3367,7 @@ class StockAnalysisPipeline:
                             use_image = self.notifier._should_use_image_for_channel(
                                 channel, image_bytes
                             )
-                            if use_image:
+                            if use_image and image_bytes:
                                 return self.notifier._send_telegram_photo(image_bytes)
                             return self.notifier.send_to_telegram(report)
 
@@ -3425,7 +3425,7 @@ class StockAnalysisPipeline:
                                             channel, grp_image_bytes
                                         )
                                     )
-                                    if use_image:
+                                    if use_image and grp_image_bytes:
                                         return (
                                             self.notifier._send_email_with_inline_image(
                                                 grp_image_bytes, receivers=receivers
@@ -3459,7 +3459,7 @@ class StockAnalysisPipeline:
                                 use_image = self.notifier._should_use_image_for_channel(
                                     channel, image_bytes
                                 )
-                                if use_image:
+                                if use_image and image_bytes:
                                     return self.notifier._send_email_with_inline_image(
                                         image_bytes
                                     )
@@ -3481,7 +3481,7 @@ class StockAnalysisPipeline:
                             use_image = self.notifier._should_use_image_for_channel(
                                 channel, image_bytes
                             )
-                            if use_image:
+                            if use_image and image_bytes:
                                 return self.notifier._send_custom_webhook_image(
                                     image_bytes, fallback_content=report
                                 )
@@ -3582,6 +3582,7 @@ class StockAnalysisPipeline:
                             )
                             if (
                                 use_image
+                                and image_bytes
                                 and self.notifier._slack_bot_token
                                 and self.notifier._slack_channel_id
                             ):
