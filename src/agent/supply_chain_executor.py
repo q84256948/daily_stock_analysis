@@ -168,7 +168,7 @@ class SupplyChainExecutor:
         self,
         message: str,
         session_id: str,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         context: Optional[Dict[str, Any]] = None,
     ):
         """执行一轮供应链深度调研（ReAct 工具循环 + 会话持久化）。"""
