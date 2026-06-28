@@ -1887,18 +1887,18 @@ class NotificationService(
                 "sector_bottom": [],
             }
 
-        earnings_block = ctx.get("earnings") if isinstance(ctx.get("earnings"), dict) else {}
-        earnings_data = earnings_block.get("data") if isinstance(earnings_block.get("data"), dict) else {}
-        financial_report = earnings_data.get("financial_report") if isinstance(earnings_data.get("financial_report"), dict) else {}
-        dividend = earnings_data.get("dividend") if isinstance(earnings_data.get("dividend"), dict) else {}
+        earnings_block = v if isinstance(v := ctx.get("earnings"), dict) else {}
+        earnings_data = v if isinstance(v := earnings_block.get("data"), dict) else {}
+        financial_report = v if isinstance(v := earnings_data.get("financial_report"), dict) else {}
+        dividend = v if isinstance(v := earnings_data.get("dividend"), dict) else {}
 
-        growth_block = ctx.get("growth") if isinstance(ctx.get("growth"), dict) else {}
-        growth_data = growth_block.get("data") if isinstance(growth_block.get("data"), dict) else {}
+        growth_block = v if isinstance(v := ctx.get("growth"), dict) else {}
+        growth_data = v if isinstance(v := growth_block.get("data"), dict) else {}
 
-        boards_block = ctx.get("boards") if isinstance(ctx.get("boards"), dict) else {}
-        boards_data = boards_block.get("data") if isinstance(boards_block.get("data"), dict) else {}
-        sector_top = boards_data.get("top") if isinstance(boards_data.get("top"), list) else []
-        sector_bottom = boards_data.get("bottom") if isinstance(boards_data.get("bottom"), list) else []
+        boards_block = v if isinstance(v := ctx.get("boards"), dict) else {}
+        boards_data = v if isinstance(v := boards_block.get("data"), dict) else {}
+        sector_top = v if isinstance(v := boards_data.get("top"), list) else []
+        sector_bottom = v if isinstance(v := boards_data.get("bottom"), list) else []
 
         belong_boards = ctx.get("belong_boards") if isinstance(ctx.get("belong_boards"), list) else []
 
@@ -2114,13 +2114,13 @@ class NotificationService(
     ) -> bool:
         use_image = self._should_use_image_for_channel(channel, image_bytes)
         if channel == NotificationChannel.WECHAT:
-            if use_image:
+            if use_image and image_bytes:
                 return self._send_wechat_image(image_bytes)
             return self.send_to_wechat(content)
         if channel == NotificationChannel.FEISHU:
             return self.send_to_feishu(content)
         if channel == NotificationChannel.TELEGRAM:
-            if use_image:
+            if use_image and image_bytes:
                 return self._send_telegram_photo(image_bytes)
             return self.send_to_telegram(content)
         if channel == NotificationChannel.EMAIL:
@@ -2129,7 +2129,7 @@ class NotificationService(
                 receivers = self.get_all_email_receivers()
             elif email_stock_codes and self._stock_email_groups:
                 receivers = self.get_receivers_for_stocks(email_stock_codes)
-            if use_image:
+            if use_image and image_bytes:
                 return self._send_email_with_inline_image(image_bytes, receivers=receivers)
             return self.send_to_email(content, receivers=receivers)
         if channel == NotificationChannel.PUSHOVER:
@@ -2143,13 +2143,13 @@ class NotificationService(
         if channel == NotificationChannel.SERVERCHAN3:
             return self.send_to_serverchan3(content)
         if channel == NotificationChannel.CUSTOM:
-            if use_image:
+            if use_image and image_bytes:
                 return self._send_custom_webhook_image(image_bytes, fallback_content=content)
             return self.send_to_custom(content)
         if channel == NotificationChannel.DISCORD:
             return self.send_to_discord(content)
         if channel == NotificationChannel.SLACK:
-            if use_image:
+            if use_image and image_bytes:
                 return self._send_slack_image(image_bytes, fallback_content=content)
             return self.send_to_slack(content)
         if channel == NotificationChannel.ASTRBOT:
