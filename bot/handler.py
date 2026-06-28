@@ -11,7 +11,7 @@ import asyncio
 import json
 import logging
 import threading
-from typing import Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from bot.models import WebhookResponse
 from bot.dispatcher import get_dispatcher
@@ -53,7 +53,7 @@ def handle_webhook(
     platform_name: str,
     headers: Dict[str, str],
     body: bytes,
-    query_params: Optional[Dict[str, list]] = None
+    query_params: Optional[Dict[str, list[Any]]] = None
 ) -> WebhookResponse:
     """
     处理 Webhook 请求
@@ -140,7 +140,7 @@ async def handle_webhook_async(
     platform_name: str,
     headers: Dict[str, str],
     body: bytes,
-    query_params: Optional[Dict[str, list]] = None
+    query_params: Optional[Dict[str, list[Any]]] = None
 ) -> WebhookResponse:
     """Async version of :func:`handle_webhook`.
 

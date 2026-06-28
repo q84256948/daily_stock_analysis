@@ -44,7 +44,7 @@ class DimensionScore:
     dimension: str
     weight: float
     score: float
-    indicators: tuple = field(default_factory=tuple)
+    indicators: tuple[Any, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -52,9 +52,9 @@ class FrameworkScore:
     """Six-dimension research framework total score"""
 
     dimension_total: float
-    dimensions: tuple
+    dimensions: tuple[Any, ...]
     version: str = "v1"
-    warnings: tuple = field(default_factory=tuple)
+    warnings: tuple[Any, ...] = field(default_factory=tuple)
 
 
 def validate_weights(weights: List[float]) -> None:

@@ -33,7 +33,7 @@ _ALLOWED_TEMPERATURE_PATTERNS = (
 )
 
 
-def _collect_error_text(value: Any, seen: Optional[set] = None) -> List[str]:
+def _collect_error_text(value: Any, seen: Optional[set[Any]] = None) -> List[str]:
     if seen is None:
         seen = set()
     if value is None:

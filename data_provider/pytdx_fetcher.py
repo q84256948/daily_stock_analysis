@@ -18,7 +18,7 @@ import logging
 import re
 import time
 from contextlib import contextmanager
-from typing import Optional, Generator, List, Tuple
+from typing import Optional, Generator, List, Tuple, Any
 
 import pandas as pd
 from tenacity import (
@@ -182,7 +182,7 @@ class PytdxFetcher(BaseFetcher):
             return None
     
     @contextmanager
-    def _pytdx_session(self) -> Generator:
+    def _pytdx_session(self) -> Generator[Any, Any, Any]:
         """
         Pytdx 连接上下文管理器
         
@@ -452,7 +452,7 @@ class PytdxFetcher(BaseFetcher):
         
         return None
     
-    def get_realtime_quote(self, stock_code: str) -> Optional[dict]:
+    def get_realtime_quote(self, stock_code: str) -> Optional[dict[str, Any]]:
         """
         获取实时行情
         

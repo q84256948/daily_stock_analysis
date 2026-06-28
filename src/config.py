@@ -456,7 +456,7 @@ def get_configured_llm_models(model_list: List[Dict[str, Any]]) -> List[str]:
     underlying provider/model path.
     """
     models: List[str] = []
-    seen: set = set()
+    seen: set[Any] = set()
     for entry in model_list or []:
         # Prefer top-level model_name (router routing key); fall back to
         # litellm_params.model for entries that omit it.
@@ -2513,7 +2513,7 @@ class Config:
         """
         from data_provider.base import normalize_stock_code
 
-        groups: dict = {}
+        groups: dict[Any, Any] = {}
         stock_re = re.compile(r"^STOCK_GROUP_(\d+)$", re.IGNORECASE)
         email_re = re.compile(r"^EMAIL_GROUP_(\d+)$", re.IGNORECASE)
         for key in os.environ:

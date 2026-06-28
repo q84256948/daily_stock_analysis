@@ -257,7 +257,7 @@ class AgentOrchestrator:
         self,
         agent: Any,
         ctx: AgentContext,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         timeout_seconds: Optional[float] = None,
     ) -> StageResult:
         """Run a stage agent while preserving compatibility with older call signatures."""
@@ -301,7 +301,7 @@ class AgentOrchestrator:
         self,
         message: str,
         session_id: str,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> "AgentResult":
         """Run the pipeline in chat mode (free-form answer, no dashboard parse).
@@ -364,7 +364,7 @@ class AgentOrchestrator:
         self,
         ctx: AgentContext,
         parse_dashboard: bool = True,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
     ) -> OrchestratorResult:
         """Run the agent pipeline according to ``self.mode``."""
         stats = AgentRunStats()
@@ -587,7 +587,7 @@ class AgentOrchestrator:
     # Agent chain construction
     # -----------------------------------------------------------------
 
-    def _build_agent_chain(self, ctx: AgentContext) -> list:
+    def _build_agent_chain(self, ctx: AgentContext) -> list[Any]:
         """Instantiate the ordered agent list based on ``self.mode``."""
         from src.agent.agents.technical_agent import TechnicalAgent
         from src.agent.agents.intel_agent import IntelAgent
@@ -621,7 +621,7 @@ class AgentOrchestrator:
         else:
             return [technical, intel, decision]
 
-    def _build_specialist_agents(self, ctx: AgentContext) -> list:
+    def _build_specialist_agents(self, ctx: AgentContext) -> list[Any]:
         """Build specialist sub-agents based on requested skills.
 
         Uses the skill router to select applicable skills, then creates
@@ -653,11 +653,11 @@ class AgentOrchestrator:
             logger.warning("[Orchestrator] failed to build skill agents: %s", exc)
             return []
 
-    def _build_skill_agents(self, ctx: AgentContext) -> list:
+    def _build_skill_agents(self, ctx: AgentContext) -> list[Any]:
         """Compatibility wrapper for legacy imports."""
         return self._build_specialist_agents(ctx)
 
-    def _build_strategy_agents(self, ctx: AgentContext) -> list:
+    def _build_strategy_agents(self, ctx: AgentContext) -> list[Any]:
         """Compatibility wrapper for legacy tests/imports."""
         return self._build_specialist_agents(ctx)
 

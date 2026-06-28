@@ -705,7 +705,7 @@ class LongbridgeFetcher(BaseFetcher):
                 return None
 
             ordered = sorted(candles, key=self._ts_sort_key, reverse=True)
-            past_vols: list = []
+            past_vols: list[Any] = []
             for c in ordered[1:6]:
                 vol = int(getattr(c, "volume", 0) or 0)
                 if vol > 0:

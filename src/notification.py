@@ -1009,7 +1009,7 @@ class NotificationService(
                 return value[len(prefix):]
         return value
 
-    def _get_signal_level(self, result: AnalysisResult) -> tuple:
+    def _get_signal_level(self, result: AnalysisResult) -> tuple[Any, ...]:
         """Get localized signal level and color based on operation advice."""
         return get_signal_level(
             result.operation_advice,

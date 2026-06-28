@@ -9,6 +9,7 @@ Tools:
 """
 
 import logging
+from typing import Any
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
 
@@ -30,7 +31,7 @@ def _get_backtest_service():
 # get_skill_backtest_summary / get_strategy_backtest_summary
 # ============================================================
 
-def _serialize_overall_backtest_summary(summary: dict, eval_window_days: int) -> dict:
+def _serialize_overall_backtest_summary(summary: dict[str, Any], eval_window_days: int) -> dict[str, Any]:
     """Return the public overall-summary payload exposed to the agent."""
     return {
         "scope": summary.get("scope", "overall"),
@@ -48,7 +49,7 @@ def _serialize_overall_backtest_summary(summary: dict, eval_window_days: int) ->
     }
 
 
-def _handle_get_overall_backtest_summary(eval_window_days: int = 30) -> dict:
+def _handle_get_overall_backtest_summary(eval_window_days: int = 30) -> dict[str, Any]:
     """Get the overall backtest summary for the full analysis corpus."""
     try:
         svc = _get_backtest_service()
@@ -61,7 +62,7 @@ def _handle_get_overall_backtest_summary(eval_window_days: int = 30) -> dict:
         return {"error": "Failed to retrieve backtest summary."}
 
 
-def _handle_get_skill_backtest_summary(skill_id: str = "", eval_window_days: int = 30) -> dict:
+def _handle_get_skill_backtest_summary(skill_id: str = "", eval_window_days: int = 30) -> dict[str, Any]:
     """Get a skill-scoped backtest summary when real per-skill stats exist."""
     if not skill_id:
         return {
@@ -149,7 +150,7 @@ get_strategy_backtest_summary_tool = ToolDefinition(
 # get_stock_backtest_summary
 # ============================================================
 
-def _handle_get_stock_backtest_summary(stock_code: str, eval_window_days: int = 30, limit: int = 10) -> dict:
+def _handle_get_stock_backtest_summary(stock_code: str, eval_window_days: int = 30, limit: int = 10) -> dict[str, Any]:
     """Get backtest results for a specific stock.
 
     Returns the summary plus recent evaluation items.

@@ -27,7 +27,7 @@ import threading
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from typing import Optional, Callable
+from typing import Any, Optional, Callable
 import time
 
 logger = logging.getLogger(__name__)
@@ -487,7 +487,7 @@ class FeishuStreamHandler:
             self._logger.error(f"[Feishu Stream] 解析消息失败: {e}")
             return None
 
-    def _extract_command(self, text: str, mentions: list) -> str:
+    def _extract_command(self, text: str, mentions: list[Any]) -> str:
         """
         提取命令内容（去除 @机器人）
 

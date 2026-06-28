@@ -1923,7 +1923,7 @@ class StockAnalysisPipeline:
         return value
 
     @staticmethod
-    def _extract_advice_text_from_dict(raw_advice: dict) -> str:
+    def _extract_advice_text_from_dict(raw_advice: dict[str, Any]) -> str:
         for field in ("has_position", "no_position"):
             if isinstance(raw_advice.get(field), str):
                 text = raw_advice[field].strip()
@@ -3394,7 +3394,7 @@ class StockAnalysisPipeline:
                                     code_to_emails[r.code] = (
                                         list(dict.fromkeys(emails)) if emails else None
                                     )
-                            emails_to_results: Dict[Optional[Tuple], List] = (
+                            emails_to_results: Dict[Optional[Tuple[Any, ...]], List[Any]] = (
                                 defaultdict(list)
                             )
                             for r in results:

@@ -6,7 +6,7 @@ Auth middleware: protect /api/v1/* when admin auth is enabled.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -40,7 +40,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next: Callable,
+        call_next: Callable[..., Any],
     ):
         if not is_auth_enabled():
             return await call_next(request)

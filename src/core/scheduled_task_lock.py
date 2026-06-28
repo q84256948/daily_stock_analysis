@@ -73,7 +73,7 @@ def _write_lock_metadata(handle: Any, task_name: str) -> None:
     handle.flush()
 
 
-def _read_lock_metadata(lock_path: Path) -> dict:
+def _read_lock_metadata(lock_path: Path) -> dict[str, Any]:
     try:
         return json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

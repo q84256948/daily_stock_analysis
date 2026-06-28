@@ -125,7 +125,7 @@ class DingtalkStreamHandler:
             """创建 SDK 需要的处理器实例"""
             return self._ChatbotHandler(self)
 
-    def _parse_stream_message(self, incoming: Any, raw_data: dict) -> Optional[BotMessage]:
+    def _parse_stream_message(self, incoming: Any, raw_data: dict[str, Any]) -> Optional[BotMessage]:
         """
         解析 Stream 消息为统一格式
 

@@ -5,7 +5,7 @@ import json
 import logging
 from pathlib import Path
 from threading import RLock
-from typing import Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from src.data.stock_mapping import is_meaningful_stock_name
 from src.services.stock_index_remote_service import (
@@ -72,7 +72,7 @@ def _build_lookup_keys(canonical_code: str, display_code: str) -> Iterable[str]:
     return keys
 
 
-def _load_stock_index_payload(index_path: Path) -> list:
+def _load_stock_index_payload(index_path: Path) -> list[Any]:
     with index_path.open("r", encoding="utf-8") as fh:
         raw_items = json.load(fh)
 
@@ -83,7 +83,7 @@ def _load_stock_index_payload(index_path: Path) -> list:
     return raw_items
 
 
-def _build_stock_name_map(raw_items: list) -> Dict[str, str]:
+def _build_stock_name_map(raw_items: list[Any]) -> Dict[str, str]:
     stock_name_map: Dict[str, str] = {}
     for item in raw_items:
         if not isinstance(item, list) or len(item) < 3:

@@ -90,7 +90,7 @@ class ChanlunExecutor:
         self,
         message: str,
         session_id: str,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         context: Optional[Dict[str, Any]] = None,
     ):
         """执行缠论分析。"""

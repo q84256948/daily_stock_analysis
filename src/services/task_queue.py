@@ -181,10 +181,10 @@ class AnalysisTaskQueue:
         # 核心数据结构
         self._tasks: Dict[str, TaskInfo] = {}           # task_id -> TaskInfo
         self._analyzing_stocks: Dict[str, str] = {}     # dedupe_key -> task_id
-        self._futures: Dict[str, Future] = {}           # task_id -> Future
+        self._futures: Dict[str, Future[Any]] = {}           # task_id -> Future
         
         # SSE 订阅者列表（asyncio.Queue 实例）
-        self._subscribers: List['AsyncQueue'] = []
+        self._subscribers: List['AsyncQueue[Any]'] = []
         self._subscribers_lock = threading.Lock()
         
         # 主事件循环引用（用于跨线程广播）
@@ -902,7 +902,7 @@ class AnalysisTaskQueue:
     
     # ========== SSE 事件广播 ==========
     
-    def subscribe(self, queue: 'AsyncQueue') -> None:
+    def subscribe(self, queue: 'AsyncQueue[Any]') -> None:
         """
         订阅任务事件
         
@@ -922,7 +922,7 @@ class AnalysisTaskQueue:
                     pass
             logger.debug(f"[TaskQueue] 新订阅者加入，当前订阅者数: {len(self._subscribers)}")
     
-    def unsubscribe(self, queue: 'AsyncQueue') -> None:
+    def unsubscribe(self, queue: 'AsyncQueue[Any]') -> None:
         """
         取消订阅任务事件
         

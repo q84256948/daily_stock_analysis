@@ -10,7 +10,7 @@
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Body
 
@@ -273,7 +273,7 @@ def get_stock_bar(
         )
 
         # Deduplicate by normalized code, keeping the record with highest id
-        seen: dict = {}
+        seen: dict[str, Any] = {}
         for record in records:
             norm_code = _normalize_code_for_grouping(record.code or "")
             if norm_code not in seen or record.id > seen[norm_code].id:

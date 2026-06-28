@@ -38,12 +38,12 @@ class ToolDefinition:
     name: str
     description: str
     parameters: List[ToolParameter]
-    handler: Callable
+    handler: Callable[..., Any]
     category: str = "data"  # data | analysis | search | action
 
     # ----- Multi-provider schema converters -----
 
-    def _params_json_schema(self) -> dict:
+    def _params_json_schema(self) -> dict[str, Any]:
         """Convert parameters to JSON Schema (shared by OpenAI/Anthropic)."""
         properties: Dict[str, Any] = {}
         required: List[str] = []
@@ -62,7 +62,7 @@ class ToolDefinition:
             schema["required"] = required
         return schema
 
-    def to_openai_tool(self) -> dict:
+    def to_openai_tool(self) -> dict[str, Any]:
         """Convert to OpenAI ``tools`` list element format."""
         return {
             "type": "function",
@@ -133,7 +133,7 @@ class ToolRegistry:
 
     # ----- Schema generation -----
 
-    def to_openai_tools(self) -> List[dict]:
+    def to_openai_tools(self) -> List[dict[str, Any]]:
         """Generate OpenAI-format tools list (used by litellm for all providers)."""
         return [t.to_openai_tool() for t in self._tools.values()]
 
@@ -189,7 +189,7 @@ def tool(
         def get_realtime_quote(stock_code: str) -> dict:
             ...
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Infer parameters from type hints if not provided
         params = parameters
         if params is None:
@@ -213,7 +213,7 @@ def tool(
     return decorator
 
 
-def _infer_parameters(func: Callable) -> List[ToolParameter]:
+def _infer_parameters(func: Callable[..., Any]) -> List[ToolParameter]:
     """Infer ToolParameter list from function signature and type hints."""
     sig = inspect.signature(func)
     hints = getattr(func, '__annotations__', {})

@@ -82,7 +82,7 @@ class LLMResponse:
 _AUTO_THINKING_MODELS: List[str] = ["deepseek-reasoner", "deepseek-r1", "qwq"]
 
 # Models that need explicit opt-in via extra_body; payload decoupled from model name.
-_OPT_IN_THINKING_MODELS: Dict[str, dict] = {
+_OPT_IN_THINKING_MODELS: Dict[str, dict[str, Any]] = {
     "deepseek-chat": {"thinking": {"type": "enabled"}},
 }
 
@@ -99,7 +99,7 @@ _OPT_IN_THINKING_MODELS: Dict[str, dict] = {
 # - MiniMax-M2.5: kept as legacy so existing user configs continue to report
 #   accurate cost. Still listed as a Legacy Model on the official pricing
 #   page; remove only after we have user-facing migration guidance.
-_CUSTOM_MODEL_PRICING: Dict[str, dict] = {
+_CUSTOM_MODEL_PRICING: Dict[str, dict[str, Any]] = {
     "MiniMax-M3": {
         "supports_function_calling": True,
         "supports_vision": True,
@@ -253,7 +253,7 @@ def _model_matches(model: str, entries: List[str]) -> bool:
     return False
 
 
-def _get_opt_in_payload(model: str, opt_in: Dict[str, dict]) -> Optional[dict]:
+def _get_opt_in_payload(model: str, opt_in: Dict[str, dict[str, Any]]) -> Optional[dict[str, Any]]:
     """Return extra_body payload for opt-in thinking models, or None."""
     if not model:
         return None
@@ -264,7 +264,7 @@ def _get_opt_in_payload(model: str, opt_in: Dict[str, dict]) -> Optional[dict]:
     return None
 
 
-def get_thinking_extra_body(model: str) -> Optional[dict]:
+def get_thinking_extra_body(model: str) -> Optional[dict[str, Any]]:
     """Return extra_body for thinking mode, or None.
 
     - Auto-thinking models (_AUTO_THINKING_MODELS: deepseek-reasoner, deepseek-r1, qwq):
@@ -439,7 +439,7 @@ class LLMToolAdapter:
     def call_with_tools(
         self,
         messages: List[Dict[str, Any]],
-        tools: List[dict],
+        tools: List[dict[str, Any]],
         provider: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> LLMResponse:
@@ -479,7 +479,7 @@ class LLMToolAdapter:
         self,
         messages: List[Dict[str, Any]],
         *,
-        tools: Optional[List[dict]] = None,
+        tools: Optional[List[dict[str, Any]]] = None,
         provider: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -562,7 +562,7 @@ class LLMToolAdapter:
     def _call_litellm_model(
         self,
         messages: List[Dict[str, Any]],
-        tools: List[dict],
+        tools: List[dict[str, Any]],
         model: str,
         *,
         temperature: Optional[float] = None,

@@ -13,7 +13,7 @@ import re
 import threading
 import time
 from collections import defaultdict
-from typing import Dict, List, Optional, Type, Callable
+from typing import Any, Dict, List, Optional, Type, Callable
 
 from bot.models import BotMessage, BotResponse
 from bot.commands.base import BotCommand
@@ -119,7 +119,7 @@ class CommandDispatcher:
         self._rate_limiter = RateLimiter(rate_limit_requests, rate_limit_window)
 
         # 回调函数：获取帮助命令的命令列表
-        self._help_command_getter: Optional[Callable] = None
+        self._help_command_getter: Optional[Callable[..., Any]] = None
 
     def register(self, command: BotCommand) -> None:
         """
@@ -360,7 +360,7 @@ class CommandDispatcher:
             logger.exception(e)
             return BotResponse.error_response(f"命令执行失败: {str(e)[:100]}")
 
-    def set_help_command_getter(self, getter: Callable) -> None:
+    def set_help_command_getter(self, getter: Callable[..., Any]) -> None:
         """
         设置帮助命令的命令列表获取器
 
@@ -602,7 +602,7 @@ User: "analyze TSLA and NVDA using trend strategy"
         return None
 
     @staticmethod
-    async def _parse_intent_via_llm(text: str, config) -> Optional[dict]:
+    async def _parse_intent_via_llm(text: str, config) -> Optional[dict[str, Any]]:
         """Call LLM to parse user intent.  Returns parsed dict or None on failure."""
         try:
             from src.agent.llm_adapter import LLMToolAdapter
@@ -625,7 +625,7 @@ User: "analyze TSLA and NVDA using trend strategy"
             return None
 
     @staticmethod
-    def _parse_intent_via_llm_sync(text: str, config) -> Optional[dict]:
+    def _parse_intent_via_llm_sync(text: str, config) -> Optional[dict[str, Any]]:
         """Synchronous variant for webhook/stream integrations."""
         try:
             from src.agent.llm_adapter import LLMToolAdapter
@@ -647,7 +647,7 @@ User: "analyze TSLA and NVDA using trend strategy"
             return None
 
     @staticmethod
-    def _parse_intent_payload(raw: str) -> Optional[dict]:
+    def _parse_intent_payload(raw: str) -> Optional[dict[str, Any]]:
         """Parse the JSON payload returned by the intent-routing LLM call."""
         import json as _json
 

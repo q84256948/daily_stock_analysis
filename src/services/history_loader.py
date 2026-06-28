@@ -28,7 +28,7 @@ _frozen_target_date: contextvars.ContextVar[Optional[date]] = contextvars.Contex
 )
 
 
-def set_frozen_target_date(d: date) -> contextvars.Token:
+def set_frozen_target_date(d: date) -> contextvars.Token[Any]:
     return _frozen_target_date.set(d)
 
 
@@ -36,7 +36,7 @@ def get_frozen_target_date() -> Optional[date]:
     return _frozen_target_date.get()
 
 
-def reset_frozen_target_date(token: contextvars.Token) -> None:
+def reset_frozen_target_date(token: contextvars.Token[Any]) -> None:
     _frozen_target_date.reset(token)
 
 
@@ -103,7 +103,7 @@ def _bar_date(bar: Any) -> date:
     return date.min
 
 
-def _select_best_bars(db, stock_code: str, start: date, end: date) -> Tuple[Optional[str], list]:
+def _select_best_bars(db, stock_code: str, start: date, end: date) -> Tuple[Optional[str], list[Any]]:
     candidates, normalized_code = _history_code_candidates(stock_code)
     best_code = None
     best_bars = []

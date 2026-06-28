@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +113,7 @@ def _count_conclusions(markdown: str) -> int:
     return len(re.findall(r"【结论】", markdown))
 
 
-def _count_validation_markers(markdown: str) -> tuple:
+def _count_validation_markers(markdown: str) -> tuple[Any, ...]:
     """统计双源验证标注：返回 (verified✓, conflict⚠)。
 
     温和信息性统计，不参与 passed/score 判定（避免 LLM 未严格遵循格式时误判）。

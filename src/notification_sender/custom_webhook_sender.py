@@ -146,7 +146,7 @@ class CustomWebhookSender:
                 logger.error("自定义 Webhook %d 图片推送异常: %s", i + 1, e)
         return success_count > 0
 
-    def _post_custom_webhook(self, url: str, payload: dict, timeout: int = 30) -> bool:
+    def _post_custom_webhook(self, url: str, payload: dict[str, Any], timeout: int = 30) -> bool:
         headers = {
             'Content-Type': 'application/json; charset=utf-8',
             'User-Agent': 'StockAnalysis/1.0',
@@ -194,7 +194,7 @@ class CustomWebhookSender:
         self,
         *,
         url: str,
-        payload: dict,
+        payload: dict[str, Any],
         timeout_seconds: float,
         index: int,
     ) -> Dict[str, Any]:
@@ -266,7 +266,7 @@ class CustomWebhookSender:
             return "network_error", True
         return "unexpected_error", False
     
-    def _build_custom_webhook_payload(self, url: str, content: str) -> dict:
+    def _build_custom_webhook_payload(self, url: str, content: str) -> dict[str, Any]:
         """
         根据 URL 构建对应的 Webhook payload
         
@@ -319,7 +319,7 @@ class CustomWebhookSender:
             "body": content
         }
 
-    def _build_custom_webhook_template_payload(self, content: str) -> Optional[dict]:
+    def _build_custom_webhook_template_payload(self, content: str) -> Optional[dict[str, Any]]:
         """Build payload from CUSTOM_WEBHOOK_BODY_TEMPLATE when configured."""
         template = (self._custom_webhook_body_template or "").strip()
         if not template:

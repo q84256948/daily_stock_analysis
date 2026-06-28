@@ -49,9 +49,9 @@ class LLMSubjectiveScoringService:
         stock_name: str,
         industry: str = "",
         main_business: str = "",
-        concept_boards: List[Dict] = None,
-        institutional_data: Dict = None,
-        northbound_data: Dict = None,
+        concept_boards: Optional[List[Dict[str, Any]]] = None,
+        institutional_data: Optional[Dict[str, Any]] = None,
+        northbound_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Analyze supply chain positioning using LLM.

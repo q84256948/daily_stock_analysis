@@ -11,7 +11,7 @@ import base64
 import hashlib
 import requests
 import time
-from typing import Optional
+from typing import Any, Optional
 
 from src.config import Config
 from src.formatters import chunk_content_by_max_bytes
@@ -173,7 +173,7 @@ class WechatSender:
                 time.sleep(1)
         return success_count == len(chunks)
 
-    def _gen_wechat_payload(self, content: str) -> dict:
+    def _gen_wechat_payload(self, content: str) -> dict[str, Any]:
         """生成企业微信消息 payload"""
         if self._wechat_msg_type == 'text':
             return {

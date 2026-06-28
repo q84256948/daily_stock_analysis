@@ -544,7 +544,7 @@ class AgentExecutor:
 
         return self._run_loop(messages, tool_decls, parse_dashboard=True)
 
-    def chat(self, message: str, session_id: str, progress_callback: Optional[Callable] = None, context: Optional[Dict[str, Any]] = None) -> AgentResult:
+    def chat(self, message: str, session_id: str, progress_callback: Optional[Callable[..., Any]] = None, context: Optional[Dict[str, Any]] = None) -> AgentResult:
         """Execute the agent loop for a free-form chat message.
 
         Args:
@@ -740,7 +740,7 @@ class AgentExecutor:
         messages: List[Dict[str, Any]],
         tool_decls: List[Dict[str, Any]],
         parse_dashboard: bool,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         stock_scope: Optional[StockScope] = None,
     ) -> AgentResult:
         """Delegate to the shared runner and adapt the result.

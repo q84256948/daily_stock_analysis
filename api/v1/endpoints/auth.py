@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
@@ -69,7 +70,7 @@ class AuthSettingsRequest(BaseModel):
     current_password: str = Field(default="", alias="currentPassword")
 
 
-def _cookie_params(request: Request) -> dict:
+def _cookie_params(request: Request) -> dict[str, Any]:
     """Build cookie params including Secure based on request."""
     secure = False
     if os.getenv("TRUST_X_FORWARDED_FOR", "false").lower() == "true":
@@ -154,7 +155,7 @@ def _set_session_cookie(response: Response, session_value: str, request: Request
     )
 
 
-def _get_auth_status_dict(request: Request | None = None) -> dict:
+def _get_auth_status_dict(request: Request | None = None) -> dict[str, Any]:
     """Helper to build consistent auth status response body."""
     auth_enabled = is_auth_enabled()
     logged_in = False

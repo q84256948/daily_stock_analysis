@@ -11,7 +11,7 @@ Selects which trading skills to apply based on:
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.agent.protocols import AgentContext
 from src.agent.skills.defaults import (
@@ -110,11 +110,11 @@ class SkillRouter:
             return "auto"
 
     @staticmethod
-    def _get_available_ids() -> set:
+    def _get_available_ids() -> set[Any]:
         return {skill.name for skill in SkillRouter._get_available_skills()}
 
     @staticmethod
-    def _get_available_skills() -> list:
+    def _get_available_skills() -> list[Any]:
         try:
             from src.agent.factory import _SKILL_MANAGER_PROTOTYPE
 

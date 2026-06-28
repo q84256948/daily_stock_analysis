@@ -11,7 +11,7 @@ Core functions:
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 DEFAULT_NEUTRAL_SCORE = 50.0
 
@@ -178,7 +178,7 @@ def check_stop_conditions(
     posterior_p: float,
     market_implied_p: float,
     strong_negative_evidence: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     """
     Long-term stop loss condition check
 
@@ -254,7 +254,7 @@ class BayesianResult:
     edge: float
     posterior_p: float
     position_suggestion: str
-    stop_conditions: dict
+    stop_conditions: dict[str, Any]
 
     def __post_init__(self):
         assert 0 <= self.prior_p <= 1, f"prior_p must be in [0,1], got {self.prior_p}"

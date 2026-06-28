@@ -18,7 +18,7 @@ import logging
 import re
 from contextlib import contextmanager
 from datetime import datetime
-from typing import Optional, Generator
+from typing import Optional, Generator, Any
 
 import pandas as pd
 from tenacity import (
@@ -91,7 +91,7 @@ class BaostockFetcher(BaseFetcher):
         return self._bs_module
     
     @contextmanager
-    def _baostock_session(self) -> Generator:
+    def _baostock_session(self) -> Generator[Any, Any, Any]:
         """
         Baostock 连接上下文管理器
         

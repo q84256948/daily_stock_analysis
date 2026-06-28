@@ -119,7 +119,7 @@ class ZhengxiExecutor:
         self,
         message: str,
         session_id: str,
-        progress_callback: Optional[Callable] = None,
+        progress_callback: Optional[Callable[..., Any]] = None,
         context: Optional[Dict[str, Any]] = None,
     ):
         """执行一轮郑希投研问答（ReAct 工具循环 + 会话持久化）。"""

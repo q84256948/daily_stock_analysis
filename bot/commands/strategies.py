@@ -6,7 +6,7 @@ Shows all available trading strategies and their activation status.
 """
 
 import logging
-from typing import List
+from typing import Any, List
 
 from bot.commands.base import BotCommand
 from bot.models import BotMessage, BotResponse
@@ -53,7 +53,7 @@ class StrategiesCommand(BotCommand):
 
             # Derive activation status from config without mutating the skill
             # manager — this is a read-only listing command.
-            configured_active: set = set(config.agent_skills or DEFAULT_AGENT_SKILLS)
+            configured_active: set[Any] = set(config.agent_skills or DEFAULT_AGENT_SKILLS)
 
             all_skills = sm.list_skills()
             if not all_skills:

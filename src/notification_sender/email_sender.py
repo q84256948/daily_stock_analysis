@@ -6,7 +6,7 @@ Email 发送提醒服务
 1. 通过 SMTP 发送 Email 消息
 """
 import logging
-from typing import Optional, List
+from typing import Any, List, Optional
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -79,7 +79,7 @@ class EmailSender:
         if not stock_codes or not self._stock_email_groups:
             return self._email_config['receivers']
         normalized_codes = [normalize_stock_code(c) for c in stock_codes]
-        seen: set = set()
+        seen: set[Any] = set()
         result: List[str] = []
         for stocks, emails in self._stock_email_groups:
             for code in normalized_codes:
@@ -96,7 +96,7 @@ class EmailSender:
         Return union of all configured email receivers (all groups + default).
         Used for market review which should go to everyone.
         """
-        seen: set = set()
+        seen: set[Any] = set()
         result: List[str] = []
         for _, emails in self._stock_email_groups:
             for e in emails:

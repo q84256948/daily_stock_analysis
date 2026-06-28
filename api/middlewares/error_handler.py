@@ -12,7 +12,7 @@
 
 import logging
 import traceback
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -31,7 +31,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, 
         request: Request, 
-        call_next: Callable
+        call_next: Callable[..., Any]
     ) -> Response:
         """
         处理请求，捕获异常
