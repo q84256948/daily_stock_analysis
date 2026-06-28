@@ -166,8 +166,14 @@ class TestScoreTool:
 # ============================================================
 
 class TestToolMetadata:
-    def test_single_supply_chain_tool(self):
-        assert len(ALL_SUPPLY_CHAIN_TOOLS) == 1
+    def test_supply_chain_tools(self):
+        assert len(ALL_SUPPLY_CHAIN_TOOLS) == 3
+        names = {t.name for t in ALL_SUPPLY_CHAIN_TOOLS}
+        assert names == {
+            "score_supply_chain_bottleneck",
+            "search_semianalysis",
+            "search_clue_hype",
+        }
         assert ALL_SUPPLY_CHAIN_TOOLS[0].name == "score_supply_chain_bottleneck"
         assert ALL_SUPPLY_CHAIN_TOOLS[0].category == "analysis"
 

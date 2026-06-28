@@ -32,6 +32,8 @@ router = APIRouter()
 SUPPLY_CHAIN_TOOL_DISPLAY_NAMES: Dict[str, str] = {
     **_AGENT_TOOL_DISPLAY_NAMES,
     "score_supply_chain_bottleneck": "瓶颈打分",
+    "search_semianalysis": "SemiAnalysis 检索",
+    "search_clue_hype": "线索炒作检索",
 }
 
 # 会话命名空间前缀（与问股/郑希会话隔离）

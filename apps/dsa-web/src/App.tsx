@@ -19,7 +19,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ZhengxiChatPage = lazy(() => import('./pages/ZhengxiChatPage'));
-const SupplyChainChatPage = lazy(() => import('./pages/SupplyChainChatPage'));
+const SupplyChainReportPage = lazy(() => import('./pages/SupplyChainReportPage'));
 const DeepResearchPage = lazy(() => import('./pages/DeepResearchPage'));
 const PolicyMinesweeperPage = lazy(() => import('./pages/PolicyMinesweeperPage'));
 
@@ -91,7 +91,7 @@ const AppContent: React.FC = () => {
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/zhengxi" element={<ZhengxiChatPage />} />
         <Route path="/chanlun" element={<ChanlunChatPage />} />
-        <Route path="/supply-chain" element={<SupplyChainChatPage />} />
+        <Route path="/supply-chain" element={<SupplyChainReportPage />} />
         <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/decision-signals" element={<DecisionSignalsPage />} />
         <Route path="/screening" element={<StockScreeningPage />} />

@@ -30,6 +30,7 @@ from api.v1.endpoints import (
     usage,
     zhengxi,
     supply_chain,
+    supply_chain_reports,
     deep_research,
     policy_minesweeper,
 )
@@ -67,6 +68,10 @@ router.include_router(
 router.include_router(zhengxi.router, prefix="/zhengxi", tags=["Zhengxi"])
 
 router.include_router(supply_chain.router, prefix="/supply-chain", tags=["SupplyChain"])
+
+router.include_router(
+    supply_chain_reports.router, prefix="/supply-chain", tags=["SupplyChainReports"]
+)
 
 router.include_router(
     deep_research.router, prefix="/deep-research", tags=["DeepResearch"]

@@ -465,6 +465,65 @@ class PolicyMinesweeperReport(Base):
         }
 
 
+class SupplyChainReport(Base):
+    """供应链分析报告记录模型（表单式报告流）。
+
+    与 ``DeepResearchReport`` / ``PolicyMinesweeperReport`` 同理：正文存文件
+    （``reports/supply_chain/``），元数据存本表，支持并发安全的列表/详情/删除
+    （SQLite + _run_write_transaction 重试）。主输入是「分析主题」（非单股票），
+    ``research_hint`` 为本轮一次性线索（可为空，与历史报告隔离）。
+    """
+
+    __tablename__ = "supply_chain_reports"
+
+    id: Mapped[str] = mapped_column(
+        String(64), primary_key=True
+    )  # sc_{YYYYMMDDHHmm}(_\d+)?
+
+    # 输入
+    topic: Mapped[str] = mapped_column(Text, nullable=False)
+    research_hint: Mapped[Optional[str]] = mapped_column(Text)
+
+    # 时间
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, index=True
+    )
+
+    # 文件路径
+    md_path: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_path: Mapped[Optional[str]] = mapped_column(Text)  # NULL = 尚未惰性生成
+
+    # 质量
+    status: Mapped[Optional[str]] = mapped_column(
+        String(16)
+    )  # success | partial | failed
+
+    # 统计
+    total_steps: Mapped[Optional[int]] = mapped_column(Integer)
+    total_tokens: Mapped[Optional[int]] = mapped_column(Integer)
+    provider: Mapped[Optional[str]] = mapped_column(String(64))
+    model: Mapped[Optional[str]] = mapped_column(String(128))
+    error: Mapped[Optional[str]] = mapped_column(Text)
+
+    __table_args__ = (Index("ix_supply_chain_time", "created_at"),)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "topic": self.topic,
+            "research_hint": self.research_hint,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "md_path": self.md_path,
+            "pdf_path": self.pdf_path,
+            "status": self.status,
+            "total_steps": self.total_steps,
+            "total_tokens": self.total_tokens,
+            "provider": self.provider,
+            "model": self.model,
+            "error": self.error,
+        }
+
+
 class ScheduledTaskLog(Base):
     """Scheduled task execution log.
 
@@ -2643,6 +2702,166 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             return self._run_write_transaction("prune_policy_minesweeper_reports", _write)
         except Exception as exc:
             logger.error("prune_policy_minesweeper_reports failed: %s", exc)
+            return []
+
+    # ==================================================================
+    # 供应链分析报告（SupplyChain）CRUD
+    # ==================================================================
+
+    def save_supply_chain_report(
+        self,
+        report_id: str,
+        topic: str,
+        research_hint: Optional[str],
+        md_path: str,
+        status: str,
+        total_steps: int = 0,
+        total_tokens: int = 0,
+        provider: str = "",
+        model: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> bool:
+        """保存/更新一条供应链报告元数据（report_id 重复则 merge 覆盖）。失败返回 False。"""
+        def _write(session: Session) -> bool:
+            record = SupplyChainReport(
+                id=report_id,
+                topic=topic,
+                research_hint=research_hint,
+                created_at=datetime.now(),
+                md_path=md_path,
+                pdf_path=None,
+                status=status,
+                total_steps=total_steps,
+                total_tokens=total_tokens,
+                provider=provider,
+                model=model,
+                error=error,
+            )
+            session.merge(record)
+            return True
+
+        try:
+            self._run_write_transaction(f"save_supply_chain[{report_id}]", _write)
+            return True
+        except Exception as exc:
+            logger.error("save_supply_chain_report failed [%s]: %s", report_id, exc)
+            return False
+
+    def set_supply_chain_pdf_path(self, report_id: str, pdf_path: str) -> bool:
+        """PDF 惰性生成后，回填 pdf_path 到元数据。"""
+        def _write(session: Session) -> bool:
+            rec = session.execute(
+                select(SupplyChainReport).where(SupplyChainReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return False
+            rec.pdf_path = pdf_path
+            return True
+
+        try:
+            result = self._run_write_transaction(
+                f"set_supply_chain_pdf[{report_id}]", _write
+            )
+            return bool(result)
+        except Exception as exc:
+            logger.error("set_supply_chain_pdf_path failed [%s]: %s", report_id, exc)
+            return False
+
+    def get_supply_chain_reports(
+        self, offset: int = 0, limit: int = 50
+    ) -> Tuple[List[SupplyChainReport], int]:
+        """分页查询供应链报告列表（按时间倒序）。返回 (记录列表, 总数)。"""
+        with self.get_session() as session:
+            total = session.execute(
+                select(func.count(SupplyChainReport.id))
+            ).scalar() or 0
+            rows = session.execute(
+                select(SupplyChainReport)
+                .order_by(desc(SupplyChainReport.created_at))
+                .offset(offset)
+                .limit(limit)
+            ).scalars().all()
+            return list(rows), int(total)
+
+    def get_supply_chain_report(self, report_id: str) -> Optional[SupplyChainReport]:
+        """按主键查询单条报告。"""
+        with self.get_session() as session:
+            return session.execute(
+                select(SupplyChainReport).where(SupplyChainReport.id == report_id)
+            ).scalars().first()
+
+    def delete_supply_chain_report(
+        self, report_id: str
+    ) -> Optional[Dict[str, Optional[str]]]:
+        """删除单条报告元数据，返回被删记录的 md_path/pdf_path（供调用方删文件）。"""
+        def _write(session: Session) -> Optional[Dict[str, Optional[str]]]:
+            rec = session.execute(
+                select(SupplyChainReport).where(SupplyChainReport.id == report_id)
+            ).scalars().first()
+            if rec is None:
+                return None
+            paths: Dict[str, Optional[str]] = {
+                "md_path": cast(str, rec.md_path),
+                "pdf_path": cast(Optional[str], rec.pdf_path),
+            }
+            session.delete(rec)
+            return paths
+
+        try:
+            return self._run_write_transaction(
+                f"delete_supply_chain[{report_id}]", _write
+            )
+        except Exception as exc:
+            logger.error("delete_supply_chain_report failed [%s]: %s", report_id, exc)
+            return None
+
+    def prune_supply_chain_reports(
+        self, max_reports: int
+    ) -> List[Dict[str, Optional[str]]]:
+        """清理超额供应链报告（删最旧），返回被删记录的 md_path/pdf_path 列表。
+
+        Args:
+            max_reports: 保留最新报告数量上限（>0 才执行）。
+
+        Returns:
+            被删记录的 {"md_path": ..., "pdf_path": ...} 列表（pdf_path 可能为 None）。
+        """
+        if max_reports <= 0:
+            return []
+
+        def _write(session: Session) -> List[Dict[str, Optional[str]]]:
+            total = session.execute(
+                select(func.count(SupplyChainReport.id))
+            ).scalar() or 0
+            if total <= max_reports:
+                return []
+            excess = total - max_reports
+            old_ids = session.execute(
+                select(SupplyChainReport.id)
+                .order_by(asc(SupplyChainReport.created_at))
+                .limit(excess)
+            ).scalars().all()
+            old_recs = session.execute(
+                select(SupplyChainReport).where(SupplyChainReport.id.in_(old_ids))
+            ).scalars().all()
+            result_paths: List[Dict[str, Optional[str]]] = [
+                {
+                    "md_path": cast(str, r.md_path),
+                    "pdf_path": cast(Optional[str], r.pdf_path),
+                }
+                for r in old_recs
+            ]
+            session.execute(
+                delete(SupplyChainReport).where(
+                    SupplyChainReport.id.in_(old_ids)
+                )
+            )
+            return result_paths
+
+        try:
+            return self._run_write_transaction("prune_supply_chain_reports", _write)
+        except Exception as exc:
+            logger.error("prune_supply_chain_reports failed: %s", exc)
             return []
 
     def get_distinct_stocks_from_history(

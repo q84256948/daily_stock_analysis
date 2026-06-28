@@ -65,7 +65,12 @@ _PDF_FONT_STACK = (
 
 # CJK 友好的 PDF 样式：全标签覆盖字体回退链 + 表格边框 + 合理字号/行距。
 # 覆盖范围包含 td/th/li/blockquote/pre/code 等所有文本节点。
-# CSS 的 { } 需转义为 {{ }} 以走 str.format。
+# 关键：``table { display: table; table-layout: fixed }`` 覆盖 formatters 里
+# 面向 web 的 ``table { display: block; overflow-x: auto }``（GitHub 式横向滚动）——
+# 该 web 样式在 WeasyPrint 分页 PDF 下会把宽表列宽压成 1 字竖排（格式错误）。
+# 本 CSS 注入在 formatters <style> 之后（同优先级后者生效），恢复真正表格布局：
+# fixed 列宽均分 + 单元格任意断行，宽多列表格（如供应链「线索验证」6 列长 CJK）
+# 不再塌缩。CSS 的 { } 需转义为 {{ }} 以走 str.format。
 _PDF_CSS = """
 <style>
 body, p, td, th, li, h1, h2, h3, h4, h5, h6, blockquote, span, div, strong, em, pre, code {{
@@ -76,8 +81,8 @@ body, p, td, th, li, h1, h2, h3, h4, h5, h6, blockquote, span, div, strong, em, 
 h1 {{ font-size: 18pt; }}
 h2 {{ font-size: 15pt; }}
 h3 {{ font-size: 13pt; }}
-table {{ border-collapse: collapse; width: 100%; margin: 8px 0; }}
-td, th {{ border: 1px solid #999; padding: 4px 8px; text-align: left; }}
+table {{ border-collapse: collapse; width: 100%; margin: 8px 0; display: table; table-layout: fixed; }}
+td, th {{ border: 1px solid #999; padding: 4px 8px; text-align: left; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }}
 th {{ background-color: #f0f0f0; font-weight: bold; }}
 blockquote {{ border-left: 3px solid #ccc; padding-left: 10px; color: #555; }}
 pre {{ background-color: #f6f8fa; padding: 8px; border-radius: 3px; white-space: pre-wrap; word-wrap: break-word; }}
