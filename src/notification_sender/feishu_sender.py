@@ -116,7 +116,7 @@ class FeishuSender:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_card_body(content: str) -> dict:
+    def _build_card_body(content: str) -> dict[str, Any]:
         """Build a Feishu interactive-card body (without the ``msg_type`` wrapper)."""
         return {
             "config": {"wide_screen_mode": True},

@@ -90,16 +90,16 @@ class Scheduler:
         self._schedule_time_provider = schedule_time_provider
         self._heartbeat_path = heartbeat_path
         self.shutdown_handler = GracefulShutdown()
-        self._task_callback: Optional[Callable] = None
+        self._task_callback: Optional[Callable[..., Any]] = None
         self._daily_job: Optional[Any] = None
         self._daily_jobs: Dict[str, Any] = {}  # 多任务调度：name -> job
         self._daily_task_callbacks: Dict[
-            str, Callable
+            str, Callable[..., Any]
         ] = {}  # 多任务调度：name -> callback
         self._background_tasks: List[Dict[str, Any]] = []
         self._running = False
 
-    def set_daily_task(self, task: Callable, run_immediately: bool = True):
+    def set_daily_task(self, task: Callable[..., Any], run_immediately: bool = True):
         """
         设置每日定时任务
 
@@ -208,7 +208,7 @@ class Scheduler:
     def add_daily_task(
         self,
         name: str,
-        task: Callable,
+        task: Callable[..., Any],
         schedule_time: str,
         run_immediately: bool = False,
     ) -> bool:
@@ -290,7 +290,7 @@ class Scheduler:
 
     def add_background_task(
         self,
-        task: Callable,
+        task: Callable[..., Any],
         interval_seconds: int,
         run_immediately: bool = False,
         name: Optional[str] = None,
@@ -430,7 +430,7 @@ class Scheduler:
 
 
 def run_with_schedule(
-    task: Optional[Callable] = None,
+    task: Optional[Callable[..., Any]] = None,
     schedule_time: str = "18:00",
     run_immediately: bool = True,
     background_tasks: Optional[List[Dict[str, Any]]] = None,

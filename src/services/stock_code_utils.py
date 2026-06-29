@@ -6,14 +6,14 @@ Shared stock code utilities.
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 from data_provider.base import is_bse_code
 
 
 # Known exchange prefixes (case-insensitive) and the digit lengths they accept.
 # e.g. SH600519 -> 600519, HK00700 -> 00700
-_PREFIX_DIGIT_LENS: dict = {
+_PREFIX_DIGIT_LENS: dict[str, Any] = {
     "SH": (6,),
     "SZ": (6,),
     "SS": (6,),
@@ -21,7 +21,7 @@ _PREFIX_DIGIT_LENS: dict = {
     "HK": (1, 2, 3, 4, 5),
 }
 
-_SUFFIX_DIGIT_LENS: dict = {
+_SUFFIX_DIGIT_LENS: dict[str, Any] = {
     ".SH": (6,),
     ".SZ": (6,),
     ".SS": (6,),

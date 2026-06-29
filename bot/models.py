@@ -63,7 +63,7 @@ class BotMessage:
     timestamp: datetime = field(default_factory=datetime.now)
     raw_data: Dict[str, Any] = field(default_factory=dict)
     
-    def get_command_and_args(self, prefix: str = "/") -> tuple:
+    def get_command_and_args(self, prefix: str = "/") -> tuple[Any, ...]:
         """
         解析命令和参数
         
@@ -164,7 +164,7 @@ class WebhookResponse:
     headers: Dict[str, str] = field(default_factory=dict)
     
     @classmethod
-    def success(cls, body: Optional[Dict] = None) -> 'WebhookResponse':
+    def success(cls, body: Optional[Dict[str, Any]] = None) -> 'WebhookResponse':
         """创建成功响应"""
         return cls(status_code=200, body=body or {})
     

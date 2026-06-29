@@ -17,7 +17,7 @@ import random
 import re
 import sys
 import time
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from src.config import Config, get_config
 
@@ -249,7 +249,7 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
     key = api_key if api_key and api_key in keys else random.choice(keys)
 
     data_url = f"data:{mime_type};base64,{image_b64}"
-    call_kwargs: dict = {
+    call_kwargs: dict[str, Any] = {
         "model": model,
         "messages": [
             {

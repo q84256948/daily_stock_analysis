@@ -73,7 +73,7 @@ class SocialSentimentService:
         self._api_key = (api_key or "").strip() or None
         self._api_url = (api_url or "https://api.adanos.org").rstrip("/")
         # Simple in-memory cache: {"key": (timestamp, data)}
-        self._cache: Dict[str, tuple] = {}
+        self._cache: Dict[str, tuple[Any, ...]] = {}
         self._cache_lock = threading.RLock()
         self._cache_inflight: Dict[str, threading.Event] = {}
 
@@ -89,7 +89,7 @@ class SocialSentimentService:
     # API calls
     # ------------------------------------------------------------------
 
-    def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict]:
+    def _fetch_json(self, url: str, params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """Fetch JSON from API, return None on any error."""
         try:
             resp = _get_with_retry(url, headers=self._headers, params=params)
@@ -149,12 +149,12 @@ class SocialSentimentService:
                     self._cache_inflight.pop(cache_key, None)
                     inflight.set()
 
-    def fetch_reddit_report(self, ticker: str) -> Optional[Dict]:
+    def fetch_reddit_report(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Fetch detailed Reddit report for a single ticker."""
         url = f"{self._api_url}/reddit/stocks/v1/report/{ticker.upper()}"
         return self._fetch_json(url)
 
-    def fetch_reddit_trending(self) -> Optional[List[Dict]]:
+    def fetch_reddit_trending(self) -> Optional[List[Dict[str, Any]]]:
         """Fetch Reddit trending stocks (cached)."""
         url = f"{self._api_url}/reddit/stocks/v1/trending"
         data = self._fetch_cached("reddit_trending", url)
@@ -164,7 +164,7 @@ class SocialSentimentService:
             return data
         return None
 
-    def fetch_x_trending(self) -> Optional[List[Dict]]:
+    def fetch_x_trending(self) -> Optional[List[Dict[str, Any]]]:
         """Fetch X/Twitter trending stocks (cached)."""
         url = f"{self._api_url}/x/stocks/v1/trending"
         data = self._fetch_cached("x_trending", url)
@@ -174,7 +174,7 @@ class SocialSentimentService:
             return data
         return None
 
-    def fetch_polymarket_trending(self) -> Optional[List[Dict]]:
+    def fetch_polymarket_trending(self) -> Optional[List[Dict[str, Any]]]:
         """Fetch Polymarket trending stocks (cached)."""
         url = f"{self._api_url}/polymarket/stocks/v1/trending"
         data = self._fetch_cached("polymarket_trending", url)
@@ -224,7 +224,7 @@ class SocialSentimentService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _find_ticker_in_trending(trending: List[Dict], ticker: str) -> Optional[Dict]:
+    def _find_ticker_in_trending(trending: List[Dict[str, Any]], ticker: str) -> Optional[Dict[str, Any]]:
         """Find a ticker entry in a trending list."""
         for entry in trending:
             code = (entry.get("ticker") or entry.get("symbol") or entry.get("code") or "").upper()
@@ -243,9 +243,9 @@ class SocialSentimentService:
     @staticmethod
     def _format_social_intel(
         ticker: str,
-        reddit_data: Optional[Dict],
-        x_entry: Optional[Dict],
-        poly_entry: Optional[Dict],
+        reddit_data: Optional[Dict[str, Any]],
+        x_entry: Optional[Dict[str, Any]],
+        poly_entry: Optional[Dict[str, Any]],
     ) -> str:
         """Format social sentiment data as a prompt-ready text block."""
         lines = [f"📱 Social Sentiment Intelligence for {ticker} (Reddit / X / Polymarket)"]

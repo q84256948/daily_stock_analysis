@@ -8,7 +8,7 @@ Slack 发送提醒服务
 """
 import logging
 import json
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 
@@ -77,7 +77,7 @@ class SlackSender:
         logger.warning("Slack 配置不完整，跳过推送")
         return False
 
-    def _build_blocks(self, content: str) -> list:
+    def _build_blocks(self, content: str) -> list[Any]:
         """
         将内容构建为 Slack Block Kit 格式
 

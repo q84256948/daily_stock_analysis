@@ -103,13 +103,13 @@ def _history_code_candidates(stock_code: str) -> Tuple[List[str], str]:
     return candidates, normalized_code
 
 
-def _append_history_metadata(response: dict, metadata: Dict[str, Any]) -> dict:
+def _append_history_metadata(response: dict[str, Any], metadata: Dict[str, Any]) -> dict[str, Any]:
     if metadata:
         response.update(metadata)
     return response
 
 
-def _compact_fundamental_context(fundamental_context: dict) -> dict:
+def _compact_fundamental_context(fundamental_context: dict[str, Any]) -> dict[str, Any]:
     """Reduce token footprint for tool responses while keeping key semantics."""
     if not isinstance(fundamental_context, dict):
         return {}
@@ -244,7 +244,7 @@ def _backfill_capital_flow(
     return out
 
 
-def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False, top_n: int = 5) -> dict:
+def _compact_portfolio_snapshot(snapshot: dict[str, Any], include_positions: bool = False, top_n: int = 5) -> dict[str, Any]:
     """Shrink portfolio snapshot payload for default tool responses."""
     if not isinstance(snapshot, dict):
         return {}
@@ -292,7 +292,7 @@ def _compact_portfolio_snapshot(snapshot: dict, include_positions: bool = False,
     }
 
 
-def _compact_portfolio_risk(risk: dict, top_n: int = 10) -> dict:
+def _compact_portfolio_risk(risk: dict[str, Any], top_n: int = 10) -> dict[str, Any]:
     """Shrink portfolio risk payload for tool responses."""
     if not isinstance(risk, dict):
         return {}
@@ -340,7 +340,7 @@ def _compact_portfolio_risk(risk: dict, top_n: int = 10) -> dict:
 # get_realtime_quote
 # ============================================================
 
-def _handle_get_realtime_quote(stock_code: str) -> dict:
+def _handle_get_realtime_quote(stock_code: str) -> dict[str, Any]:
     """Get real-time stock quote."""
     manager = _get_fetcher_manager()
     quote = manager.get_realtime_quote(stock_code)
@@ -408,7 +408,7 @@ get_realtime_quote_tool = ToolDefinition(
 # get_daily_history
 # ============================================================
 
-def _handle_get_daily_history(stock_code: str, days: int = 60) -> dict:
+def _handle_get_daily_history(stock_code: str, days: int = 60) -> dict[str, Any]:
     """Get daily OHLCV history data."""
     effective_days, metadata = _normalize_history_days(days)
 
@@ -540,7 +540,7 @@ def _estimate_chip_from_history(
     }
 
 
-def _handle_get_chip_distribution(stock_code: str) -> dict:
+def _handle_get_chip_distribution(stock_code: str) -> dict[str, Any]:
     """Get chip distribution data."""
     manager = _get_fetcher_manager()
     chip = manager.get_chip_distribution(stock_code)
@@ -598,7 +598,7 @@ get_chip_distribution_tool = ToolDefinition(
 # get_analysis_context
 # ============================================================
 
-def _handle_get_analysis_context(stock_code: str) -> dict:
+def _handle_get_analysis_context(stock_code: str) -> dict[str, Any]:
     """Get stored analysis context from database."""
     db = _get_db()
     context = db.get_analysis_context(stock_code)
@@ -665,7 +665,7 @@ def _fallback_valuation_from_quote(
     return merged
 
 
-def _handle_get_stock_info(stock_code: str) -> dict:
+def _handle_get_stock_info(stock_code: str) -> dict[str, Any]:
     """Get stock fundamental information through unified fundamental context."""
     manager = _get_fetcher_manager()
     try:
@@ -752,7 +752,7 @@ def _handle_get_portfolio_snapshot(
     include_positions: bool = False,
     include_risk: bool = True,
     as_of: Optional[str] = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get compact portfolio snapshot for account-aware suggestions."""
     method = (cost_method or "fifo").strip().lower()
     if method not in {"fifo", "avg"}:
@@ -867,7 +867,7 @@ ALL_DATA_TOOLS = [
 # get_capital_flow
 # ============================================================
 
-def _handle_get_capital_flow(stock_code: str) -> dict:
+def _handle_get_capital_flow(stock_code: str) -> dict[str, Any]:
     """Get main-force capital flow data for a stock."""
     manager = _get_fetcher_manager()
     try:

@@ -92,8 +92,8 @@ class MarketOverview:
     # north_flow: float = 0.0           # 北向资金净流入（亿元）- 已废弃，接口不可用
     
     # 板块涨幅榜
-    top_sectors: List[Dict] = field(default_factory=list)     # 涨幅前5板块
-    bottom_sectors: List[Dict] = field(default_factory=list)  # 跌幅前5板块
+    top_sectors: List[Dict[str, Any]] = field(default_factory=list)     # 涨幅前5板块
+    bottom_sectors: List[Dict[str, Any]] = field(default_factory=list)  # 跌幅前5板块
 
 
 @dataclass
@@ -469,7 +469,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     #     except Exception as e:
     #         logger.warning(f"[大盘] 获取北向资金失败: {e}")
     
-    def search_market_news(self) -> List[Dict]:
+    def search_market_news(self) -> List[Dict[str, Any]]:
         """
         搜索市场新闻
         
@@ -525,7 +525,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         
         return all_news
     
-    def generate_market_review(self, overview: MarketOverview, news: List) -> str:
+    def generate_market_review(self, overview: MarketOverview, news: List[Any]) -> str:
         """
         使用大模型生成大盘复盘报告
         
@@ -596,7 +596,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
     def build_market_review_payload(
         self,
         overview: MarketOverview,
-        news: List,
+        news: List[Any],
         report: str,
         market_light_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
@@ -717,7 +717,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         self,
         review: str,
         overview: MarketOverview,
-        news: Optional[List] = None,
+        news: Optional[List[Any]] = None,
     ) -> str:
         """Inject structured data tables into the corresponding LLM prose sections."""
         # Build data blocks
@@ -975,7 +975,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
                 )
         return "\n".join(lines)
 
-    def _build_news_block(self, news: List) -> str:
+    def _build_news_block(self, news: List[Any]) -> str:
         """Build a compact source-aware news catalyst list for the rendered report."""
         if not news:
             return ""
@@ -1124,7 +1124,7 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         label = str(scores["temperature_label"])
         return score, label
 
-    def _build_review_prompt(self, overview: MarketOverview, news: List) -> str:
+    def _build_review_prompt(self, overview: MarketOverview, news: List[Any]) -> str:
         """构建复盘报告 Prompt"""
         review_language = self._get_review_language()
 
@@ -1333,7 +1333,7 @@ Output the report content directly, no extra commentary.
 请直接输出复盘报告内容，不要输出其他说明文字。
 """
     
-    def _generate_template_review(self, overview: MarketOverview, news: List) -> str:
+    def _generate_template_review(self, overview: MarketOverview, news: List[Any]) -> str:
         """使用模板生成复盘报告（无大模型时的备选方案）"""
         template_language = self._get_template_review_language()
         mood_code = self.profile.mood_index_code

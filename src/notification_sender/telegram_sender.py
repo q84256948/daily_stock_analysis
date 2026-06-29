@@ -7,7 +7,7 @@ Telegram 发送提醒服务
 2. 通过 Telegram Bot API 发送 图片消息
 """
 import logging
-from typing import Optional
+from typing import Any, Optional
 import requests
 import time
 import re
@@ -194,7 +194,7 @@ class TelegramSender:
     def _send_plain_text_fallback(
         self,
         api_url: str,
-        payload: dict,
+        payload: dict[str, Any],
         text: str,
         *,
         timeout_seconds: Optional[float] = None,

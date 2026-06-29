@@ -11,19 +11,19 @@ from __future__ import annotations
 import glob
 import json
 import os
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.services.zhengxi import scoring
 from src.services.zhengxi.paths import fund_data_dir
 
 
-def _index() -> dict:
+def _index() -> dict[str, Any]:
     path = os.path.join(fund_data_dir(), "_index.json")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
-def list_funds() -> List[dict]:
+def list_funds() -> List[dict[str, Any]]:
     """返回 ``_index.json`` 的基金清单（代码/名称/角色/区间/类型/季度数）。"""
     return _index().get("funds", [])
 
@@ -35,7 +35,7 @@ def _fund_dir(code: str) -> Optional[str]:
     return None
 
 
-def resolve_fund(code_or_name: str) -> Optional[dict]:
+def resolve_fund(code_or_name: str) -> Optional[dict[str, Any]]:
     """代码或名称 → 基金元信息。
 
     代码精确匹配；名称模糊匹配，多命中时取最短名（通常是主代码）。
@@ -54,7 +54,7 @@ def resolve_fund(code_or_name: str) -> Optional[dict]:
     return candidates[0]
 
 
-def load_holdings(code: str) -> List[dict]:
+def load_holdings(code: str) -> List[dict[str, Any]]:
     """加载季度持仓（完整历史，按 年+季 升序）。"""
     fund_dir = _fund_dir(code)
     if not fund_dir:
@@ -68,7 +68,7 @@ def load_holdings(code: str) -> List[dict]:
     return quarters
 
 
-def latest_holdings(code: str) -> Optional[dict]:
+def latest_holdings(code: str) -> Optional[dict[str, Any]]:
     """最新一季前十大重仓 + 集中度 + 换手代理。"""
     quarters = load_holdings(code)
     if not quarters:
@@ -93,7 +93,7 @@ def latest_holdings(code: str) -> Optional[dict]:
     }
 
 
-def load_performance_summary(code: str) -> dict:
+def load_performance_summary(code: str) -> dict[str, Any]:
     """净值业绩规模摘要（精炼，剔除逐日净值序列）。
 
     覆盖：区间收益（今年/近1年/近3年/成立以来）、最大回撤、规模、
@@ -109,7 +109,7 @@ def load_performance_summary(code: str) -> dict:
         raw = json.load(fh)
 
     nav = scoring.nav_series(raw.get("累计净值走势"))
-    summary: dict = {
+    summary: dict[str, Any] = {
         "fund_name": raw.get("fS_name"),
         "fund_code": raw.get("fS_code"),
         "fee_rate": raw.get("费率"),

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Any, Optional
 """
 Supply Chain Analysis Prompts for P2.
 
@@ -104,9 +105,9 @@ def build_supply_chain_prompt(
     stock_name: str,
     industry: str = "",
     main_business: str = "",
-    concept_boards: list = None,
-    institutional_data: dict = None,
-    northbound_data: dict = None,
+    concept_boards: Optional[list[Any]] = None,
+    institutional_data: Optional[dict[str, Any]] = None,
+    northbound_data: Optional[dict[str, Any]] = None,
 ) -> str:
     """
     Build supply chain analysis prompt with data.

@@ -12,7 +12,7 @@
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.agent.tools.registry import ToolDefinition, ToolParameter
 
@@ -30,7 +30,7 @@ def _handle_search_zhengxi_views(
     match_any: bool = False,
     doc_types: Optional[List[str]] = None,
     max_results: int = 8,
-) -> dict:
+) -> dict[str, Any]:
     """检索郑希公开观点原文（季报/手记/媒体专访）。"""
     from src.services.zhengxi import corpus
 
@@ -123,7 +123,7 @@ search_zhengxi_views_tool = ToolDefinition(
 def _handle_get_zhengxi_fund_data(
     fund: str,
     sections: Optional[List[str]] = None,
-) -> dict:
+) -> dict[str, Any]:
     """查询郑希管理的某只基金的最新持仓与业绩摘要。"""
     from src.services.zhengxi import fund_data
 
@@ -198,7 +198,7 @@ _SIX_DIMENSIONS = [
 ]
 
 
-def _handle_score_fund_zhengxi(fund: str) -> dict:
+def _handle_score_fund_zhengxi(fund: str) -> dict[str, Any]:
     """收集某基金的评分证据档案 + 六维评分指引，交 LLM 逐维打分。"""
     from src.services.zhengxi import fund_data
 

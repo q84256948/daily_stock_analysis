@@ -12,6 +12,7 @@
 """
 
 import re
+from typing import Any
 
 # 美股代码正则：1-5 个大写字母，可选 .X 后缀（如 BRK.B）
 _US_STOCK_PATTERN = re.compile(r'^[A-Z]{1,5}(\.[A-Z])?$')
@@ -94,7 +95,7 @@ def is_us_stock_code(code: str) -> bool:
     return bool(_US_STOCK_PATTERN.match(normalized))
 
 
-def get_us_index_yf_symbol(code: str) -> tuple:
+def get_us_index_yf_symbol(code: str) -> tuple[Any, ...]:
     """
     获取美股指数的 Yahoo Finance 符号与中文名称。
 

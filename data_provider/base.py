@@ -379,7 +379,7 @@ class BaseFetcher(ABC):
         """
         return None
 
-    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
         """
         获取板块涨跌榜
 
@@ -391,7 +391,7 @@ class BaseFetcher(ABC):
         """
         return None
 
-    def get_concept_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict], List[Dict]]]:
+    def get_concept_rankings(self, n: int = 5) -> Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]]:
         """
         获取概念/题材涨跌榜。
 
@@ -1675,8 +1675,8 @@ class DataFetcherManager:
                 primary_src = "LongbridgeFetcher" if prefer_lb else "YfinanceFetcher"
                 secondary_src = "YfinanceFetcher" if prefer_lb else "LongbridgeFetcher"
                 market_label = "美股指数" if is_us_index else "美股"
-                primary_kw: dict = {}
-                secondary_kw: dict = {}
+                primary_kw: dict[str, Any] = {}
+                secondary_kw: dict[str, Any] = {}
             else:
                 primary_src = "LongbridgeFetcher" if prefer_lb else "AkshareFetcher"
                 secondary_src = "AkshareFetcher" if prefer_lb else "LongbridgeFetcher"
@@ -1886,7 +1886,7 @@ class DataFetcherManager:
         return False
 
     @classmethod
-    def _merge_quote_fields(cls, primary, secondary) -> list:
+    def _merge_quote_fields(cls, primary, secondary) -> list[Any]:
         """
         Copy non-None fields from *secondary* into *primary* where
         *primary* has None. Returns list of field names that were filled.
@@ -3378,7 +3378,7 @@ class DataFetcherManager:
     def _get_sector_rankings_with_meta(
             self,
             n: int = 5,
-        ) -> Tuple[List[Dict], List[Dict], List[Dict[str, Any]], str]:
+        ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], str]:
             """Get sector rankings with ordered fallback chain metadata."""
             source_chain: List[Dict[str, Any]] = []
             last_error = ""
@@ -3428,7 +3428,7 @@ class DataFetcherManager:
 
             return [], [], source_chain, last_error
 
-    def get_sector_rankings(self, n: int = 5) -> Tuple[List[Dict], List[Dict]]:
+    def get_sector_rankings(self, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """获取板块涨跌榜（自动切换数据源）"""
         # 按需求固定回退顺序：Akshare(EM) -> Akshare(Sina) -> Tushare -> Efinance
         top, bottom, _, last_error = self._get_sector_rankings_with_meta(n)
@@ -3437,7 +3437,7 @@ class DataFetcherManager:
         logger.warning(f"[板块排行] 所有数据源均失败，最终错误: {last_error}")
         return [], []
 
-    def get_concept_rankings(self, n: int = 5) -> Tuple[List[Dict], List[Dict]]:
+    def get_concept_rankings(self, n: int = 5) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """获取概念/题材涨跌榜（自动切换数据源）。"""
         last_error = ""
         for fetcher in self._fetchers:

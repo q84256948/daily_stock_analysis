@@ -8,7 +8,7 @@ Tools:
 
 import logging
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -114,7 +114,7 @@ def _fetch_trend_data(stock_code: str):
     return _merge_today_realtime_bar(stock_code, df)
 
 
-def _handle_analyze_trend(stock_code: str) -> dict:
+def _handle_analyze_trend(stock_code: str) -> dict[str, Any]:
     """Run technical trend analysis on a stock."""
     from src.stock_analyzer import StockTrendAnalyzer
 
@@ -195,7 +195,7 @@ analyze_trend_tool = ToolDefinition(
 # calculate_ma — flexible moving average calculator
 # ============================================================
 
-def _handle_calculate_ma(stock_code: str, periods: Optional[str] = None, days: int = 120) -> dict:
+def _handle_calculate_ma(stock_code: str, periods: Optional[str] = None, days: int = 120) -> dict[str, Any]:
     """Calculate moving averages for arbitrary periods from historical K-line data."""
     from src.services.history_loader import load_history_df
 
@@ -217,7 +217,7 @@ def _handle_calculate_ma(stock_code: str, periods: Optional[str] = None, days: i
 
     close = df["close"]
     current_price = float(close.iloc[-1])
-    result: dict = {
+    result: dict[str, Any] = {
         "code": stock_code,
         "source": source,
         "current_price": round(current_price, 2),
@@ -286,7 +286,7 @@ calculate_ma_tool = ToolDefinition(
 # get_volume_analysis — volume-price relationship analysis
 # ============================================================
 
-def _handle_get_volume_analysis(stock_code: str, days: int = 30) -> dict:
+def _handle_get_volume_analysis(stock_code: str, days: int = 30) -> dict[str, Any]:
     """Analyse volume-price patterns over recent trading days."""
     from src.services.history_loader import load_history_df
     import pandas as pd
@@ -402,7 +402,7 @@ get_volume_analysis_tool = ToolDefinition(
 # analyze_pattern — candlestick / chart pattern recognition
 # ============================================================
 
-def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict:
+def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict[str, Any]:
     """Detect common candlestick and chart patterns in recent price history."""
     from src.services.history_loader import load_history_df
 

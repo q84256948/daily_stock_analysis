@@ -33,7 +33,7 @@ def reset_validator() -> None:
         _validator_instance = None
 
 
-def _build_sources(config: Any) -> list:
+def _build_sources(config: Any) -> list[Any]:
     """构建数据源列表：MX 主源 + iFinD 验证源（配置 endpoint+token 时）。"""
     from data_provider.mx_data_adapter import MXSource
 

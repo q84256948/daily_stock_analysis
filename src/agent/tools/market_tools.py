@@ -8,6 +8,7 @@ Tools:
 """
 
 import logging
+from typing import Any
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
 
@@ -24,7 +25,7 @@ def _get_fetcher_manager():
 # get_market_indices
 # ============================================================
 
-def _handle_get_market_indices(region: str = "cn") -> dict:
+def _handle_get_market_indices(region: str = "cn") -> dict[str, Any]:
     """Get major market indices."""
     manager = _get_fetcher_manager()
     indices = manager.get_main_indices(region=region)
@@ -62,7 +63,7 @@ get_market_indices_tool = ToolDefinition(
 # get_sector_rankings
 # ============================================================
 
-def _handle_get_sector_rankings(top_n: int = 10) -> dict:
+def _handle_get_sector_rankings(top_n: int = 10) -> dict[str, Any]:
     """Get sector performance rankings."""
     manager = _get_fetcher_manager()
     result = manager.get_sector_rankings(n=top_n)

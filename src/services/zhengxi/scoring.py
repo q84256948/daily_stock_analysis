@@ -15,7 +15,7 @@ from typing import Any, Iterable, List, Optional, Tuple
 NavPoint = Tuple[int, float]
 
 
-def turnover_proxy(quarters: List[dict]) -> Optional[float]:
+def turnover_proxy(quarters: List[dict[str, Any]]) -> Optional[float]:
     """季度间换手代理（%）。
 
     取近 5 季，计算相邻季度前十大重仓股"重叠率之补"的平均：
@@ -46,7 +46,7 @@ def _parse_pct(value: Any) -> float:
     return 0.0
 
 
-def concentration(holdings: List[dict]) -> Optional[float]:
+def concentration(holdings: List[dict[str, Any]]) -> Optional[float]:
     """前十大重仓占净值比之和（%）。"""
     if not holdings:
         return None

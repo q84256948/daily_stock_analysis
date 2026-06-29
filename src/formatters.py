@@ -8,7 +8,7 @@
 """
 
 import re
-from typing import Callable, List, Optional
+from typing import Any, Callable, List, Optional
 
 import markdown2
 
@@ -514,7 +514,7 @@ def _flush_table_as_key_value_rows(buffer: List[str], output: List[str], *, bull
 def _protect_fenced_code_blocks(content: str) -> tuple[str, List[str]]:
     blocks: List[str] = []
 
-    def _replace(match: re.Match) -> str:
+    def _replace(match: re.Match[str]) -> str:
         blocks.append(match.group(0))
         return FENCED_CODE_BLOCK_PLACEHOLDER.format(len(blocks) - 1)
 
@@ -852,7 +852,7 @@ def _escape_telegram_non_link_markdown_chars(content: str) -> str:
 
     links: list[str] = []
 
-    def _save_link(match: re.Match) -> str:
+    def _save_link(match: re.Match[str]) -> str:
         links.append(match.group(0))
         return f"@@DSA_TELEGRAM_LINK_{len(links) - 1}@@"
 

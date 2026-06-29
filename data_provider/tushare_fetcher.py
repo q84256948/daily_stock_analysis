@@ -775,7 +775,7 @@ class TushareFetcher(BaseFetcher):
             logger.warning(f"Tushare (旧版) 获取实时行情失败 {stock_code}: {e}")
             return None
 
-    def get_main_indices(self, region: str = "cn") -> Optional[List[dict]]:
+    def get_main_indices(self, region: str = "cn") -> Optional[List[dict[str, Any]]]:
         """
         获取主要指数实时行情 (Tushare Pro)，仅支持 A 股
         """
@@ -846,7 +846,7 @@ class TushareFetcher(BaseFetcher):
 
         return None
 
-    def get_market_stats(self) -> Optional[dict]:
+    def get_market_stats(self) -> Optional[dict[str, Any]]:
         """
         获取市场涨跌统计 (Tushare Pro)
         2000积分 每天访问该接口 ts.pro_api().rt_k 两次
@@ -1053,7 +1053,7 @@ class TushareFetcher(BaseFetcher):
 
         return start_date
     
-    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[list, list]]:
+    def get_sector_rankings(self, n: int = 5) -> Optional[Tuple[list[Any], list[Any]]]:
         """
         获取行业板块涨跌榜 (Tushare Pro)
         
@@ -1062,7 +1062,7 @@ class TushareFetcher(BaseFetcher):
         2. 东财接口 (ts.pro_api().moneyflow_ind_dc)
         注意：每个接口的行业分类和板块定义不同，会导致结果两者不一致
         """
-        def _get_rank_top_n(df: pd.DataFrame, change_col: str, industry_name: str, n: int) -> Tuple[list, list]:
+        def _get_rank_top_n(df: pd.DataFrame, change_col: str, industry_name: str, n: int) -> Tuple[list[Any], list[Any]]:
             df[change_col] = pd.to_numeric(df[change_col], errors='coerce')
             df = df.dropna(subset=[change_col])
 
@@ -1194,7 +1194,7 @@ class TushareFetcher(BaseFetcher):
             logger.warning(f"[Tushare] 获取筹码分布失败 {stock_code}: {e}")
             return None
 
-    def compute_cyq_metrics(self, df: pd.DataFrame, current_price: float) -> dict:
+    def compute_cyq_metrics(self, df: pd.DataFrame, current_price: float) -> dict[str, Any]:
         """
         基于 Tushare 的筹码分布明细表 (cyq_chips) 计算常用筹码指标  
         :param df: 包含 'price' 和 'percent' 列的 DataFrame  

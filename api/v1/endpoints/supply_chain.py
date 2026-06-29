@@ -159,9 +159,9 @@ async def supply_chain_chat_stream(request: SupplyChainChatRequest):
     _require_agent(config)
     session_id = _ensure_supply_chain_session_id(request.session_id)
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue[Any] = asyncio.Queue()
 
-    def progress_callback(event: dict):
+    def progress_callback(event: dict[str, Any]):
         if event.get("type") in ("tool_start", "tool_done"):
             tool = event.get("tool", "")
             event["display_name"] = SUPPLY_CHAIN_TOOL_DISPLAY_NAMES.get(tool, tool)

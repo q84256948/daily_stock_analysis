@@ -278,18 +278,24 @@ class TestMd2Pdf:
         assert not os.path.exists(out)
 
     def test_render_failure_returns_none_not_raises(self, tmp_path, monkeypatch):
-        """渲染异常（mock pisa 报错）应优雅降级返回 None，不抛异常。"""
+        """渲染异常（mock weasyprint 报错）应优雅降级返回 None，不抛异常。
+
+        注：``src.md2pdf`` 已由 xhtml2pdf/pisa 迁移至 WeasyPrint（commit 9d47260），
+        原 ``_font_registered`` 标志与 ``xhtml2pdf.pisa`` 已不存在；此处按现行 API
+        mock ``weasyprint.HTML`` 的 ``write_pdf`` 抛错，断言优雅降级返回 None。
+        """
         import src.md2pdf as md2pdf_mod
+        md2pdf_mod._prepare_weasyprint_env()  # macOS: 先配好 brew lib 路径，下方 import weasyprint 才能成功
+        import weasyprint
 
-        class _BoomPisa:
-            err = True
+        class _BadHTML:
+            def __init__(self, *args, **kwargs) -> None:
+                pass
 
-            def CreatePDF(self, *a, **kw):  # noqa: ANN001 (mock)
+            def write_pdf(self, *args, **kwargs):  # noqa: ANN001 (mock)
                 raise RuntimeError("render boom")
 
-        # 重置字体注册标志后注入 mock pisa
-        monkeypatch.setattr(md2pdf_mod, "_font_registered", True)
-        monkeypatch.setitem(__import__("sys").modules, "xhtml2pdf", type("M", (), {"pisa": _BoomPisa()})())
+        monkeypatch.setattr(weasyprint, "HTML", _BadHTML)
 
         out = str(tmp_path / "boom.pdf")
         # 不应抛异常

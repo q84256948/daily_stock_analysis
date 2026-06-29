@@ -15,7 +15,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +475,7 @@ class SkillManager:
 
     def get_required_tools(self) -> List[str]:
         """Get all tool names required by active skills."""
-        tools: set = set()
+        tools: set[Any] = set()
         for s in self.list_active_skills():
             tools.update(s.required_tools)
         return list(tools)

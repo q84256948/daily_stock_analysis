@@ -12,7 +12,7 @@ import glob
 import json
 import os
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.services.zhengxi.paths import corpus_dir, corpus_index_path
 
@@ -20,7 +20,7 @@ from src.services.zhengxi.paths import corpus_dir, corpus_index_path
 DOC_TYPES = ("定期报告", "基金经理手记", "媒体报道")
 
 
-def load_doc(path: str) -> dict:
+def load_doc(path: str) -> dict[str, Any]:
     """解析一篇语料 markdown。
 
     语料格式::
@@ -55,7 +55,7 @@ def search_corpus(
     doc_types: Optional[List[str]] = None,
     context: int = 0,
     max_results: int = 20,
-) -> List[dict]:
+) -> List[dict[str, Any]]:
     """在郑希语料中按关键词检索段落。
 
     Args:
@@ -77,7 +77,7 @@ def search_corpus(
     from src.services.zhengxi.synonyms import expand_keywords
 
     groups = expand_keywords(keywords)
-    hits: List[dict] = []
+    hits: List[dict[str, Any]] = []
     for doc_type in types:
         for path in sorted(glob.glob(os.path.join(corpus_dir(), doc_type, "*.md"))):
             doc = load_doc(path)
@@ -108,7 +108,7 @@ def search_corpus(
     return hits[:max_results]
 
 
-def load_corpus_summary() -> dict:
+def load_corpus_summary() -> dict[str, Any]:
     """语料库概览（类型计数 + 日期范围），用于向 LLM 介绍可用语料规模。"""
     idx_path = corpus_index_path()
     if os.path.exists(idx_path):

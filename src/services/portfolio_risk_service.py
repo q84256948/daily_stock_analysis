@@ -210,7 +210,7 @@ class PortfolioRiskService:
     ) -> Dict[str, Any]:
         total_mv = float(snapshot.get("total_market_value", 0.0) or 0.0)
         sector_exposure: Dict[str, float] = {}
-        sector_symbols: Dict[str, set] = {}
+        sector_symbols: Dict[str, set[Any]] = {}
         coverage = {
             "classified_count": 0,
             "unclassified_count": 0,

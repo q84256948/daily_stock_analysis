@@ -397,7 +397,7 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
 
 # ---------- chip_structure fallback (Issue #589) ----------
 
-_CHIP_KEYS: tuple = ("profit_ratio", "avg_cost", "concentration", "chip_health")
+_CHIP_KEYS: tuple[str, ...] = ("profit_ratio", "avg_cost", "concentration", "chip_health")
 
 
 def _is_value_placeholder(v: Any) -> bool:
@@ -1549,7 +1549,7 @@ def _set_structural_hold_wording(
 
 
 def get_stock_name_multi_source(
-    stock_code: str, context: Optional[Dict] = None, data_manager=None
+    stock_code: str, context: Optional[Dict[str, Any]] = None, data_manager=None
 ) -> str:
     """
     多来源获取股票中文名称
@@ -2669,7 +2669,7 @@ class GeminiAnalyzer:
     def _call_litellm(
         self,
         prompt: str,
-        generation_config: dict,
+        generation_config: dict[str, Any],
         *,
         system_prompt: Optional[str] = None,
         stream: bool = False,

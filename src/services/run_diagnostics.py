@@ -500,7 +500,7 @@ def activate_run_diagnostic_context(
     trigger_source: Optional[str] = None,
     scope: Optional[str] = None,
     event_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
-) -> Token:
+) -> Token[Any]:
     """Activate a diagnostic context and return its reset token."""
     context = RunDiagnosticContext(
         trace_id=trace_id or query_id or task_id or build_trace_id(),
@@ -514,7 +514,7 @@ def activate_run_diagnostic_context(
     return _CURRENT_CONTEXT.set(context)
 
 
-def reset_run_diagnostic_context(token: Optional[Token]) -> None:
+def reset_run_diagnostic_context(token: Optional[Token[Any]]) -> None:
     if token is None:
         return
     try:

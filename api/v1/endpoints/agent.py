@@ -388,7 +388,7 @@ async def agent_chat_stream(request: ChatRequest):
 
     session_id = request.session_id or str(uuid.uuid4())
     loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue[Any] = asyncio.Queue()
 
     # Pass explicit skills into context for the orchestrator.
     # Direct assignment so caller-provided skills always take precedence.
@@ -397,7 +397,7 @@ async def agent_chat_stream(request: ChatRequest):
     if skills is not None:
         stream_ctx["skills"] = skills
 
-    def progress_callback(event: dict):
+    def progress_callback(event: dict[str, Any]):
         # Enrich tool events with display names
         if event.get("type") in ("tool_start", "tool_done"):
             tool = event.get("tool", "")

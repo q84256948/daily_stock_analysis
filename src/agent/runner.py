@@ -329,7 +329,7 @@ def try_parse_json(text: str) -> Optional[Dict[str, Any]]:
 _try_parse_json = try_parse_json
 
 
-def _try_repair_json(text: str, repair_fn: Callable) -> Optional[Dict[str, Any]]:
+def _try_repair_json(text: str, repair_fn: Callable[..., Any]) -> Optional[Dict[str, Any]]:
     try:
         repaired = repair_fn(text)
         obj = json.loads(repaired)
@@ -664,7 +664,7 @@ def _execute_tools(
     tool_calls,
     tool_registry: ToolRegistry,
     step: int,
-    progress_callback: Optional[Callable],
+    progress_callback: Optional[Callable[..., Any]],
     tool_calls_log: List[Dict[str, Any]],
     non_retriable_tool_results: Optional[Dict[str, str]] = None,
     tool_wait_timeout_seconds: Optional[float] = None,

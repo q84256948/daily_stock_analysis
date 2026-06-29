@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
@@ -63,7 +63,7 @@ def _conflict_error(*, error: str, message: str) -> HTTPException:
     return api_error(409, error, message)
 
 
-def _serialize_import_record(item: dict) -> PortfolioImportTradeItem:
+def _serialize_import_record(item: dict[str, Any]) -> PortfolioImportTradeItem:
     payload = dict(item)
     trade_date = payload.get("trade_date")
     if isinstance(trade_date, date):
@@ -492,7 +492,7 @@ def _resolve_position_analysis_context(
     *,
     symbol: str,
     account_id: Optional[int],
-) -> dict:
+) -> dict[str, Any]:
     target = service._normalize_symbol_for_position(symbol)
     if not target:
         raise ValueError("symbol must not be empty")

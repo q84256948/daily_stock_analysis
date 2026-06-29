@@ -91,7 +91,7 @@ class AnnualReportProvider:
             logger.warning(f"[AnnualReportProvider] Failed to fetch: {e}")
             return None
 
-    def _extract_report_content(self, announcement: Dict) -> Optional[str]:
+    def _extract_report_content(self, announcement: Dict[str, Any]) -> Optional[str]:
         """Extract text content from announcement"""
         try:
             pdf_url = announcement.get("adjunctUrl", "")

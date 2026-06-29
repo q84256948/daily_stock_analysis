@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Research Framework API endpoints."""
 
-from typing import Optional, List
+from typing import Any, List, Optional
 from collections import defaultdict
 
 from fastapi import APIRouter, HTTPException, Query
@@ -151,7 +151,7 @@ def get_concentration() -> ConcentrationResponse:
     try:
         positions = repo.get_open_positions()
 
-        sector_map: dict = defaultdict(list)
+        sector_map: dict[str, Any] = defaultdict(list)
         for pos in positions:
             market = pos.market or "unknown"
             sector_map[market].append(pos.stock_code)

@@ -12,7 +12,7 @@
 """
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 import re
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, Depends
@@ -50,7 +50,7 @@ router = APIRouter()
 ALLOWED_MIME_STR = ", ".join(ALLOWED_MIME)
 
 
-def _read_watchlist_codes(service: SystemConfigService) -> list:
+def _read_watchlist_codes(service: SystemConfigService) -> list[Any]:
     """Read STOCK_LIST codes as-is (no normalization)."""
     config_data = service.get_config(include_schema=False)
     stock_list_str = ""
@@ -61,7 +61,7 @@ def _read_watchlist_codes(service: SystemConfigService) -> list:
     return [c.strip() for c in stock_list_str.split(",") if c.strip()]
 
 
-def _write_watchlist_codes(service: SystemConfigService, codes: list) -> None:
+def _write_watchlist_codes(service: SystemConfigService, codes: list[Any]) -> None:
     """Persist stock codes to STOCK_LIST as-is (no normalization)."""
     config_data = service.get_config(include_schema=False)
     config_version = config_data.get("config_version", "")

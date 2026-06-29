@@ -325,7 +325,7 @@ def trigger_analysis(
 
 
 def _handle_async_analysis_batch(
-    stock_codes: list, request: AnalyzeRequest
+    stock_codes: list[Any], request: AnalyzeRequest
 ) -> JSONResponse:
     """
     Handle asynchronous analysis requests, including batch submission.
@@ -352,7 +352,7 @@ def _handle_async_analysis_batch(
         getattr(request, "report_language", None), default=""
     )
 
-    submit_kwargs = dict(
+    submit_kwargs: Dict[str, Any] = dict(
         stock_codes=stock_codes,
         stock_name=stock_name,
         original_query=original_query,
@@ -659,7 +659,7 @@ async def task_stream():
 
     async def event_generator():
         task_queue = get_task_queue()
-        event_queue: asyncio.Queue = asyncio.Queue()
+        event_queue: asyncio.Queue[Any] = asyncio.Queue()
 
         # 发送连接成功事件
         yield _format_sse_event("connected", {"message": "Connected to task stream"})

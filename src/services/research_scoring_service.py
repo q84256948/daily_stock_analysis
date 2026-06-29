@@ -492,7 +492,7 @@ class ResearchScoringService:
 
             registry = get_tool_registry()
             llm_adapter = LLMToolAdapter()
-            common_kwargs = dict(
+            common_kwargs: Dict[str, Any] = dict(
                 tool_registry=registry,
                 llm_adapter=llm_adapter,
             )

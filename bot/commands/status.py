@@ -10,7 +10,7 @@
 import platform
 import sys
 from datetime import datetime
-from typing import List
+from typing import Any, List
 
 from bot.commands.base import BotCommand
 from bot.models import BotMessage, BotResponse
@@ -56,7 +56,7 @@ class StatusCommand(BotCommand):
         
         return BotResponse.markdown_response(text)
     
-    def _collect_status(self, config) -> dict:
+    def _collect_status(self, config) -> dict[str, Any]:
         """收集系统状态信息"""
         from src.config import _uses_direct_env_provider, get_configured_llm_models
 
@@ -142,7 +142,7 @@ class StatusCommand(BotCommand):
         
         return status
     
-    def _format_status(self, status: dict, platform: str) -> str:
+    def _format_status(self, status: dict[str, Any], platform: str) -> str:
         """格式化状态信息"""
         # 状态图标
         def icon(enabled: bool) -> str:

@@ -8,6 +8,7 @@ Tools:
 """
 
 import logging
+from typing import Any
 
 from src.agent.tools.registry import ToolParameter, ToolDefinition
 
@@ -68,7 +69,7 @@ def _persist_news_response(
         )
 
 
-def _handle_search_stock_news(stock_code: str, stock_name: str) -> dict:
+def _handle_search_stock_news(stock_code: str, stock_name: str) -> dict[str, Any]:
     """Search latest news for a stock."""
     service = _get_search_service()
 
@@ -135,7 +136,7 @@ search_stock_news_tool = ToolDefinition(
 # search_comprehensive_intel
 # ============================================================
 
-def _handle_search_comprehensive_intel(stock_code: str, stock_name: str) -> dict:
+def _handle_search_comprehensive_intel(stock_code: str, stock_name: str) -> dict[str, Any]:
     """Multi-dimensional intelligence search."""
     service = _get_search_service()
 
