@@ -35,6 +35,7 @@ def _get_fetcher_manager():
     consecutive tool calls within the same agent run.
     """
     from data_provider import DataFetcherManager
+
     global _fetcher_manager_singleton
     if _fetcher_manager_singleton is None:
         with _fetcher_manager_lock:
@@ -53,6 +54,7 @@ def reset_fetcher_manager() -> None:
 def _get_db():
     """Lazy import for DatabaseManager."""
     from src.storage import get_db
+
     return get_db()
 
 
@@ -103,7 +105,9 @@ def _history_code_candidates(stock_code: str) -> Tuple[List[str], str]:
     return candidates, normalized_code
 
 
-def _append_history_metadata(response: dict[str, Any], metadata: Dict[str, Any]) -> dict[str, Any]:
+def _append_history_metadata(
+    response: dict[str, Any], metadata: Dict[str, Any]
+) -> dict[str, Any]:
     if metadata:
         response.update(metadata)
     return response
@@ -152,8 +156,7 @@ def _latest_annual_period(today: Optional[date] = None) -> str:
 
 
 # growth 块字段 → 交叉验证锚点名：akshare 失败时从 CV 回填这些 None 字段。
-# net_profit_yoy 无对应 CV 锚点，故不在此列（无法兜底）。
-_GROWTH_CV_FIELDS = ("revenue_yoy", "gross_margin", "roe")
+_GROWTH_CV_FIELDS = ("revenue_yoy", "gross_margin", "roe", "net_profit_yoy")
 
 
 def _backfill_growth_from_validation(
@@ -182,7 +185,9 @@ def _backfill_growth_from_validation(
                 backfilled_any = True
     if not backfilled_any:
         return block
-    if not original_had_value:  # 原数据全 None/空 → 提升到 partial（CV 兜底，非完整 bundle）
+    if (
+        not original_had_value
+    ):  # 原数据全 None/空 → 提升到 partial（CV 兜底，非完整 bundle）
         block["status"] = "partial"
     block["data"] = data
     return block
@@ -244,7 +249,9 @@ def _backfill_capital_flow(
     return out
 
 
-def _compact_portfolio_snapshot(snapshot: dict[str, Any], include_positions: bool = False, top_n: int = 5) -> dict[str, Any]:
+def _compact_portfolio_snapshot(
+    snapshot: dict[str, Any], include_positions: bool = False, top_n: int = 5
+) -> dict[str, Any]:
     """Shrink portfolio snapshot payload for default tool responses."""
     if not isinstance(snapshot, dict):
         return {}
@@ -340,6 +347,7 @@ def _compact_portfolio_risk(risk: dict[str, Any], top_n: int = 10) -> dict[str, 
 # get_realtime_quote
 # ============================================================
 
+
 def _handle_get_realtime_quote(stock_code: str) -> dict[str, Any]:
     """Get real-time stock quote."""
     manager = _get_fetcher_manager()
@@ -371,16 +379,20 @@ def _handle_get_realtime_quote(stock_code: str) -> dict[str, Any]:
         "total_mv": quote.total_mv,
         "circ_mv": quote.circ_mv,
         "change_60d": quote.change_60d,
-        "source": quote.source.value if hasattr(quote.source, 'value') else str(quote.source),
+        "source": quote.source.value
+        if hasattr(quote.source, "value")
+        else str(quote.source),
     }
     # opt-in 交叉验证：当前价主源=realtime（盘中实时），MX/iFinD 验证（开关关→无此字段）
     # quote.price 可能为 None（盘前/停牌/数据缺口），此时不注入 primary_reading，
     # validator 仍可用 MX/iFinD 单源验证 current_price（fail-open，不静默丢锚点）
     _cv = build_cross_validation_block(
-        stock_code, ["current_price"],
+        stock_code,
+        ["current_price"],
         primary_readings=(
             {"current_price": AnchorReading(source="realtime", value=quote.price)}
-            if quote.price is not None else None
+            if quote.price is not None
+            else None
         ),
     )
     if _cv:
@@ -391,7 +403,7 @@ def _handle_get_realtime_quote(stock_code: str) -> dict[str, Any]:
 get_realtime_quote_tool = ToolDefinition(
     name="get_realtime_quote",
     description="Get real-time stock quote including price, change%, volume ratio, "
-                "turnover rate, PE, PB, market cap. Returns live market data.",
+    "turnover rate, PE, PB, market cap. Returns live market data.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -408,11 +420,13 @@ get_realtime_quote_tool = ToolDefinition(
 # get_daily_history
 # ============================================================
 
+
 def _handle_get_daily_history(stock_code: str, days: int = 60) -> dict[str, Any]:
     """Get daily OHLCV history data."""
     effective_days, metadata = _normalize_history_days(days)
 
     from src.services.history_loader import load_history_df
+
     df, source = load_history_df(stock_code, days=effective_days)
 
     if df is None or df.empty:
@@ -449,23 +463,26 @@ def _handle_get_daily_history(stock_code: str, days: int = 60) -> dict[str, Any]
     if source == "db_cache" and records:
         response_code = records[-1].get("code") or response_code
 
-    return _append_history_metadata({
-        "code": response_code,
-        "source": source,
-        "cache_hit": source == "db_cache",
-        "requested_days": effective_days,
-        "effective_days": effective_days,
-        "actual_records": len(records),
-        "partial_cache": source == "db_cache" and len(records) < effective_days,
-        "total_records": len(records),
-        "data": records,
-    }, metadata)
+    return _append_history_metadata(
+        {
+            "code": response_code,
+            "source": source,
+            "cache_hit": source == "db_cache",
+            "requested_days": effective_days,
+            "effective_days": effective_days,
+            "actual_records": len(records),
+            "partial_cache": source == "db_cache" and len(records) < effective_days,
+            "total_records": len(records),
+            "data": records,
+        },
+        metadata,
+    )
 
 
 get_daily_history_tool = ToolDefinition(
     name="get_daily_history",
     description="Get daily OHLCV (open, high, low, close, volume) historical data "
-                "with MA5/MA10/MA20 indicators. Returns the last N trading days.",
+    "with MA5/MA10/MA20 indicators. Returns the last N trading days.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -488,6 +505,7 @@ get_daily_history_tool = ToolDefinition(
 # ============================================================
 # get_chip_distribution
 # ============================================================
+
 
 def _estimate_chip_from_history(
     stock_code: str, df: Any, current_price: Optional[float]
@@ -558,7 +576,9 @@ def _handle_get_chip_distribution(stock_code: str) -> dict[str, Any]:
             logger.debug("get_chip_distribution(%s) 估算降级失败: %s", stock_code, exc)
             estimated = None
         if estimated:
-            logger.info("get_chip_distribution(%s): em 源不可用，历史K线估算降级", stock_code)
+            logger.info(
+                "get_chip_distribution(%s): em 源不可用，历史K线估算降级", stock_code
+            )
             return estimated
         return {"error": f"No chip distribution data available for {stock_code}"}
 
@@ -580,8 +600,8 @@ def _handle_get_chip_distribution(stock_code: str) -> dict[str, Any]:
 get_chip_distribution_tool = ToolDefinition(
     name="get_chip_distribution",
     description="Get chip distribution analysis for a stock. Returns profit ratio, "
-                "average cost, chip concentration at 90% and 70% levels. "
-                "Useful for judging support/resistance and holding structure.",
+    "average cost, chip concentration at 90% and 70% levels. "
+    "Useful for judging support/resistance and holding structure.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -597,6 +617,7 @@ get_chip_distribution_tool = ToolDefinition(
 # ============================================================
 # get_analysis_context
 # ============================================================
+
 
 def _handle_get_analysis_context(stock_code: str) -> dict[str, Any]:
     """Get stored analysis context from database."""
@@ -621,8 +642,8 @@ def _handle_get_analysis_context(stock_code: str) -> dict[str, Any]:
 get_analysis_context_tool = ToolDefinition(
     name="get_analysis_context",
     description="Get historical analysis context from the database for a stock. "
-                "Returns today's and yesterday's OHLCV data, MA alignment status, "
-                "volume and price changes. Provides the technical data foundation.",
+    "Returns today's and yesterday's OHLCV data, MA alignment status, "
+    "volume and price changes. Provides the technical data foundation.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -638,6 +659,7 @@ get_analysis_context_tool = ToolDefinition(
 # ============================================================
 # get_stock_info
 # ============================================================
+
 
 def _fallback_valuation_from_quote(
     manager: Any, stock_code: str, valuation: Dict[str, Any]
@@ -671,8 +693,12 @@ def _handle_get_stock_info(stock_code: str) -> dict[str, Any]:
     try:
         fundamental_context = manager.get_fundamental_context(stock_code)
     except Exception as e:
-        logger.warning(f"get_stock_info via fundamental pipeline failed for {stock_code}: {e}")
-        fundamental_context = manager.build_failed_fundamental_context(stock_code, str(e))
+        logger.warning(
+            f"get_stock_info via fundamental pipeline failed for {stock_code}: {e}"
+        )
+        fundamental_context = manager.build_failed_fundamental_context(
+            stock_code, str(e)
+        )
 
     compact_context = _compact_fundamental_context(fundamental_context)
     valuation = compact_context.get("valuation", {}).get("data", {})
@@ -685,8 +711,15 @@ def _handle_get_stock_info(stock_code: str) -> dict[str, Any]:
     _cv = build_cross_validation_block(
         stock_code,
         [
-            "pe_ratio", "pb_ratio", "total_mv", "circ_mv",
-            "revenue", "net_profit", "roe", "gross_margin", "revenue_yoy",
+            "pe_ratio",
+            "pb_ratio",
+            "total_mv",
+            "circ_mv",
+            "revenue",
+            "net_profit",
+            "roe",
+            "gross_margin",
+            "revenue_yoy",
         ],
         period=_latest_annual_period(),
     )
@@ -694,7 +727,9 @@ def _handle_get_stock_info(stock_code: str) -> dict[str, Any]:
     if _cv:
         compact_context = {
             **compact_context,
-            "growth": _backfill_growth_from_validation(compact_context.get("growth"), _cv),
+            "growth": _backfill_growth_from_validation(
+                compact_context.get("growth"), _cv
+            ),
         }
 
     sector_rankings = compact_context.get("boards", {}).get("data", {})
@@ -728,8 +763,8 @@ def _handle_get_stock_info(stock_code: str) -> dict[str, Any]:
 get_stock_info_tool = ToolDefinition(
     name="get_stock_info",
     description="Get stock fundamental information: valuation, growth, earnings, institution flow, "
-                "stock sector membership (belong_boards; boards is compatibility alias) and "
-                "sector rankings. Returns a compact fundamental_context to reduce token usage.",
+    "stock sector membership (belong_boards; boards is compatibility alias) and "
+    "sector rankings. Returns a compact fundamental_context to reduce token usage.",
     parameters=[
         ToolParameter(
             name="stock_code",
@@ -745,6 +780,7 @@ get_stock_info_tool = ToolDefinition(
 # ============================================================
 # get_portfolio_snapshot
 # ============================================================
+
 
 def _handle_get_portfolio_snapshot(
     account_id: Optional[int] = None,
@@ -770,7 +806,10 @@ def _handle_get_portfolio_snapshot(
         from src.services.portfolio_risk_service import PortfolioRiskService
     except Exception as exc:
         logger.warning("get_portfolio_snapshot unavailable: %s", exc)
-        return {"status": "not_supported", "error": f"portfolio module unavailable: {exc}"}
+        return {
+            "status": "not_supported",
+            "error": f"portfolio module unavailable: {exc}",
+        }
 
     try:
         portfolio_service = PortfolioService()
@@ -781,7 +820,9 @@ def _handle_get_portfolio_snapshot(
         )
         result = {
             "status": "ok",
-            "snapshot": _compact_portfolio_snapshot(snapshot, include_positions=bool(include_positions)),
+            "snapshot": _compact_portfolio_snapshot(
+                snapshot, include_positions=bool(include_positions)
+            ),
         }
         if include_risk:
             try:
@@ -798,14 +839,17 @@ def _handle_get_portfolio_snapshot(
         return result
     except Exception as exc:
         logger.warning("get_portfolio_snapshot failed: %s", exc)
-        return {"status": "failed", "error": f"failed to fetch portfolio snapshot: {exc}"}
+        return {
+            "status": "failed",
+            "error": f"failed to fetch portfolio snapshot: {exc}",
+        }
 
 
 get_portfolio_snapshot_tool = ToolDefinition(
     name="get_portfolio_snapshot",
     description="Get portfolio snapshot summary and optional risk blocks. "
-                "Default returns compact summary for lower token usage; "
-                "set include_positions=true to include full position details.",
+    "Default returns compact summary for lower token usage; "
+    "set include_positions=true to include full position details.",
     parameters=[
         ToolParameter(
             name="account_id",
@@ -866,6 +910,7 @@ ALL_DATA_TOOLS = [
 # ============================================================
 # get_capital_flow
 # ============================================================
+
 
 def _handle_get_capital_flow(stock_code: str) -> dict[str, Any]:
     """Get main-force capital flow data for a stock."""

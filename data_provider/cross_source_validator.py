@@ -44,12 +44,16 @@ class AnchorSpec:
     field: str  # 标准字段名，如 "pe_ratio"
     mode: str  # numeric | direction
     tolerance_pct: float  # numeric 模式的相对容差（百分比，10.0 = ±10%）
-    caliber_aware: bool = True  # 是否要求口径一致才做数值比对（财务/估值 True；行情/资金 False）
+    caliber_aware: bool = (
+        True  # 是否要求口径一致才做数值比对（财务/估值 True；行情/资金 False）
+    )
 
 
 # 锚点规格表（对齐方案第三节）。key = 标准字段名。
 ANCHOR_SPECS: Dict[str, AnchorSpec] = {
-    "current_price": AnchorSpec("current_price", MODE_NUMERIC, 1.0, caliber_aware=False),
+    "current_price": AnchorSpec(
+        "current_price", MODE_NUMERIC, 1.0, caliber_aware=False
+    ),
     "pe_ratio": AnchorSpec("pe_ratio", MODE_NUMERIC, 10.0),
     "pb_ratio": AnchorSpec("pb_ratio", MODE_NUMERIC, 10.0),
     "total_mv": AnchorSpec("total_mv", MODE_NUMERIC, 5.0),
@@ -61,8 +65,14 @@ ANCHOR_SPECS: Dict[str, AnchorSpec] = {
     # caliber_aware=False 避免口径判定误伤，容差放宽（毛利率 15%、增速 20%）
     "gross_margin": AnchorSpec("gross_margin", MODE_NUMERIC, 15.0, caliber_aware=False),
     "revenue_yoy": AnchorSpec("revenue_yoy", MODE_NUMERIC, 20.0, caliber_aware=False),
+    # 净利润同比：派生指标，波动较大，容差放宽至 25%
+    "net_profit_yoy": AnchorSpec(
+        "net_profit_yoy", MODE_NUMERIC, 25.0, caliber_aware=False
+    ),
     # 融资余额：交易所每日确定数据，应严格一致
-    "margin_balance": AnchorSpec("margin_balance", MODE_NUMERIC, 0.5, caliber_aware=False),
+    "margin_balance": AnchorSpec(
+        "margin_balance", MODE_NUMERIC, 0.5, caliber_aware=False
+    ),
     # 主力净流入：东财/同花顺算法口径不同，比对方向非数值
     "main_inflow": AnchorSpec("main_inflow", MODE_DIRECTION, 0.0, caliber_aware=False),
 }
@@ -134,7 +144,9 @@ class SourceAdapter(Protocol):
 
 # 股票代码白名单（code 经自然语言查询送外部 API，拒绝非法格式防注入 + 防配额浪费）。
 # A 股 6 位数字、港股 5 位数字、美股 1-6 位字母、可带 SH/SZ/HK 前缀或 .SH 后缀。
-_CODE_RE = re.compile(r"^(?:SH|SZ|BJ|sh|sz|bj)?\d{5,6}$|^(?:HK|hk)?\d{5}$|^[A-Za-z]{1,6}$|^\d{5,6}\.(SH|SZ|BJ|HK)$")
+_CODE_RE = re.compile(
+    r"^(?:SH|SZ|BJ|sh|sz|bj)?\d{5,6}$|^(?:HK|hk)?\d{5}$|^[A-Za-z]{1,6}$|^\d{5,6}\.(SH|SZ|BJ|HK)$"
+)
 
 
 def _is_valid_code(code: str) -> bool:
@@ -367,7 +379,9 @@ class CrossSourceValidator:
         max_workers: int = 4,
     ) -> None:
         self._sources: Tuple[SourceAdapter, ...] = tuple(sources)
-        self._specs: Dict[str, AnchorSpec] = dict(specs) if specs else dict(ANCHOR_SPECS)
+        self._specs: Dict[str, AnchorSpec] = (
+            dict(specs) if specs else dict(ANCHOR_SPECS)
+        )
         self._max_workers = max(1, int(max_workers))
 
     def verify(
@@ -417,7 +431,12 @@ class CrossSourceValidator:
             try:
                 return source.read(code, field, period)
             except Exception as exc:  # noqa: BLE001 — fail-open：源异常不影响其他源
-                logger.debug("[CrossValidate] source %s read %s failed: %s", source.name, field, exc)
+                logger.debug(
+                    "[CrossValidate] source %s read %s failed: %s",
+                    source.name,
+                    field,
+                    exc,
+                )
                 return None
 
         if len(self._sources) == 1:

@@ -651,6 +651,13 @@ def setup_env(override: bool = False):
         env_path = Path(__file__).parent.parent / ".env"
     load_dotenv(dotenv_path=env_path, override=override)
 
+    # 清除 ALL_PROXY (socks 代理)，防止 MCP/SSL 连接被代理干扰
+    # MCP 客户端不支持 socks 代理，会抛出 "Unknown scheme for proxy URL"
+    os.environ.pop("ALL_PROXY", None)
+    os.environ.pop("all_proxy", None)
+    os.environ.pop("SOCKS_PROXY", None)
+    os.environ.pop("socks_proxy", None)
+
 
 @dataclass
 class Config:
@@ -1261,6 +1268,14 @@ class Config:
                 os.environ["HTTPS_PROXY"] = https_proxy
                 os.environ["https_proxy"] = https_proxy
 
+            # 清除 ALL_PROXY (socks 代理)，防止与国内数据源 HTTP 长连接冲突
+            # socks 代理对东财等站点的 Server-Sent Events / chunked transfer 不兼容
+            os.environ["ALL_PROXY"] = ""
+            os.environ["all_proxy"] = ""
+            # 同时清除可能存在的 SOCKS_PROXY 变量
+            for var in ["SOCKS_PROXY", "socks_proxy", "SOCKS5_PROXY", "socks5_proxy"]:
+                os.environ.pop(var, None)
+
         # 解析自选股列表（逗号分隔，统一为大写 Issue #355）
         stock_list_str = cls._resolve_env_value(
             "STOCK_LIST",
@@ -1610,7 +1625,9 @@ class Config:
             mx_apikey=os.getenv("MX_APIKEY") or None,
             ifind_mcp_endpoint=os.getenv("IFIND_MCP_ENDPOINT") or None,
             ifind_mcp_token=os.getenv("IFIND_MCP_TOKEN") or None,
-            ifind_mcp_timeout_seconds=float(os.getenv("IFIND_MCP_TIMEOUT_SECONDS") or "8.0"),
+            ifind_mcp_timeout_seconds=float(
+                os.getenv("IFIND_MCP_TIMEOUT_SECONDS") or "8.0"
+            ),
             deep_research_cross_validate=parse_env_bool(
                 os.getenv("DEEP_RESEARCH_CROSS_VALIDATE"), default=False
             ),

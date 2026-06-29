@@ -36,11 +36,27 @@ logger = logging.getLogger(__name__)
 # Phase 0 实测：自然语言 query + Markdown 表格返回，单位换算由 _safe_float 处理
 _IFIND_ANCHOR_QUERIES: Dict[str, Tuple[str, str, List[str]]] = {
     "current_price": ("get_stock_info", "{code} 收盘价", ["收盘价"]),
-    "pe_ratio": ("get_stock_info", "{code} 市盈率PE TTM", ["市盈率(PE,TTM)", "市盈率PE(TTM)"]),
-    "pb_ratio": ("get_stock_info", "{code} 市净率PB", ["市净率(PB,最新)", "市净率PB(最新)"]),
+    "pe_ratio": (
+        "get_stock_info",
+        "{code} 市盈率PE TTM",
+        ["市盈率(PE,TTM)", "市盈率PE(TTM)"],
+    ),
+    "pb_ratio": (
+        "get_stock_info",
+        "{code} 市净率PB",
+        ["市净率(PB,最新)", "市净率PB(最新)"],
+    ),
     "total_mv": ("get_stock_info", "{code} 总市值", ["总市值（单位：元）", "总市值"]),
-    "circ_mv": ("get_stock_info", "{code} 流通市值", ["流通市值（单位：元）", "流通市值"]),
-    "revenue": ("get_stock_financials", "{code} {period} 营业收入", ["营业收入（单位：元）", "营业收入"]),
+    "circ_mv": (
+        "get_stock_info",
+        "{code} 流通市值",
+        ["流通市值（单位：元）", "流通市值"],
+    ),
+    "revenue": (
+        "get_stock_financials",
+        "{code} {period} 营业收入",
+        ["营业收入（单位：元）", "营业收入"],
+    ),
     "net_profit": (
         "get_stock_financials",
         "{code} {period} 归属于母公司所有者的净利润",
@@ -49,7 +65,12 @@ _IFIND_ANCHOR_QUERIES: Dict[str, Tuple[str, str, List[str]]] = {
     "roe": (
         "get_stock_financials",
         "{code} {period} 净资产收益率ROE",
-        ["净资产收益率ROE(加权,公布值)（单位：%）", "净资产收益率ROE(加权,公布值)"],
+        [
+            "净资产收益率ROE（单位：%）",
+            "净资产收益率ROE(加权,公布值)（单位：%）",
+            "净资产收益率ROE(加权,公布值)",
+            "净资产收益率ROE",
+        ],
     ),
     # 毛利率 / 营收同比：与 MX 互补，给 growth 块提供第二源（best-effort，受 period 影响）
     "gross_margin": (
@@ -60,18 +81,49 @@ _IFIND_ANCHOR_QUERIES: Dict[str, Tuple[str, str, List[str]]] = {
     "revenue_yoy": (
         "get_stock_financials",
         "{code} {period} 营业收入同比增长率",
-        ["营业收入同比增长率（单位：%）", "营业收入同比增长率", "营业收入同比增长", "营收同比增长"],
+        [
+            "营业收入同比增长率（单位：%）",
+            "营业收入同比增长率",
+            "营业收入同比增长",
+            "营收同比增长",
+        ],
     ),
-    "margin_balance": ("get_stock_performance", "{code} 融资余额", ["融资余额（单位：元）", "融资余额"]),
+    "net_profit_yoy": (
+        "get_stock_financials",
+        "{code} {period} 净利润同比",
+        [
+            "归属母公司股东的净利润(同比增长率)（单位：%）",
+            "归属母公司股东的净利润(同比增长率)",
+            "净利润(同比增长率)（单位：%）",
+            "净利润(同比增长率)",
+        ],
+    ),
+    "margin_balance": (
+        "get_stock_performance",
+        "{code} 融资余额",
+        ["融资余额（单位：元）", "融资余额"],
+    ),
     # 主力净流入：「股」单位量级异常（Phase 0：-37631 股 vs MX -8.699亿），
     # direction 验证可参考方向一致性，量级比对仅供参考
     "main_inflow": (
         "get_stock_performance",
         "{code} 主力净流入额",
-        ["主力净流入额（单位：万元）", "主力净流入额（单位：元）", "主力净流入额", "主力净流入量（单位：股）"],
+        [
+            "主力净流入额（单位：万元）",
+            "主力净流入额（单位：元）",
+            "主力净流入额",
+            "主力净流入量（单位：股）",
+        ],
     ),
 }
-_PERIOD_FIELDS = {"revenue", "net_profit", "roe", "gross_margin", "revenue_yoy"}
+_PERIOD_FIELDS = {
+    "revenue",
+    "net_profit",
+    "roe",
+    "gross_margin",
+    "revenue_yoy",
+    "net_profit_yoy",
+}
 # iFinD PE/PB 口径
 _CALIBERS: Dict[str, Optional[str]] = {
     "pe_ratio": "TTM",
@@ -82,6 +134,7 @@ _CALIBERS: Dict[str, Optional[str]] = {
 # ------------------------------------------------------------------
 # 解析（纯函数，100% 可单测）
 # ------------------------------------------------------------------
+
 
 def _parse_ifind_markdown_table(text: str) -> Dict[str, str]:
     """从 iFinD ``data.answer`` Markdown 表格中提取「表头: 值」映射。
@@ -104,7 +157,12 @@ def _parse_ifind_markdown_table(text: str) -> Dict[str, str]:
     result: Dict[str, str] = {}
     for row in lines[sep_idx + 1 :]:
         cells = [c.strip() for c in row.split("|") if c.strip()]
-        if not cells or cells[0] in ("# 指标参数信息", "# 行情衍生指标日期提示", "注:", ""):
+        if not cells or cells[0] in (
+            "# 指标参数信息",
+            "# 行情衍生指标日期提示",
+            "注:",
+            "",
+        ):
             continue  # pragma: no cover — Phase 0 响应参数段在表格外，数据行先触发 break
         for i, cell in enumerate(cells):
             if i < len(headers):
@@ -135,7 +193,11 @@ def _parse_ifind_markdown_series(
         return []
     headers = [h.strip() for h in lines[0].split("|") if h.strip()]
     val_idx = next(
-        (i for i, h in enumerate(headers) if value_kw in h and "量" not in h and "股" not in h),
+        (
+            i
+            for i, h in enumerate(headers)
+            if value_kw in h and "量" not in h and "股" not in h
+        ),
         None,
     )
     date_idx = next((i for i, h in enumerate(headers) if date_kw in h), None)
@@ -144,7 +206,11 @@ def _parse_ifind_markdown_series(
     series: List[Tuple[str, float]] = []
     for row in lines[sep_idx + 1 :]:
         cells = [c.strip() for c in row.split("|") if c.strip()]
-        if not cells or cells[0].startswith("#") or len(cells) <= max(val_idx, date_idx):
+        if (
+            not cells
+            or cells[0].startswith("#")
+            or len(cells) <= max(val_idx, date_idx)
+        ):
             continue
         val = _safe_float(cells[val_idx])
         if val is None:
@@ -168,13 +234,17 @@ def _safe_float(value: Any) -> Optional[float]:
     s = s.replace("元", "")  # 移除单位词「元」（保留量级单位「亿/万」）
     # 中文金额单位（最长匹配，顺序：万亿>千亿>百亿>十亿>亿>万）
     CN_UNIT_FACTORS: Dict[str, float] = {
-        "万亿": 1e12, "千亿": 1e11, "百亿": 1e10, "十亿": 1e9,
-        "亿": 1e8, "万": 1e4,
+        "万亿": 1e12,
+        "千亿": 1e11,
+        "百亿": 1e10,
+        "十亿": 1e9,
+        "亿": 1e8,
+        "万": 1e4,
     }
     factor = 1.0
     for unit, mult in CN_UNIT_FACTORS.items():
         if s.endswith(unit):
-            s = s[:-len(unit)].strip()
+            s = s[: -len(unit)].strip()
             factor = mult
             break
     try:
@@ -342,7 +412,9 @@ class IfindFetcher:
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                result = await session.call_tool("get_stock_performance", {"query": query})
+                result = await session.call_tool(
+                    "get_stock_performance", {"query": query}
+                )
         content = getattr(result, "content", None) or []
         raw_text = next(
             (getattr(b, "text", "") for b in content if getattr(b, "text", None)), ""
@@ -351,7 +423,11 @@ class IfindFetcher:
             resp_json = json.loads(raw_text)
         except (json.JSONDecodeError, TypeError, ValueError):
             return None
-        answer = resp_json.get("data", {}).get("answer", "") if isinstance(resp_json, dict) else ""
+        answer = (
+            resp_json.get("data", {}).get("answer", "")
+            if isinstance(resp_json, dict)
+            else ""
+        )
         return _parse_ifind_markdown_series(answer, "主力净流入额")
 
 

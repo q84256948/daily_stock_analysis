@@ -35,9 +35,19 @@ def _mx_response(rows):
         name_map[key] = label
     return {
         "status": 0,
-        "data": {"data": {"searchDataResultDTO": {"dataTableDTOList": [
-            {"entityName": "贵州茅台(600519.SH)", "table": table, "nameMap": name_map}
-        ]}}},
+        "data": {
+            "data": {
+                "searchDataResultDTO": {
+                    "dataTableDTOList": [
+                        {
+                            "entityName": "贵州茅台(600519.SH)",
+                            "table": table,
+                            "nameMap": name_map,
+                        }
+                    ]
+                }
+            }
+        },
     }
 
 
@@ -151,7 +161,9 @@ class TestPickGrowthValue(unittest.TestCase):
 
     def test_skip_unparseable(self):
         # 命中增长率列但值不可解析 → 跳过，全不可解析返回 None
-        self.assertIsNone(_pick_growth_value({"营业收入(同比增长率)": "-"}, ["营业收入"]))
+        self.assertIsNone(
+            _pick_growth_value({"营业收入(同比增长率)": "-"}, ["营业收入"])
+        )
 
     def test_empty_bundle(self):
         self.assertIsNone(_pick_growth_value({}, ["营业收入"]))
@@ -186,7 +198,9 @@ class TestPost(unittest.TestCase):
 
 class TestExtractFirstTableRow(unittest.TestCase):
     def test_normal(self):
-        out = _extract_first_table_row(_mx_response([("最新价", "1685"), ("总市值", "2e12")]))
+        out = _extract_first_table_row(
+            _mx_response([("最新价", "1685"), ("总市值", "2e12")])
+        )
         self.assertEqual(out["最新价"], "1685")
         self.assertEqual(out["总市值"], "2e12")
         self.assertIn("_mx_entity", out)
@@ -198,27 +212,59 @@ class TestExtractFirstTableRow(unittest.TestCase):
         self.assertEqual(_extract_first_table_row({"status": 1, "data": {}}), {})
 
     def test_no_data_table_returns_empty(self):
-        self.assertEqual(_extract_first_table_row({"status": 0, "data": {"data": {}}}), {})
+        self.assertEqual(
+            _extract_first_table_row({"status": 0, "data": {"data": {}}}), {}
+        )
 
     def test_table_not_dict_returns_empty(self):
-        r = {"status": 0, "data": {"data": {"searchDataResultDTO": {"dataTableDTOList": [
-            {"table": "oops"}]}}}}
+        r = {
+            "status": 0,
+            "data": {
+                "data": {
+                    "searchDataResultDTO": {"dataTableDTOList": [{"table": "oops"}]}
+                }
+            },
+        }
         self.assertEqual(_extract_first_table_row(r), {})
 
     def test_name_map_list_fallback(self):
         # nameMap 退化为 list 时按 index 转 dict；row 类 key 匹配不上则回退原 key
-        r = {"status": 0, "data": {"data": {"searchDataResultDTO": {"dataTableDTOList": [
-            {"table": {"headName": ["a"], "row1": ["99"]}, "nameMap": ["PE"]}
-        ]}}}}
+        r = {
+            "status": 0,
+            "data": {
+                "data": {
+                    "searchDataResultDTO": {
+                        "dataTableDTOList": [
+                            {
+                                "table": {"headName": ["a"], "row1": ["99"]},
+                                "nameMap": ["PE"],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
         out = _extract_first_table_row(r)
         self.assertEqual(out["_mx_entity"], "")
         self.assertEqual(out["row1"], "99")
 
     def test_non_list_value_branch(self):
         # values 非 list 时直接赋值（防御性 else 分支）
-        r = {"status": 0, "data": {"data": {"searchDataResultDTO": {"dataTableDTOList": [
-            {"table": {"headName": ["a"], "row1": "99"}, "nameMap": {"row1": "PE"}}
-        ]}}}}
+        r = {
+            "status": 0,
+            "data": {
+                "data": {
+                    "searchDataResultDTO": {
+                        "dataTableDTOList": [
+                            {
+                                "table": {"headName": ["a"], "row1": "99"},
+                                "nameMap": {"row1": "PE"},
+                            }
+                        ]
+                    }
+                }
+            },
+        }
         self.assertEqual(_extract_first_table_row(r), {"_mx_entity": "", "PE": "99"})
 
     def test_non_dict_returns_empty(self):
@@ -275,7 +321,9 @@ class TestMXClient(unittest.TestCase):
 
     def test_query_capital(self):
         c = MXClient(api_key="k")
-        with patch.object(c, "query", return_value=_mx_response([("主力净流入额", "2e8")])):
+        with patch.object(
+            c, "query", return_value=_mx_response([("主力净流入额", "2e8")])
+        ):
             out = c.query_capital("600519")
         self.assertEqual(out["主力净流入额"], "2e8")
 
@@ -286,8 +334,11 @@ class TestMXSource(unittest.TestCase):
         self.assertIsNone(src.read("600519", "pe_ratio"))
 
     def test_read_snapshot_field(self):
-        src = MXSource(client=_FakeMXClient(
-            available=True, snapshot={"市盈率": "30.5", "最新价": "1685"}))
+        src = MXSource(
+            client=_FakeMXClient(
+                available=True, snapshot={"市盈率": "30.5", "最新价": "1685"}
+            )
+        )
         r = src.read("600519", "pe_ratio")
         self.assertIsInstance(r, AnchorReading)
         self.assertEqual(r.value, 30.5)
@@ -295,15 +346,17 @@ class TestMXSource(unittest.TestCase):
         self.assertEqual(r.source, "mx")
 
     def test_read_financial_field_carries_period(self):
-        src = MXSource(client=_FakeMXClient(
-            available=True, financials={"营业收入": "1e10"}))
+        src = MXSource(
+            client=_FakeMXClient(available=True, financials={"营业收入": "1e10"})
+        )
         r = src.read("600519", "revenue", period="2024年报")
         self.assertEqual(r.value, 1e10)
         self.assertEqual(r.period, "2024年报")
 
     def test_read_capital_field(self):
-        src = MXSource(client=_FakeMXClient(
-            available=True, capital={"主力净流入额": "2e8"}))
+        src = MXSource(
+            client=_FakeMXClient(available=True, capital={"主力净流入额": "2e8"})
+        )
         r = src.read("600519", "main_inflow")
         self.assertEqual(r.value, 2e8)
 
@@ -351,8 +404,11 @@ class TestMXSourceGrowthFields(unittest.TestCase):
     """MXSource 对 gross_margin / revenue_yoy 的读取（financials bundle 含对应列）。"""
 
     def test_read_gross_margin(self):
-        src = MXSource(client=_FakeMXClient(
-            available=True, financials={"毛利率": "52.3", "营业收入": "4.66亿"}))
+        src = MXSource(
+            client=_FakeMXClient(
+                available=True, financials={"毛利率": "52.3", "营业收入": "4.66亿"}
+            )
+        )
         r = src.read("688486", "gross_margin", period="2024年报")
         self.assertIsInstance(r, AnchorReading)
         self.assertAlmostEqual(r.value, 52.3)
@@ -360,18 +416,48 @@ class TestMXSourceGrowthFields(unittest.TestCase):
 
     def test_read_revenue_yoy_from_growth_column(self):
         # financials 同时含绝对值与同比增长率列；revenue_yoy 取增长率列
-        src = MXSource(client=_FakeMXClient(
-            available=True,
-            financials={"营业收入": "4.66亿", "营业收入(同比增长率)": "18.5"}))
+        src = MXSource(
+            client=_FakeMXClient(
+                available=True,
+                financials={"营业收入": "4.66亿", "营业收入(同比增长率)": "18.5"},
+            )
+        )
         r = src.read("688486", "revenue_yoy", period="2024年报")
         self.assertIsInstance(r, AnchorReading)
         self.assertAlmostEqual(r.value, 18.5)
 
     def test_read_revenue_yoy_missing_returns_none(self):
         # bundle 无同比增长率列 → None（不会误取绝对值）
-        src = MXSource(client=_FakeMXClient(
-            available=True, financials={"营业收入": "4.66亿"}))
+        src = MXSource(
+            client=_FakeMXClient(available=True, financials={"营业收入": "4.66亿"})
+        )
         self.assertIsNone(src.read("688486", "revenue_yoy", period="2024年报"))
+
+    def test_read_net_profit_yoy_from_growth_column(self):
+        # financials 含净利润同比增长率列；net_profit_yoy 取增长率列
+        src = MXSource(
+            client=_FakeMXClient(
+                available=True,
+                financials={
+                    "归属于母公司股东的净利润": "8.6亿",
+                    "归属母公司股东的净利润同比增长率": "15.38",
+                },
+            )
+        )
+        r = src.read("600519", "net_profit_yoy", period="2024年报")
+        self.assertIsInstance(r, AnchorReading)
+        self.assertAlmostEqual(r.value, 15.38)
+        self.assertEqual(r.source, "mx")
+        self.assertEqual(r.period, "2024年报")
+
+    def test_read_net_profit_yoy_missing_returns_none(self):
+        # bundle 无净利润同比增长率列 → None
+        src = MXSource(
+            client=_FakeMXClient(
+                available=True, financials={"归属于母公司股东的净利润": "8.6亿"}
+            )
+        )
+        self.assertIsNone(src.read("600519", "net_profit_yoy", period="2024年报"))
 
 
 class TestMXSourcePeriodFallback(unittest.TestCase):
@@ -379,8 +465,13 @@ class TestMXSourcePeriodFallback(unittest.TestCase):
 
     def test_period_hit_returns_period(self):
         # 指期 bundle 含该字段 → 返回 (val, period)
-        client = _PeriodFakeMXClient(available=True, financials_by_period={
-            "2024年报": {"营业收入": "1e10"}, None: {"营业收入": "9e9"}})
+        client = _PeriodFakeMXClient(
+            available=True,
+            financials_by_period={
+                "2024年报": {"营业收入": "1e10"},
+                None: {"营业收入": "9e9"},
+            },
+        )
         src = MXSource(client=client)
         r = src.read("600519", "revenue", period="2024年报")
         self.assertAlmostEqual(r.value, 1e10)
@@ -388,8 +479,10 @@ class TestMXSourcePeriodFallback(unittest.TestCase):
 
     def test_period_miss_falls_back_to_latest(self):
         # 指期 bundle 不含该字段 → 回退 None(latest)，period=None
-        client = _PeriodFakeMXClient(available=True, financials_by_period={
-            "2025年报": {}, None: {"营业收入": "9e9"}})
+        client = _PeriodFakeMXClient(
+            available=True,
+            financials_by_period={"2025年报": {}, None: {"营业收入": "9e9"}},
+        )
         src = MXSource(client=client)
         r = src.read("600519", "revenue", period="2025年报")
         self.assertAlmostEqual(r.value, 9e9)
@@ -399,8 +492,9 @@ class TestMXSourcePeriodFallback(unittest.TestCase):
 
     def test_no_period_queries_latest_once(self):
         # period=None → 直接查 latest，只一次查询
-        client = _PeriodFakeMXClient(available=True, financials_by_period={
-            None: {"营业收入": "9e9"}})
+        client = _PeriodFakeMXClient(
+            available=True, financials_by_period={None: {"营业收入": "9e9"}}
+        )
         src = MXSource(client=client)
         r = src.read("600519", "revenue", period=None)
         self.assertAlmostEqual(r.value, 9e9)

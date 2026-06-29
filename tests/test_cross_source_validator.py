@@ -68,9 +68,9 @@ class TestPureFunctions(unittest.TestCase):
 
     def test_magnitude_tier(self):
         self.assertEqual(_magnitude_tier(0), 0)
-        self.assertEqual(_magnitude_tier(2.3e8), 8)   # 亿级
-        self.assertEqual(_magnitude_tier(5e7), 7)     # 千万级
-        self.assertEqual(_magnitude_tier(1e4), 4)     # 万级
+        self.assertEqual(_magnitude_tier(2.3e8), 8)  # 亿级
+        self.assertEqual(_magnitude_tier(5e7), 7)  # 千万级
+        self.assertEqual(_magnitude_tier(1e4), 4)  # 万级
         self.assertEqual(_magnitude_tier(-3e9), 9)
 
 
@@ -79,47 +79,60 @@ class TestJudgeNumeric(unittest.TestCase):
         return AnchorSpec("pe_ratio", MODE_NUMERIC, tol, caliber_aware=caliber_aware)
 
     def test_high_when_within_tolerance(self):
-        v = _judge_numeric(_reading("mx", 30.5, "TTM", "2024年报"),
-                           _reading("ifind", 30.4, "TTM", "2024年报"), self._spec())
+        v = _judge_numeric(
+            _reading("mx", 30.5, "TTM", "2024年报"),
+            _reading("ifind", 30.4, "TTM", "2024年报"),
+            self._spec(),
+        )
         self.assertEqual(v.confidence, "high")
         self.assertTrue(v.agreed)
         self.assertEqual(v.sources, ("mx", "ifind"))
 
     def test_low_when_over_tolerance(self):
-        v = _judge_numeric(_reading("mx", 30.0), _reading("ifind", 40.0), self._spec(tol=10.0))
+        v = _judge_numeric(
+            _reading("mx", 30.0), _reading("ifind", 40.0), self._spec(tol=10.0)
+        )
         self.assertEqual(v.confidence, "low")
         self.assertFalse(v.agreed)
         self.assertIn("数据冲突", v.note)
 
     def test_medium_when_caliber_mismatch(self):
-        v = _judge_numeric(_reading("mx", 30.0, "TTM"),
-                           _reading("ifind", 30.0, "static"), self._spec())
+        v = _judge_numeric(
+            _reading("mx", 30.0, "TTM"), _reading("ifind", 30.0, "static"), self._spec()
+        )
         self.assertEqual(v.confidence, "medium")
         self.assertIn("口径不一致", v.note)
 
     def test_medium_when_period_mismatch(self):
-        v = _judge_numeric(_reading("mx", 100, period="2024年报"),
-                           _reading("ifind", 100, period="2024三季报"), self._spec())
+        v = _judge_numeric(
+            _reading("mx", 100, period="2024年报"),
+            _reading("ifind", 100, period="2024三季报"),
+            self._spec(),
+        )
         self.assertEqual(v.confidence, "medium")
         self.assertIn("报告期不一致", v.note)
 
     def test_caliber_check_skipped_when_not_aware(self):
         # 行情类 caliber_aware=False：口径不同仍走数值比对
         spec = AnchorSpec("current_price", MODE_NUMERIC, 1.0, caliber_aware=False)
-        v = _judge_numeric(_reading("realtime", 100.0, "spot"),
-                           _reading("ifind", 100.5, "spot"), spec)
+        v = _judge_numeric(
+            _reading("realtime", 100.0, "spot"), _reading("ifind", 100.5, "spot"), spec
+        )
         self.assertEqual(v.confidence, "high")
 
     def test_caliber_check_skipped_when_one_side_none(self):
         # 一方无口径：不触发口径检查，继续数值比对
-        v = _judge_numeric(_reading("mx", 30.0, "TTM"),
-                           _reading("ifind", 30.1, None), self._spec())
+        v = _judge_numeric(
+            _reading("mx", 30.0, "TTM"), _reading("ifind", 30.1, None), self._spec()
+        )
         self.assertEqual(v.confidence, "high")
 
 
 class TestJudgeDirection(unittest.TestCase):
     def test_high_same_direction_same_tier(self):
-        v = _judge_direction(_reading("mx", 2.3e8), _reading("ifind", 1.9e8), "main_inflow")
+        v = _judge_direction(
+            _reading("mx", 2.3e8), _reading("ifind", 1.9e8), "main_inflow"
+        )
         self.assertEqual(v.confidence, "high")
         self.assertTrue(v.agreed)
         self.assertEqual(v.caliber, "方向比对")
@@ -130,13 +143,17 @@ class TestJudgeDirection(unittest.TestCase):
         self.assertIn("量级差异大", v.note)
 
     def test_low_opposite_direction(self):
-        v = _judge_direction(_reading("mx", 2.3e8), _reading("ifind", -5e7), "main_inflow")
+        v = _judge_direction(
+            _reading("mx", 2.3e8), _reading("ifind", -5e7), "main_inflow"
+        )
         self.assertEqual(v.confidence, "low")
         self.assertFalse(v.agreed)
         self.assertIn("方向冲突", v.note)
 
     def test_both_negative_same_direction(self):
-        v = _judge_direction(_reading("mx", -2e8), _reading("ifind", -1.8e8), "main_inflow")
+        v = _judge_direction(
+            _reading("mx", -2e8), _reading("ifind", -1.8e8), "main_inflow"
+        )
         self.assertEqual(v.confidence, "high")
         self.assertIn("净流出", v.note)
 
@@ -186,18 +203,23 @@ class TestCrossSourceValidator(unittest.TestCase):
 
     def test_verify_invalid_code_returns_missing(self):
         # 非法 code（注入/垃圾输入）→ missing（不送外部 API）
-        v = CrossSourceValidator(sources=[_FakeSource("mx", {"pe_ratio": _reading("mx", 30.0)})])
+        v = CrossSourceValidator(
+            sources=[_FakeSource("mx", {"pe_ratio": _reading("mx", 30.0)})]
+        )
         result = v.verify("600519; DROP TABLE", "pe_ratio")
         self.assertEqual(result.confidence, "low")
         self.assertIn("所有数据源", result.note)
 
     def test_verify_empty_code_returns_missing(self):
-        v = CrossSourceValidator(sources=[_FakeSource("mx", {"pe_ratio": _reading("mx", 30.0)})])
+        v = CrossSourceValidator(
+            sources=[_FakeSource("mx", {"pe_ratio": _reading("mx", 30.0)})]
+        )
         result = v.verify("", "pe_ratio")
         self.assertEqual(result.confidence, "low")
 
     def test_is_valid_code_whitelist(self):
         from data_provider.cross_source_validator import _is_valid_code
+
         # 合法
         self.assertTrue(_is_valid_code("600519"))
         self.assertTrue(_is_valid_code("000001"))
@@ -233,7 +255,9 @@ class TestCrossSourceValidator(unittest.TestCase):
 
     def test_verify_two_sources_numeric_high(self):
         mx = _FakeSource("mx", {"pe_ratio": _reading("mx", 30.0, "TTM", "2024年报")})
-        ifind = _FakeSource("ifind", {"pe_ratio": _reading("ifind", 30.3, "TTM", "2024年报")})
+        ifind = _FakeSource(
+            "ifind", {"pe_ratio": _reading("ifind", 30.3, "TTM", "2024年报")}
+        )
         v = CrossSourceValidator(sources=[mx, ifind])
         result = v.verify("600519", "pe_ratio")
         self.assertEqual(result.confidence, "high")
@@ -248,7 +272,9 @@ class TestCrossSourceValidator(unittest.TestCase):
 
     def test_verify_period_passed_through(self):
         mx = _FakeSource("mx", {"revenue": _reading("mx", 1e10, None, "2024年报")})
-        ifind = _FakeSource("ifind", {"revenue": _reading("ifind", 1.02e10, None, "2024年报")})
+        ifind = _FakeSource(
+            "ifind", {"revenue": _reading("ifind", 1.02e10, None, "2024年报")}
+        )
         v = CrossSourceValidator(sources=[mx, ifind])
         result = v.verify("600519", "revenue", period="2024年报")
         self.assertEqual(result.confidence, "high")
@@ -282,9 +308,15 @@ class TestCrossSourceValidator(unittest.TestCase):
 class TestToCompact(unittest.TestCase):
     def test_full_payload(self):
         v = AnchorVerification(
-            field="pe_ratio", value=30.5, confidence="high",
-            sources=("mx", "ifind"), agreed=True,
-            discrepancy_pct=0.3, caliber="TTM", period="2024年报", note="已验证",
+            field="pe_ratio",
+            value=30.5,
+            confidence="high",
+            sources=("mx", "ifind"),
+            agreed=True,
+            discrepancy_pct=0.3,
+            caliber="TTM",
+            period="2024年报",
+            note="已验证",
         )
         payload = v.to_compact()
         self.assertEqual(payload["v"], 30.5)
@@ -297,8 +329,11 @@ class TestToCompact(unittest.TestCase):
 
     def test_minimal_payload_omits_optionals(self):
         v = AnchorVerification(
-            field="x", value=1.0, confidence="low",
-            sources=(), agreed=False,
+            field="x",
+            value=1.0,
+            confidence="low",
+            sources=(),
+            agreed=False,
         )
         payload = v.to_compact()
         self.assertEqual(set(payload.keys()), {"v", "conf", "src"})
@@ -307,9 +342,19 @@ class TestToCompact(unittest.TestCase):
 class TestAnchorSpecs(unittest.TestCase):
     def test_anchor_specs_complete(self):
         expected = {
-            "current_price", "pe_ratio", "pb_ratio", "total_mv", "circ_mv",
-            "revenue", "net_profit", "roe", "gross_margin", "revenue_yoy",
-            "margin_balance", "main_inflow",
+            "current_price",
+            "pe_ratio",
+            "pb_ratio",
+            "total_mv",
+            "circ_mv",
+            "revenue",
+            "net_profit",
+            "roe",
+            "gross_margin",
+            "revenue_yoy",
+            "net_profit_yoy",
+            "margin_balance",
+            "main_inflow",
         }
         self.assertEqual(set(ANCHOR_SPECS.keys()), expected)
 

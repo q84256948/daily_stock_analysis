@@ -52,6 +52,7 @@ _FINANCIAL_FIELDS: Dict[str, List[str]] = {
 # _pick_growth_value 命中。
 _GROWTH_FIELDS: Dict[str, List[str]] = {
     "revenue_yoy": ["营业收入", "营收"],
+    "net_profit_yoy": ["归属母公司股东的净利润同比", "归母净利润同比"],
 }
 _CAPITAL_FIELDS: Dict[str, List[str]] = {
     "main_inflow": ["主力净流入", "主力资金净流入", "主力净流入额"],
@@ -86,7 +87,10 @@ def _safe_float(value: Any) -> Optional[float]:
     if isinstance(value, (int, float)):
         try:
             return float(value)
-        except (TypeError, ValueError):  # pragma: no cover — int/float 转 float 不会失败，纯防御
+        except (
+            TypeError,
+            ValueError,
+        ):  # pragma: no cover — int/float 转 float 不会失败，纯防御
             return None
     s = str(value).strip().replace(",", "").replace("%", "")
     if not s or s in ("-", "--", "nan", "None", "null"):
@@ -138,7 +142,9 @@ def _pick_growth_value(bundle: Dict[str, Any], keywords: List[str]) -> Optional[
         return None
     for label, raw in bundle.items():
         label_s = str(label)
-        if any(kw in label_s for kw in keywords) and any(m in label_s for m in _GROWTH_MARKERS):
+        if any(kw in label_s for kw in keywords) and any(
+            m in label_s for m in _GROWTH_MARKERS
+        ):
             val = _safe_float(raw)
             if val is not None:
                 return val
@@ -224,7 +230,9 @@ class MXClient:
         self.timeout = timeout
         self._ttl = ttl
         self._cache: Dict[str, List[Any]] = {}  # query -> [ts, result]
-        self._cache_lock = Lock()  # CrossSourceValidator 在线程池并发调用 query，需保护缓存
+        self._cache_lock = (
+            Lock()
+        )  # CrossSourceValidator 在线程池并发调用 query，需保护缓存
 
     def query(self, tool_query: str) -> Dict[str, Any]:
         """自然语言查询，带 TTL 缓存。无 key 返回 error dict。
@@ -256,14 +264,14 @@ class MXClient:
         """财务指标：营收/归母净利润/ROE/毛利率/营收同比（带报告期）。"""
         suffix = f" {period}" if period else ""
         return _extract_first_table_row(
-            self.query(f"{code} 营业收入 归属于母公司净利润 净资产收益率 毛利率 营业收入同比增长率{suffix}")
+            self.query(
+                f"{code} 营业收入 归属于母公司净利润 净资产收益率 毛利率 营业收入同比增长率{suffix}"
+            )
         )
 
     def query_capital(self, code: str) -> Dict[str, Any]:
         """资金类：主力净流入/融资余额。"""
-        return _extract_first_table_row(
-            self.query(f"{code} 主力净流入额 融资余额")
-        )
+        return _extract_first_table_row(self.query(f"{code} 主力净流入额 融资余额"))
 
 
 # ------------------------------------------------------------------
@@ -310,7 +318,9 @@ class MXSource:
     ) -> Tuple[Optional[float], Optional[str]]:
         """返回 (value, period)。按字段类别选 query。"""
         if field in _SNAPSHOT_FIELDS:
-            return _pick_value(self._client.fetch_snapshot(code), _SNAPSHOT_FIELDS[field]), None
+            return _pick_value(
+                self._client.fetch_snapshot(code), _SNAPSHOT_FIELDS[field]
+            ), None
         if field in _FINANCIAL_FIELDS:
             return self._fetch_financial_value(
                 code, _FINANCIAL_FIELDS[field], _pick_value, period
@@ -320,7 +330,9 @@ class MXSource:
                 code, _GROWTH_FIELDS[field], _pick_growth_value, period
             )
         if field in _CAPITAL_FIELDS:
-            return _pick_value(self._client.query_capital(code), _CAPITAL_FIELDS[field]), None
+            return _pick_value(
+                self._client.query_capital(code), _CAPITAL_FIELDS[field]
+            ), None
         return None, None
 
     def _fetch_financial_value(
