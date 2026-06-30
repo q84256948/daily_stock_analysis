@@ -1,206 +1,354 @@
-# PDF 生成统一方案（简单静态 HTML → WeasyPrint）
+# PDF 生成统一方案（审计优化版）
 
-> 状态：方案（待实施）　·　关联：深度投研 / 政策与公告排雷 / 供应链分析 三处报告 PDF 下载
->　·　参考基线：`6fe5aed`（main 最新，其 PDF 生成对深度投研可用）
->　·　原则：KISS、高内聚低耦合、新代码 100% 测试、不影响无关功能
+> 状态：方案（待实施）  
+> 关联：深度投研 / 政策与公告排雷 / 供应链分析 三处报告 PDF 下载  
+> 原则：KISS、统一入口、少改调用方、真实回归验证
 
 ---
 
-## 1. 背景与目标
+## 1. 审计结论
 
-供应链分析报告「下载 PDF」连续被反馈「乱码 / 格式错误」，历经两次症状级修补（表格列宽覆盖、供应链层 emoji 剥离）仍未解决。用户要求：**把所有 PDF 生成统一换成「直接把 HTML 生成 PDF：简单静态 HTML、轻量快速（pdfkit / WeasyPrint）」**，并以 `6fe5aed` 为可用参考。
+该方案方向合理：PDF 生成应该统一收敛到 `src/md2pdf.py`，并与邮件/通知 HTML formatter 解耦。当前代码已经证明两个关键问题仍存在：
 
-目标：
-1. 建立一个**统一的、内容无关的** PDF 渲染器，任何报告（窄表/宽表/emoji/代码块/`<br>` 单元格）都能稳定渲染。
-2. 切断 PDF 对「邮件/通知共用 HTML 格式化器」的耦合（根因之一）。
-3. 消除「服务端修复后用户仍看到旧乱码」的缓存放大因。
-4. 深度投研 / 政策排雷 / 供应链三处 PDF 走同一渲染器，零差异。
+- `src/md2pdf.py` 仍调用 `src.formatters.markdown_to_html_document`，而该 formatter 面向 web/邮件，包含 `table { display: block; overflow-x: auto }`、`:hover`、`max-width: 900px` 等不适合分页 PDF 的 CSS。
+- 三个 PDF 下载端点当前 `FileResponse` 均未设置 `Cache-Control`，浏览器可能继续使用旧 PDF。
 
-## 2. 现状与症状
+上一版方案需要调整的地方：
 
-- 全仓**所有 PDF 生成只有一个函数**：`src/md2pdf.py::markdown_to_pdf_file`（WeasyPrint）。
-  - 调用方：`deep_research_service._generate_pdf` / `policy_minesweeper_service._generate_pdf` / `supply_chain_report_service._generate_pdf`。
-  - 下载端点：`api/v1/endpoints/{deep_research,policy_minesweeper,supply_chain_reports}.py::download_pdf`。
-- 现行链路：`md → formatters.markdown_to_html_document(md) → 注入 _PDF_CSS → WeasyPrint → PDF`。
-- 症状：深度投研 PDF 正常；供应链 PDF「乱码、格式错误」，两次修补后用户仍反馈「还是乱码」。
+- 「所有 PDF 调用方」判断基本成立，但当前仓库已存在 `api/v1/endpoints/supply_chain_reports.py`、`src/services/supply_chain_report_service.py` 和相关测试，方案应按现状描述，不再把供应链报告端点当作待新增能力。
+- 不应强调“service 零改动”。供应链 service 当前有本地 `strip_emoji_for_pdf`，统一方案应删除该局部逻辑并迁入 `md2pdf.py`。
+- 不建议依赖 `pymupdf` 字形指纹作为必要验收；可作为人工取证，自动测试仍以文本、CSS 契约、响应头和端到端 PDF 生成 smoke 为主。
+- `test_supply_chain_report_pdf_emoji.py` 可以保留并改向共享 `md2pdf.strip_emoji_for_pdf`，不必强制删除文件；更少测试 churn。
 
-## 3. 根因分析（取证，非图像猜测）
+## 2. 目标
 
-### 3.1 git 取证：`6fe5aed` 与 `HEAD` 在 PDF 链路上的差异
-- `git diff 6fe5aed HEAD -- src/md2pdf.py`：**唯一差异**是本会话的「表格列宽」补丁（`table{display:table;table-layout:fixed}`）。`src/formatters.py`、`deep_research_service.py` 自 `6fe5aed` 起**未变**。
-- 即：`6fe5aed`（可用参考）的 PDF 方案 = 当前方案 − 该补丁。基线本身就是 WeasyPrint + `formatters.markdown_to_html_document` + `_PDF_CSS`。
+1. `src/md2pdf.py` 成为唯一 PDF HTML/CSS 渲染入口。
+2. PDF 渲染不再复用 `formatters.markdown_to_html_document`。
+3. 深度投研、政策与公告排雷、供应链三处 PDF 使用同一静态 HTML 模板和 PDF 专用 CSS。
+4. 彩色 emoji 剥离下沉到共享渲染器，避免供应链局部补丁。
+5. 三个 PDF 下载端点统一禁止浏览器缓存。
+6. 保持 `markdown_to_pdf_file(markdown_text, output_path) -> Optional[str]` 公共契约不变。
 
-### 3.2 结构根因：PDF 复用「邮件 formatter」的 web CSS
-`formatters.markdown_to_html_document` 与邮件/通知（notification）**共用**，注入的是**面向 web/邮件**的样式：
-```
-table { display: block; overflow-x: auto; }   /* GitHub 式横向滚动 */
+## 3. 非目标
+
+- 不更换为 pdfkit/wkhtmltopdf。
+- 不改三个 service 的 PDF 调用协议。
+- 不引入新的 HTML 模板引擎。
+- 不改前端 PDF 下载逻辑。
+- 不解决所有报告内容质量问题，例如 Agent 输出规划句、表格列过多、证据缺失；本方案只处理 PDF 渲染链路。
+
+## 4. 当前代码基线
+
+当前共享渲染器：
+
+- `src/md2pdf.py`
+- 依赖：`markdown2>=2.4.0`、`weasyprint>=60.0`
+- 现状：`markdown_to_pdf_file` 内部调用 `markdown_to_html_document(markdown_text)`，再把 `_PDF_CSS` 插入 `</head>` 前。
+
+当前 PDF 调用方：
+
+- `src/services/deep_research_service.py`
+- `src/services/policy_minesweeper_service.py`
+- `src/services/supply_chain_report_service.py`
+
+当前 PDF 下载端点：
+
+- `api/v1/endpoints/deep_research.py`
+- `api/v1/endpoints/policy_minesweeper.py`
+- `api/v1/endpoints/supply_chain_reports.py`
+
+当前供应链局部补丁：
+
+- `src/services/supply_chain_report_service.py::_generate_pdf` 在调用 `markdown_to_pdf_file` 前执行 `strip_emoji_for_pdf(...)`。
+- `tests/test_supply_chain_report_pdf_emoji.py` 覆盖该局部剥离逻辑。
+
+## 5. 根因
+
+### 5.1 PDF 复用 web/邮件 CSS
+
+`src.formatters.markdown_to_html_document` 是通用 HTML formatter，适合邮件、通知和 Web 风格展示，但不适合分页 PDF。典型冲突：
+
+```css
+body { max-width: 900px; margin: 0 auto; }
+table { display: block; overflow-x: auto; }
 tr:hover { background-color: #f1f8ff; }
-body { max-width: 900px; ... }
+pre { overflow: auto; }
 ```
-- `display:block` 表格在 WeasyPrint（分页 PDF，无横向滚动）下会把宽表列宽压塌、表头压成单字竖排。
-- 深度投研报告（散文为主、表格窄、基本无 emoji）**容忍**了这套 web CSS，故 `6fe5aed`「正常」。
-- 供应链报告（**宽多列表格 + 单元格内 `<br>` + ⚠️ 彩色 emoji + 偶发泄漏的规划句**）触发冲突 → 列塌缩 / emoji 豆腐块。
-- 既有的表格 `table-layout` 覆盖、供应链层 `strip_emoji` 是**症状级补丁**，未消除「PDF 复用邮件 HTML」这一耦合。
 
-### 3.3 字体层取证（pymupdf）
-- 供应链 PDF 嵌入 `苹果-简`(PingFang SC) 子集，与「正常的」深度投研 PDF **同一字体子集**（相同子集前缀 `TELXQP+`/`NXYACE+`/`HJNUFM+`）。
-- 逐字符 font 取证：`①②③④⑤` / `≤` / `μm` / `•` 全部走 PingFang SC（**正常**）；**仅 `⚠️`**(U+26A0 + U+FE0F) 走 `Apple-Color-Emoji`（彩色位图，WeasyPrint 无法嵌入 PDF → 豆腐块）。
-- 文本层 Unicode 全程正确 → **`pypdf` 文本提取看不出视觉乱码**（这正是前几轮「验证通过」却仍乱码的原因——文本层正确不代表字形渲染正确）。
+这些规则在浏览器里用于横向滚动和交互 hover，但 WeasyPrint 生成分页 PDF 时没有横向滚动语义，宽表容易列宽塌缩、断行异常或视觉错乱。
 
-### 3.4 最强放大因：PDF 端点缺 `Cache-Control`
-- 三个 PDF 下载端点的 `FileResponse` **均未设 `Cache-Control`**（已 grep 确认）。
-- 浏览器对同一 URL `/api/v1/.../reports/{id}/pdf` 做启发式缓存 → **服务端修了、磁盘 PDF 重生成了，用户浏览器仍发旧缓存** →「修了三次还是乱码」。
-- 与观察吻合：供应链（新报告、首份是坏的、被缓存）始终乱码；深度投研（缓存里本来就是好的）始终正常。
+### 5.2 emoji 局部修补位置不对
 
-### 3.5 结论
-根因是双重的：
-- **① 结构耦合**：PDF 复用邮件 formatter 的 web CSS（`display:block` 表格 / `:hover` / `max-width`），对宽表/emoji 不稳。
-- **② 缓存放大**：PDF 端点缺 `Cache-Control`，用户拿不到修复后的文件。
+供应链报告单独剥 emoji 能缓解 `⚠️`、`📈` 等彩色 emoji 在 PDF 中的 tofu 方块问题，但问题不属于供应链业务层。其他报告未来也可能输出 emoji，因此应下沉到共享 PDF 渲染器。
 
-用户指示的「简单静态 HTML → WeasyPrint」治①；② 需配套加 `no-store`。
+### 5.3 PDF 端点缺 no-store
 
-## 4. 方案设计
+三个端点的 `FileResponse` 没有禁用缓存。对同一 URL：
 
-### 4.1 选型：WeasyPrint（**不**用 pdfkit）
-- pdfkit 依赖 `wkhtmltopdf` 系统二进制；项目历史（`src/md2img.py` / `src/config.py` / `docs/CHANGELOG.md`）已记录 **macOS Homebrew 6.0+ 无 `wkhtmltopdf` formula**，曾因此从 imgkit/wkhtmltopdf 迁出。pdfkit 在当前部署环境不可行。
-- WeasyPrint 已集成、`6fe5aed` 即用之、依赖（pango/cairo/glib）已装；保留 `_prepare_weasyprint_env`（macOS `DYLD_FALLBACK_LIBRARY_PATH` 自适应）与信号量限流。
-
-### 4.2 核心：专用 PDF HTML 模板，解耦邮件 formatter
-重写 `src/md2pdf.py`（原地重写，保留公共契约与内部符号，最小化测试 churn）：
-
-1. **HTML 构造改用 markdown2 直出 body 片段**，不再走 `formatters.markdown_to_html_document`：
-   ```python
-   body = markdown2.markdown(md, extras=["tables", "fenced-code-blocks", "break-on-newline", "cuddled-lists"])
-   html = "<!DOCTYPE html><html><head><meta charset='utf-8'>" + _PDF_CSS + "</head><body>" + body + "</body></html>"
-   ```
-2. **`_PDF_CSS` 改为 PDF 专用干净 CSS（无任何 web-ism）**：
-   - CJK 字体栈（`PingFang SC` / `Hiragino Sans GB` / `Noto Sans CJK SC` / … / `sans-serif`）；
-   - 表格**原生** `display:table`（天然，**无 `display:block` 可冲突**）+ `table-layout:auto`（内容驱动列宽，宽表自然分布）+ `td,th{vertical-align:top;overflow-wrap:anywhere;word-break:break-word}`；
-   - `@page{margin:20mm 18mm}`、标题/列表/代码块/引用/链接样式；
-   - **不含** `display:block`、`overflow-x:auto`、`:hover`、`max-width:900px`。
-3. **彩色 emoji 剥离下沉到渲染器**（`strip_emoji_for_pdf` + `_EMOJI_STRIP_RE`）：剥彩色 emoji（旗帜/补充平面象形/杂项符号 `☀-➿` 含 ⚠/补充象形/变体选择符 `U+FE00-FE0F`/ZWJ），**保留** CJK / `①②③④⑤` / `≤` / `μm` / `•` / `→` / `——`。对所有 PDF 生效（深度投研 PDF 也曾有 `Apple-Color-Emoji`，统一受益）。
-4. **公共契约不变**：`markdown_to_pdf_file(markdown_text, output_path) -> Optional[str]`（成功返回路径，失败返回 None，fail-open → service 层 404）+ `_pdf_lock` 信号量 + `_prepare_weasyprint_env` + `_PDF_LOCK_TIMEOUT` 等内部符号保留。**三个 service 零改动（drop-in）**。
-
-### 4.3 配套：消除缓存放大因
-三个 PDF 端点的 `FileResponse` 统一加响应头：
+```text
+/api/v1/.../reports/{report_id}/pdf
 ```
-Cache-Control: no-store, no-cache, must-revalidate
-Pragma: no-cache
-Expires: 0
-```
-强制浏览器每次回源，拿到重生成的 PDF。
 
-### 4.4 收尾：去掉症状级补丁
-- `supply_chain_report_service.py`：删 `strip_emoji_for_pdf` / `_EMOJI_STRIP_RE`，`_generate_pdf` 还原为 `markdown = md_path.read_text(...)`（emoji 现由渲染器统一处理）。
-- `md2pdf._PDF_CSS`：去掉之前加的 `display:table;table-layout:fixed` 覆盖补丁（新模板原生表格，无需覆盖邮件 CSS）。
+浏览器或中间层可能复用旧 PDF，导致服务端修复后用户仍看到旧文件。
 
-## 5. 改动范围（文件）
+## 6. 设计方案
 
-| 文件 | 改动 |
-|---|---|
-| `src/md2pdf.py` | 原地重写：markdown2 直出 body → 极简静态 HTML + 干净 `_PDF_CSS`（原生表格、无 web-ism）→ `strip_emoji_for_pdf` 剥彩色 emoji → WeasyPrint。保留 `markdown_to_pdf_file` 公共契约 + `_pdf_lock` + `_prepare_weasyprint_env` + 各常量。移除 `from src.formatters import markdown_to_html_document`。 |
-| `src/services/supply_chain_report_service.py` | 删 `strip_emoji_for_pdf` / `_EMOJI_STRIP_RE`；`_generate_pdf` 还原直接读 md（emoji 由渲染器处理）。 |
-| `api/v1/endpoints/deep_research.py` | `download_pdf` 的 `FileResponse` 加 `Cache-Control: no-store, no-cache, must-revalidate` + `Pragma: no-cache` + `Expires: 0`。 |
-| `api/v1/endpoints/policy_minesweeper.py` | 同上。 |
-| `api/v1/endpoints/supply_chain_reports.py` | 同上。 |
-| `tests/test_md2pdf.py` | 更新：新模板渲染（宽表表头完整、彩色 emoji 剥离、CJK/`①②③`/`≤`/`μm`/`•` 保留）；CSS 契约（**不含** `display:block`/`overflow-x:auto`/`:hover`、含原生 `table` + 字体栈）；既有 `bullet/code/emoji/table/complex/semaphore/env` 用例适配。 |
-| `tests/test_supply_chain_report_pdf_emoji.py` | 移除（emoji 剥离迁到渲染器，用例并入 `test_md2pdf.py`，测试用例不丢失）。 |
-| `tests/test_pdf_endpoints_cache.py`（新） | 三端点 PDF 响应头 `Cache-Control: no-store` 断言。 |
-| `docs/CHANGELOG.md` / `docs/supply-chain-report-test-report.md` | 记录统一渲染器 + no-store + emoji 下沉。 |
+### 6.1 保留 WeasyPrint
 
-> 三处 service 的 `_generate_pdf` 调用点 **不变**（仍是 `markdown_to_pdf_file(md, out)`）；深度投研 / 排雷 service 文件**无需改动**。
+继续使用 WeasyPrint，不使用 pdfkit：
 
-## 6. 关键设计契约
+- 当前项目已接入 WeasyPrint。
+- `requirements.txt` 已有 `weasyprint>=60.0`。
+- pdfkit 依赖 `wkhtmltopdf` 系统二进制，而项目历史已经从 wkhtmltopdf 路径迁出。
+- 保留 `_prepare_weasyprint_env`、`_pdf_lock`、`_PDF_LOCK_TIMEOUT`。
+
+### 6.2 md2pdf 改为静态 HTML 模板
+
+`src/md2pdf.py` 不再导入：
 
 ```python
-# src/md2pdf.py（重写后对外契约保持）
-def markdown_to_pdf_file(markdown_text: str, output_path: str) -> Optional[str]: ...
-def strip_emoji_for_pdf(text: Optional[str]) -> str: ...   # 新增（从 supply_chain service 迁入）
-# 保留：_pdf_lock, _PDF_LOCK_TIMEOUT, _prepare_weasyprint_env,
-#       _BREW_LIB_CANDIDATES, _GOBJECT_MARKER, _PDF_FONT_STACK, _PDF_CSS（干净版）
+from src.formatters import markdown_to_html_document
 ```
 
-`_PDF_CSS` 要点（PDF 专用，无 web-ism）：
+改为直接使用 `markdown2.markdown(...)` 生成 body 片段：
+
+```python
+body = markdown2.markdown(
+    strip_emoji_for_pdf(markdown_text),
+    extras=["tables", "fenced-code-blocks", "break-on-newline", "cuddled-lists"],
+)
+html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>{_PDF_CSS}</style>
+</head>
+<body>
+{body}
+</body>
+</html>"""
+```
+
+安全边界保持不变：
+
+- 不传 `base_url`。
+- 不加载远程资源。
+- 输入仍是系统生成的 markdown。
+
+### 6.3 PDF 专用 CSS
+
+`_PDF_CSS` 改成纯 CSS 字符串，不包含 `<style>` 标签，避免拼装混乱。
+
+要求：
+
 ```css
 @page { margin: 20mm 18mm; }
-body { font-family: "PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Source Han Sans SC","WenQuanYi Micro Hei","Microsoft YaHei",sans-serif; font-size: 11pt; line-height: 1.6; color: #222; }
-table { border-collapse: collapse; width: 100%; margin: 8px 0; }            /* 原生 display:table */
-td, th { border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+body {
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
+    "Source Han Sans SC", "WenQuanYi Micro Hei", "Microsoft YaHei", sans-serif;
+  font-size: 11pt;
+  line-height: 1.6;
+  color: #222;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  table-layout: auto;
+}
+td, th {
+  border: 1px solid #999;
+  padding: 5px 8px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 th { background-color: #f0f0f0; font-weight: bold; }
-ul, ol { padding-left: 22px; }   h2 { border-bottom: 1px solid #ddd; }   pre/code/blockquote/hr/a { ... }
+pre {
+  background-color: #f6f8fa;
+  padding: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+code { font-family: inherit; }
+blockquote { border-left: 3px solid #ccc; padding-left: 10px; color: #555; }
+ul, ol { padding-left: 22px; }
+a { color: #0645ad; text-decoration: none; }
 ```
 
-## 7. 验证方案
+明确禁止：
 
-- **单元（`tests/test_md2pdf.py`）**：渲染器输出 PDF；`⚠️` 剥离、`新莱应材/①②③④⑤/≤/μm/•/→/——` 保留；宽表（6 列）表头完整（文本提取）；CSS **不含** `display:block`/`overflow-x:auto`/`:hover`、含 `table` 与字体栈；空输入/依赖缺失/渲染异常 fail-open（返回 None）；信号量超时返回 None；父目录自动创建。
-- **端点（`tests/test_pdf_endpoints_cache.py`，新）**：三端点 PDF 响应头含 `Cache-Control: no-store`（service 层 mock，无真实渲染）。
-- **集成**：三个 service 仍生成 PDF（drop-in 不变）；`pyright` / `mypy` 改动文件 0 error。
-- **真实重生（人工/脚本）**：重启服务 → 删供应链旧 PDF → `GET /reports/{id}/pdf` 重生 → `pypdf` 文本干净（无 `⚠`）；`pymupdf` 渲染 PNG 做「字符指纹多样性」tofu 烟雾测试（多样性正常、无单一豆腐块指纹压倒）；响应头含 `no-store`。
-- **前端**：`apps/dsa-web` 无改动（PDF 下载走后端）；`npm run lint && npm run build` 仅确认无回归。
-- **回归命令**：
-  ```bash
-  python -m pytest tests/test_md2pdf.py tests/test_pdf_endpoints_cache.py \
-    tests/test_supply_chain_report_service.py tests/test_supply_chain_report_e2e.py \
-    tests/test_deep_research.py tests/test_policy_minesweeper_api.py -v
-  python -m py_compile src/md2pdf.py src/services/supply_chain_report_service.py \
-    api/v1/endpoints/deep_research.py api/v1/endpoints/policy_minesweeper.py api/v1/endpoints/supply_chain_reports.py
-  ```
+- `display: block` 用在 table。
+- `overflow-x: auto`。
+- `:hover`。
+- `max-width: 900px`。
 
-## 8. 风险与回滚
+表格不强制 `table-layout: fixed`。上一轮 fixed 是为了覆盖 web CSS 的局部补丁；静态 PDF 模板已经没有 web CSS 冲突，默认用 `auto` 更符合内容驱动布局。若真实宽表仍不理想，再用专项测试决定是否对 `table-layout` 做局部调整。
 
-- **影响面**：渲染器为三 feature 共用，统一重写同时改变深度投研/排雷 PDF 视觉（更干净的模板、彩色 emoji 被剥）——这是「所有 PDF 统一」的预期效果；CJK 与表格**内容**不变。
-- **macOS WeasyPrint 依赖**：保留 `_prepare_weasyprint_env`（`DYLD_FALLBACK_LIBRARY_PATH` 指向 `/opt/homebrew/lib`）；服务进程启动时需该 env（用户 shell profile 通常已配；服务实测可用——供应链/深度投研 PDF 现已在产）。注意：在进程启动**后**才 `os.environ[...]` 设置 DYLD 对当前进程的 `dlopen` 无效（dyld 在启动时读取），故服务需在已带该 env 的 shell 下启动。
-- **回滚**：还原 `src/md2pdf.py` + 三端点响应头 + `supply_chain_report_service` 的 emoji 剥离；删 `tests/test_pdf_endpoints_cache.py`。零功能影响（公共契约未变）。
+### 6.4 emoji 剥离下沉
 
-## 9. 决策与取舍
+在 `src/md2pdf.py` 新增：
 
-| 决策点 | 选择 | 理由 |
-|---|---|---|
-| 渲染引擎 | **WeasyPrint** | 已集成、`6fe5aed` 即用；pdfkit/wkhtmltopdf 在 macOS Homebrew 6.0+ 无 formula（项目历史已迁出） |
-| HTML 来源 | **markdown2 直出 body**，弃 `formatters.markdown_to_html_document` | 切断与邮件 formatter 的 web CSS 耦合（根因①），消除 `display:block` 表格冲突 |
-| 表格布局 | **原生** `display:table` + `table-layout:auto` | 无 web CSS 可冲突；内容驱动列宽，宽表自然分布 |
-| emoji 处理 | **渲染器内剥离彩色 emoji**（下沉） | WeasyPrint 无法嵌入彩色位图；装饰性 emoji 剥离、信息性字符全保留；三 feature 统一受益 |
-| 缓存 | **`Cache-Control: no-store`** 三端点 | 消除「修复后仍看旧缓存」放大因（根因②） |
-| 改动粒度 | **原地重写 `md2pdf.py`**（不新增 `pdf_renderer.py`） | 保留公共契约与内部符号，最小化测试 churn；少一个文件 |
-| service 层 | **零改动**（drop-in） | 公共契约不变；emoji 从供应链 service 移除（统一到渲染器） |
+```python
+def strip_emoji_for_pdf(text: Optional[str]) -> str: ...
+```
 
-## 10. 实施顺序
+处理规则：
 
-1. 重写 `src/md2pdf.py`（干净 HTML + CSS + emoji 剥离 + WeasyPrint，保留契约/信号量/env）。
-2. 三端点 `download_pdf` 加 `Cache-Control: no-store` 等响应头。
-3. `supply_chain_report_service` 去 emoji 剥离（`_generate_pdf` 还原）。
-4. 改/加测试（`test_md2pdf.py` 更新 + `test_pdf_endpoints_cache.py` 新增；移除 `test_supply_chain_report_pdf_emoji.py`，用例并入）。
-5. 重启服务 → 删旧供应链 PDF → 重生成 → 取证验证；`pyright`/`mypy` + 回归。
-6. `docs/CHANGELOG.md` + `docs/supply-chain-report-test-report.md`。
+- 剥离彩色 emoji、变体选择符 `U+FE00-FE0F`、ZWJ 组合中的 emoji。
+- 保留 CJK、圈号数字 `①②③`、数学符号 `≤ ≥`、单位 `μm`、项目符号 `•`、箭头 `→`、破折号。
+- None 返回空字符串。
 
-## 11. 附录：取证命令（可复现）
+`markdown_to_pdf_file` 内部先调用 `strip_emoji_for_pdf(markdown_text)`。
+
+供应链 service 删除本地 `strip_emoji_for_pdf` 和 `_EMOJI_STRIP_RE`，`_generate_pdf` 改回直接读取 markdown：
+
+```python
+markdown = md_path.read_text(encoding="utf-8")
+result_path = markdown_to_pdf_file(markdown, pdf_path)
+```
+
+### 6.5 三端点统一 no-store
+
+三个 PDF 端点 `FileResponse` 增加：
+
+```python
+headers={
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+```
+
+影响文件：
+
+- `api/v1/endpoints/deep_research.py`
+- `api/v1/endpoints/policy_minesweeper.py`
+- `api/v1/endpoints/supply_chain_reports.py`
+
+## 7. 改动范围
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/md2pdf.py` | 移除 `markdown_to_html_document` 依赖；使用 `markdown2.markdown` + PDF 专用 HTML/CSS；新增共享 `strip_emoji_for_pdf`；保留 `markdown_to_pdf_file`、锁、env 准备和失败返回 None 契约。 |
+| `src/services/supply_chain_report_service.py` | 删除本地 emoji 剥离逻辑；PDF 生成前不再改写 markdown，由 `md2pdf` 统一处理。 |
+| `api/v1/endpoints/deep_research.py` | PDF `FileResponse` 增加 no-store headers。 |
+| `api/v1/endpoints/policy_minesweeper.py` | 同上。 |
+| `api/v1/endpoints/supply_chain_reports.py` | 同上。 |
+| `tests/test_md2pdf.py` | 增加/调整静态模板、CSS 契约、emoji 剥离、宽表、CJK 保留、失败降级测试。 |
+| `tests/test_supply_chain_report_pdf_emoji.py` | 改为验证供应链 service 不再局部剥离，同时共享 `strip_emoji_for_pdf` 仍生效；或将纯函数用例迁到 `test_md2pdf.py` 后删除本文件。二选一，优先选择改造保留以减少 churn。 |
+| `tests/test_pdf_endpoints_cache.py` | 新增三端点 PDF 响应头测试，mock service，不真实渲染 PDF。 |
+| `docs/CHANGELOG.md` | 记录 PDF 渲染器统一、emoji 下沉、PDF no-store。 |
+| `docs/supply-chain-report-test-report.md` | 更新供应链 PDF 相关测试说明，移除“仅供应链层修复”的旧结论。 |
+
+## 8. 测试要求
+
+### 8.1 md2pdf 单元测试
+
+覆盖：
+
+- 空 markdown 返回 None。
+- weasyprint import 失败返回 None。
+- WeasyPrint 渲染异常返回 None。
+- 父目录不存在时自动创建。
+- semaphore 获取超时返回 None。
+- `_prepare_weasyprint_env` macOS 路径逻辑不回归。
+- `strip_emoji_for_pdf` 剥离 `⚠️ 📈 🔥 ✅ 🎯`，保留 `新莱应材 ①②③ ≤ μm • → ——`。
+- 生成 PDF 后文本包含 CJK、列表、代码块、表格内容。
+- 宽表表头不被拆成单字竖排。
+- `_PDF_CSS` 不包含 `display: block`、`overflow-x: auto`、`:hover`、`max-width: 900px`，并包含 CJK 字体栈和表格基础样式。
+
+### 8.2 endpoint 缓存测试
+
+新增 `tests/test_pdf_endpoints_cache.py`：
+
+- deep research PDF 响应头包含 `Cache-Control: no-store`。
+- policy minesweeper PDF 响应头包含 `Cache-Control: no-store`。
+- supply chain PDF 响应头包含 `Cache-Control: no-store`。
+
+测试方式：
+
+- 裸 FastAPI app 挂对应 router。
+- mock service `get_report` / `get_pdf_path`。
+- 用临时目录创建 fake PDF。
+- 不跑真实 WeasyPrint。
+
+### 8.3 service 回归
+
+覆盖：
+
+- `SupplyChainReportService._generate_pdf` 直接读取 markdown 原文并调用 `markdown_to_pdf_file`。
+- 成功后回写 `set_supply_chain_pdf_path`。
+- `.md` 原文不被修改。
+- deep research / policy minesweeper 现有 PDF service 测试不需要大改。
+
+### 8.4 人工验证
+
+真实验证建议：
 
 ```bash
-# 1) 确认 6fe5aed 与 HEAD 的 md2pdf 差异（仅表格补丁）
-git diff 6fe5aed HEAD -- src/md2pdf.py
+python -m pytest tests/test_md2pdf.py tests/test_pdf_endpoints_cache.py \
+  tests/test_supply_chain_report_service.py tests/test_supply_chain_report_api.py \
+  tests/test_policy_minesweeper_api.py -v
 
-# 2) 字体/字形取证（需 pymupdf）
-.venv/bin/python -c "
-import fitz
-doc = fitz.open('reports/supply_chain/<report_id>.pdf')
-print([f[3] for f in doc.get_page_fonts(0)])           # 嵌入字体（苹果-简 = PingFang SC）
-for b in doc[0].get_text('dict')['blocks']:
-    for l in b['lines']:
-        for s in l['spans']:
-            t = s['text']
-            for ch in t:
-                if ch in '①②③④⑤⚠≤μ•':
-                    print(repr(ch), '->', s['font'])    # 逐字符 font（⚠ 走 Apple-Color-Emoji = 豆腐块）
-"
-
-# 3) PDF 端点缺 Cache-Control 确认
-grep -n "FileResponse" api/v1/endpoints/deep_research.py api/v1/endpoints/policy_minesweeper.py api/v1/endpoints/supply_chain_reports.py
+python -m py_compile src/md2pdf.py src/services/supply_chain_report_service.py \
+  api/v1/endpoints/deep_research.py \
+  api/v1/endpoints/policy_minesweeper.py \
+  api/v1/endpoints/supply_chain_reports.py
 ```
+
+如本地具备 WeasyPrint 系统库，再手工执行：
+
+1. 删除一份旧供应链报告的 `.pdf`。
+2. 请求 `/api/v1/supply-chain/reports/{id}/pdf` 重新生成。
+3. 确认响应头含 `Cache-Control: no-store`。
+4. 打开 PDF 检查宽表、中文、代码块、列表和 emoji 方块。
+
+`pymupdf` 渲染截图或字形取证只作为排障工具，不作为必需 CI。
+
+## 9. 风险与取舍
+
+### 深度投研和排雷 PDF 视觉会变化
+
+统一渲染器会让三类报告使用同一 PDF 样式。视觉细节可能与之前不同，但这是统一方案的预期影响。内容契约不变。
+
+### emoji 会从 PDF 中消失
+
+彩色 emoji 主要是装饰或风险提示符号。PDF 中剥离它们，保留文字信息。Web/Markdown 原文不受影响。
+
+### 表格仍可能过宽
+
+PDF 页面宽度有限。静态模板能避免 web CSS 冲突，但不能保证任意超宽表都完美。第一阶段先使用 `table-layout: auto` + `overflow-wrap: anywhere`，真实报告若仍不佳，再考虑特定报告模板压缩列数。
+
+### no-store 会增加重复下载成本
+
+PDF 文件本身仍会在服务端复用 `pdf_path`，no-store 只要求浏览器回源，不会每次重新渲染。成本可接受。
+
+## 10. 回滚方式
+
+- 恢复 `src/md2pdf.py` 到当前实现。
+- 恢复供应链 service 的本地 emoji 剥离。
+- 移除三个端点的 no-store headers。
+- 删除或回滚新增的 `test_pdf_endpoints_cache.py`。
+
+公共函数签名不变，回滚不会影响业务 API。
+
+## 11. 推荐实施顺序
+
+1. 改 `src/md2pdf.py`：静态 HTML、PDF CSS、共享 emoji 剥离。
+2. 改 `src/services/supply_chain_report_service.py`：删除局部 emoji 剥离。
+3. 三个 PDF 端点增加 no-store headers。
+4. 更新 `tests/test_md2pdf.py` 和供应链 emoji 测试。
+5. 新增 `tests/test_pdf_endpoints_cache.py`。
+6. 跑后端回归和 py_compile。
+7. 更新 `docs/CHANGELOG.md`、`docs/supply-chain-report-test-report.md`。
 
 ## 12. 相关文件索引
 
-- 渲染器：`src/md2pdf.py`（重写）
+- 渲染器：`src/md2pdf.py`
+- 共享 HTML formatter：`src/formatters.py`
 - 调用方 service：`src/services/deep_research_service.py`、`src/services/policy_minesweeper_service.py`、`src/services/supply_chain_report_service.py`
-- 下载端点：`api/v1/endpoints/{deep_research,policy_minesweeper,supply_chain_reports}.py`
-- 历史/依赖：`src/md2img.py`、`src/config.py`（`MD2IMG_ENGINE`）、`docs/CHANGELOG.md`（imgkit→xhtml2pdf→WeasyPrint 迁移记录）
-- 测试：`tests/test_md2pdf.py`、`tests/test_pdf_endpoints_cache.py`（新）
+- 下载端点：`api/v1/endpoints/deep_research.py`、`api/v1/endpoints/policy_minesweeper.py`、`api/v1/endpoints/supply_chain_reports.py`
+- 测试：`tests/test_md2pdf.py`、`tests/test_supply_chain_report_pdf_emoji.py`、`tests/test_supply_chain_report_api.py`、`tests/test_policy_minesweeper_api.py`
+
