@@ -172,6 +172,8 @@ class StockAnalysisPipeline:
                 bocha_keys=self.config.bocha_api_keys,
                 tavily_keys=self.config.tavily_api_keys,
                 anspire_keys=self.config.anspire_api_keys,
+                x_keys=[self.config.social_sentiment_api_key] if self.config.social_sentiment_api_key else None,
+                x_api_url=self.config.social_sentiment_api_url,
                 brave_keys=self.config.brave_api_keys,
                 serpapi_keys=self.config.serpapi_keys,
                 minimax_keys=self.config.minimax_api_keys,

@@ -1258,6 +1258,276 @@ class AnspireSearchProvider(BaseSearchProvider):
             return '未知来源'
 
 
+_X_TICKER_RE = re.compile(r"^[A-Za-z]{1,6}(?:\.[A-Za-z]{1,2})?$")
+
+
+def resolve_x_ticker(stock_code: str) -> Optional[str]:
+    """把股票代码解析为 adanos x.com 用的 ticker。
+
+    美股字母代码（AAPL / BRK.A / $TSLA）→ 大写 ticker；
+    A 股 / 港股（纯数字，如 600519 / 00700）x.com 无直接覆盖 → None（fail-open）。
+    HK→ADR 映射（腾讯→TCEHY 等）为后续增强。
+    """
+    if not stock_code:
+        return None
+    code = str(stock_code).strip().upper().lstrip("$")
+    return code if _X_TICKER_RE.fullmatch(code) else None
+
+
+class XSearchProvider(BaseSearchProvider):
+    """x.com (Twitter/X) 海外媒体消息源，复用 adanos per-ticker 端点。
+
+    数据来源：adanos ``GET /x/stocks/v1/stock/{ticker}``，一次返回聚合舆情
+    (buzz/sentiment/bullish/bearish/mentions) + ``top_tweets``。复用
+    ``SOCIAL_SENTIMENT_API_KEY/URL``（与 ``SocialSentimentService`` 同账号）。
+
+    无 ticker（如 A 股）或 ``found:false`` → 空结果 fail-open，不抛异常、不拖垮主流程。
+    注：adanos ``top_tweets`` 不含 tweet id/url，故构造稳定合成 URL 以满足
+    NewsIntel 去重（UNIQUE url）需求。详见 docs/x-media-source-plan.md。
+    """
+
+    _CACHE_TTL = 600.0  # per-ticker 缓存 TTL（秒），对齐 SocialSentimentService 趋势缓存
+    _BREAKER_THRESHOLD = 5  # 连续失败多少次触发熔断
+    _BREAKER_COOLDOWN = 300.0  # 熔断冷却（秒），对齐项目 circuit_breaker_cooldown 默认
+
+    def __init__(
+        self,
+        api_keys: List[str],
+        api_url: str,
+        *,
+        cache_ttl: Optional[float] = None,
+        breaker_threshold: Optional[int] = None,
+        breaker_cooldown: Optional[float] = None,
+    ):
+        super().__init__(api_keys, "X")
+        self._api_url = (api_url or "https://api.adanos.org").rstrip("/")
+        # per-ticker TTL 缓存：命中→免重复调用 adanos，省配额（复用 _state_lock）
+        self._cache_ttl = self._CACHE_TTL if cache_ttl is None else max(0.0, float(cache_ttl))
+        # 熔断：adanos 连续失败超阈值→冷却期内跳过（bad key / 服务不可用时不持续打）
+        self._breaker_threshold = self._BREAKER_THRESHOLD if breaker_threshold is None else max(1, int(breaker_threshold))
+        self._breaker_cooldown = self._BREAKER_COOLDOWN if breaker_cooldown is None else max(0.0, float(breaker_cooldown))
+        self._cache: Dict[str, Any] = {}  # ticker(大写) -> (monotonic_ts, SearchResponse)
+        self._breaker_failures = 0
+        self._breaker_trip_until = 0.0  # monotonic ts，熔断恢复时间
+
+    def search(
+        self,
+        query: str,
+        max_results: int = 5,
+        days: int = 7,
+        ticker: Optional[str] = None,
+    ) -> SearchResponse:
+        """按 ticker 查询 x.com 舆情（带 per-ticker TTL 缓存 + 熔断）。
+
+        - ``ticker=None`` → 直接空结果（市场无覆盖，不走缓存/熔断）。
+        - 缓存命中 → 免重复调用 adanos（即使熔断中，缓存数据仍可复用）。
+        - 熔断打开（adanos 连续失败）→ 冷却期内返回空（fail-open，不抛、不持续打）。
+        """
+        if not ticker:
+            return self._execute_search(query, max_results=max_results, days=days, ticker=ticker)
+
+        key = ticker.strip().upper()
+
+        # 1) 命中缓存
+        with self._state_lock:
+            cached = self._cache.get(key)
+            if cached and (time.monotonic() - cached[0]) < self._cache_ttl:
+                return cached[1]
+
+        # 2) 熔断打开 → 跳过（fail-open）
+        if self._breaker_is_open():
+            logger.info("[X] adanos 熔断中，跳过 ticker=%s", key)
+            return SearchResponse(query=query, results=[], provider=self.name, success=True)
+
+        # 3) 调用并按结果更新缓存/熔断（只缓存成功响应；失败不缓存，下次重试）
+        resp = self._execute_search(query, max_results=max_results, days=days, ticker=ticker)
+        with self._state_lock:
+            if resp.success:
+                self._breaker_failures = 0
+                self._cache[key] = (time.monotonic(), resp)
+            else:
+                self._breaker_failures += 1
+                if self._breaker_failures >= self._breaker_threshold:
+                    self._breaker_trip_until = time.monotonic() + self._breaker_cooldown
+                    logger.warning(
+                        "[X] adanos 连续失败 %d 次，熔断 %.0fs",
+                        self._breaker_failures, self._breaker_cooldown,
+                    )
+        return resp
+
+    def _breaker_is_open(self) -> bool:
+        """熔断是否处于打开（冷却）状态。"""
+        with self._state_lock:
+            if self._breaker_failures < self._breaker_threshold:
+                return False
+            return time.monotonic() < self._breaker_trip_until
+
+    def _do_search(
+        self,
+        query: str,
+        api_key: str,
+        max_results: int,
+        days: int = 7,
+        ticker: Optional[str] = None,
+    ) -> SearchResponse:
+        import requests
+        from urllib.parse import quote
+
+        # 无 ticker（A 股 / 未解析出）→ 直接空结果，不浪费配额
+        if not ticker:
+            return SearchResponse(query=query, results=[], provider=self.name, success=True)
+
+        url = f"{self._api_url}/x/stocks/v1/stock/{quote(ticker)}"
+        headers = {"X-API-Key": api_key, "Accept": "application/json"}
+        try:
+            response = _get_with_retry(url, headers=headers, params={}, timeout=10)
+        except requests.exceptions.RequestException as exc:
+            logger.warning("[X] adanos 请求失败：%s", exc)
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=f"网络请求失败：{exc}",
+            )
+        except Exception as exc:  # 防御性：任何意外异常都 fail-open
+            logger.warning("[X] adanos 请求异常：%s", exc)
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=str(exc),
+            )
+
+        if response.status_code != 200:
+            err = self._safe_text(response)[:200]
+            logger.warning("[X] adanos HTTP %s：%s", response.status_code, err)
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=f"HTTP {response.status_code}: {err}",
+            )
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            logger.warning("[X] adanos 响应 JSON 解析失败：%s", exc)
+            return SearchResponse(
+                query=query, results=[], provider=self.name,
+                success=False, error_message=f"JSON 解析失败：{exc}",
+            )
+
+        if not data.get("found"):
+            # 该 ticker 在 X universe 无覆盖（A 股常见）→ 空结果，非错误
+            return SearchResponse(query=query, results=[], provider=self.name, success=True)
+
+        results: List[SearchResult] = []
+        summary = self._build_summary_item(data)
+        if summary:
+            results.append(summary)
+
+        tweet_budget = max(max_results, 0)
+        for tw in (data.get("top_tweets") or [])[:tweet_budget]:
+            mapped = self._map_tweet(tw)
+            if mapped is not None:
+                results.append(mapped)
+
+        logger.info(
+            "[X] %s 解析 %d 条（摘要 %s + 推文 %d）",
+            data.get("ticker") or ticker,
+            len(results), "1" if summary else "0",
+            len(results) - (1 if summary else 0),
+        )
+        return SearchResponse(query=query, results=results, provider=self.name, success=True)
+
+    @staticmethod
+    def _safe_text(response) -> str:
+        try:
+            return response.text or ""
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _build_summary_item(data: Dict[str, Any]) -> Optional[SearchResult]:
+        from urllib.parse import quote
+
+        ticker = str(data.get("ticker") or "").strip()
+
+        def _fmt(v: Any, signed: bool = False) -> Optional[str]:
+            if v is None:
+                return None
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                return None
+            return f"{fv:+.2f}" if signed else f"{fv:g}"
+
+        parts: List[str] = []
+        buzz = _fmt(data.get("buzz_score"))
+        if buzz:
+            parts.append(f"buzz={buzz}")
+        sent = _fmt(data.get("sentiment_score"), signed=True)
+        if sent:
+            parts.append(f"sentiment={sent}")
+        if data.get("bullish_pct") is not None:
+            parts.append(f"看多{data.get('bullish_pct')}%")
+        if data.get("bearish_pct") is not None:
+            parts.append(f"看空{data.get('bearish_pct')}%")
+        if data.get("mentions") is not None:
+            parts.append(f"提及{data.get('mentions')}")
+        if data.get("unique_tweets") is not None:
+            parts.append(f"{data.get('unique_tweets')}推")
+        if data.get("trend"):
+            parts.append(f"趋势{data.get('trend')}")
+        if not parts:
+            return None
+
+        title = f"{ticker} x.com 舆情摘要" if ticker else "x.com 舆情摘要"
+        url = f"https://x.com/search?q=%24{quote(ticker)}" if ticker else "https://x.com/"
+        snippet = " ".join(parts)[:500]
+        return SearchResult(title=title, snippet=snippet, url=url, source="x.com")
+
+    @staticmethod
+    def _map_tweet(tw: Any) -> Optional[SearchResult]:
+        import hashlib
+        from urllib.parse import quote
+
+        if not isinstance(tw, dict):
+            return None
+        text = str(tw.get("text_snippet") or "").strip()
+        author = str(tw.get("author") or "").strip().lstrip("@") or "x"
+        created = str(tw.get("created_at") or "").strip()
+        if not text and not created:
+            return None  # 无可定位信息 → 跳过
+
+        title = text[:80] if text else f"@{author}"
+        engagement: List[str] = []
+        if tw.get("likes") is not None:
+            engagement.append(f"❤{tw.get('likes')}")
+        if tw.get("retweets") is not None:
+            engagement.append(f"🔁{tw.get('retweets')}")
+        if tw.get("views") is not None:
+            engagement.append(f"👁{tw.get('views')}")
+        label = tw.get("sentiment_label")
+        snippet_parts: List[str] = []
+        if engagement:
+            snippet_parts.append(" ".join(engagement))
+        if label:
+            snippet_parts.append(f"[{label}]")
+        if text:
+            snippet_parts.append(text)
+        snippet = " · ".join(snippet_parts)[:500]
+
+        # adanos 不返回 tweet id/url → 合成稳定唯一 URL（dedup 友好）
+        if created:
+            url = f"https://x.com/{quote(author)}/status/{quote(created)}"
+        else:
+            digest = hashlib.md5(text.encode("utf-8")).hexdigest()[:10]
+            url = f"https://x.com/{quote(author)}/status/{digest}"
+
+        return SearchResult(
+            title=title,
+            snippet=snippet,
+            url=url,
+            source=f"x.com@{author}",
+            published_date=created or None,
+        )
+
+
 class MiniMaxSearchProvider(BaseSearchProvider):
     """
     MiniMax Web Search (Coding Plan API)
@@ -2259,6 +2529,8 @@ class SearchService:
         bocha_keys: Optional[List[str]] = None,
         tavily_keys: Optional[List[str]] = None,
         anspire_keys: Optional[List[str]] = None,
+        x_keys: Optional[List[str]] = None,
+        x_api_url: Optional[str] = None,
         brave_keys: Optional[List[str]] = None,
         serpapi_keys: Optional[List[str]] = None,
         minimax_keys: Optional[List[str]] = None,
@@ -2342,6 +2614,12 @@ class SearchService:
         if anspire_keys:
             self._providers.insert(0, AnspireSearchProvider(anspire_keys))
             logger.info(f"已配置 Anspire Search 搜索，共 {len(anspire_keys)} 个 API Key")
+
+        # 8. x.com 海外媒体源（复用 adanos per-ticker：舆情 + top_tweets）
+        # 与 SocialSentimentService 共享同一 adanos 账号（social_sentiment_api_key/url）。
+        if x_keys:
+            self._providers.append(XSearchProvider(x_keys, x_api_url or "https://api.adanos.org"))
+            logger.info("已配置 x.com 海外媒体源，共 %d 个 key", len(x_keys))
             
         if not self._providers:
             logger.warning("未配置任何搜索能力，新闻搜索功能将不可用")
@@ -3701,6 +3979,11 @@ class SearchService:
                             prefer_chinese=prefer_chinese,
                         )
                     )
+                elif isinstance(provider, XSearchProvider):
+                    x_ticker = resolve_x_ticker(stock_code)
+                    if not x_ticker:
+                        continue  # A/HK 无 X 覆盖 → 跳过，不浪费配额
+                    search_kwargs["ticker"] = x_ticker
 
                 started_at = time.monotonic()
                 try:
@@ -4105,6 +4388,13 @@ class SearchService:
                     days=request_days,
                     topic=dim['tavily_topic'],
                 )
+            elif isinstance(provider, XSearchProvider):
+                response = provider.search(
+                    dim['query'],
+                    max_results=provider_max_results,
+                    days=request_days,
+                    ticker=resolve_x_ticker(stock_code),
+                )
             else:
                 response = provider.search(
                     dim['query'],
@@ -4449,6 +4739,8 @@ def get_search_service() -> SearchService:
                     bocha_keys=config.bocha_api_keys,
                     tavily_keys=config.tavily_api_keys,
                     anspire_keys=config.anspire_api_keys,
+                    x_keys=[_sk] if (_sk := getattr(config, "social_sentiment_api_key", None)) else None,
+                    x_api_url=getattr(config, "social_sentiment_api_url", "https://api.adanos.org"),
                     brave_keys=config.brave_api_keys,
                     serpapi_keys=config.serpapi_keys,
                     minimax_keys=config.minimax_api_keys,
