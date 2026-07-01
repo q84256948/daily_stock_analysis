@@ -71,14 +71,15 @@ describe('SidebarNav', () => {
 
     await screen.findByRole('link', { name: '选股' });
     const hrefs = screen.getAllByRole('link').map((link) => link.getAttribute('href'));
-    // 当前 NAV_ITEMS 顺序：home / deep-research / policy-minesweeper / chat / chanlun / zhengxi /
-    // supply-chain / screening / portfolio / decision-signals / backtest / alerts / usage / settings
+    // 当前 NAV_ITEMS 顺序：home / deep-research / policy-minesweeper / knowledge-base /
+    // chat / chanlun / zhengxi / supply-chain / screening / portfolio / decision-signals /
+    // backtest / alerts / usage / settings
     expect(hrefs.slice(0, 5)).toEqual([
       '/',
       '/deep-research',
       '/policy-minesweeper',
+      '/knowledge-base',
       '/chat',
-      '/chanlun',
     ]);
   });
 
