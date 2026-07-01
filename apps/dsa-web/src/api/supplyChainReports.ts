@@ -1,10 +1,15 @@
 import apiClient from './index';
 import { API_BASE_URL } from '../utils/constants';
 import { createApiError, isApiRequestError, parseApiError } from './error';
+import { downloadPdfFromUrl } from './download';
 
 export interface SupplyChainGenerateRequest {
   topic: string;
   research_hint?: string;
+  // 可选单股绑定（按 docs/pdf-download-filename-plan.md §供应链报告边界 阶段 1）：
+  // 两者至少给一个时，PDF 文件名遵循单股型命名；都为空时走主题型（向后兼容）。
+  stock_code?: string;
+  stock_name?: string;
 }
 
 export interface SupplyChainStreamOptions {
@@ -15,6 +20,8 @@ export interface SupplyChainReportItem {
   id: string;
   topic: string;
   research_hint?: string;
+  stock_code?: string;
+  stock_name?: string;
   created_at?: string;
   status?: string;
   has_pdf?: boolean;
@@ -121,33 +128,12 @@ export const supplyChainReportApi = {
   /**
    * 下载报告 PDF（惰性生成：首次请求触发后端渲染）。
    * 用 fetch blob + <a download> 触发浏览器下载（带认证 cookie，不被弹窗拦截）。
+   * 业务文件名从后端 Content-Disposition 解析（按 docs/pdf-download-filename-plan.md）；
+   * 单股绑定走 ``股票名（代码）供应链分析报告YYYYMMDD.pdf``，未绑定走主题型兜底。
    */
   async downloadPdf(reportId: string): Promise<void> {
     const base = API_BASE_URL || '';
     const url = `${base}/api/v1/supply-chain/reports/${reportId}/pdf`;
-    const response = await fetch(url, { credentials: 'include' });
-    if (!response.ok) {
-      // 后端失败返回 {error, message, detail}（全局异常包装）；解析回显更具体原因
-      let backendDetail = '';
-      try {
-        const body = await response.json();
-        const msg = body?.message || body?.detail;
-        backendDetail = msg ? `: ${msg}` : '';
-      } catch {
-        // 非 JSON 响应，忽略
-      }
-      throw new Error(
-        `PDF 下载失败（${response.status}）${backendDetail}，请检查日志或稍后重试`,
-      );
-    }
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = `supply_chain_${reportId}.pdf`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
+    await downloadPdfFromUrl(url, 'supply_chain', reportId);
   },
 };

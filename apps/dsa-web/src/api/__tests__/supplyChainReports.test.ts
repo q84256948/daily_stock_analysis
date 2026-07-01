@@ -118,8 +118,15 @@ describe('supplyChainReportApi', () => {
   it('downloadPdf 成功时走 blob 下载路径并带正确文件名', async () => {
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:x');
     const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    // jsdom 真实 <a> 元素：appendChild/click/removeChild 均可正常执行
     fetchMock.mockResolvedValueOnce({
       ok: true,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-disposition'
+            ? "attachment; filename*=UTF-8''科瑞技术（002957）供应链分析报告20260630.pdf"
+            : null,
+      },
       blob: async () => new Blob(['pdf'], { type: 'application/pdf' }),
     });
 
