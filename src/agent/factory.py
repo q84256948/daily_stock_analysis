@@ -187,6 +187,10 @@ def get_tool_registry():
     from src.agent.tools.search_tools import ALL_SEARCH_TOOLS
     from src.agent.tools.market_tools import ALL_MARKET_TOOLS
     from src.agent.tools.backtest_tools import ALL_BACKTEST_TOOLS
+    from src.agent.tools.knowledge_base_tools import (
+        SEARCH_KNOWLEDGE_BASE_TOOL,
+        LIST_KNOWLEDGE_DOCUMENTS_TOOL,
+    )
 
     registry = ToolRegistry()
     for tool_fn in (
@@ -197,6 +201,10 @@ def get_tool_registry():
         + ALL_BACKTEST_TOOLS
     ):
         registry.register(tool_fn)
+
+    # Register knowledge base tools
+    registry.register(SEARCH_KNOWLEDGE_BASE_TOOL)
+    registry.register(LIST_KNOWLEDGE_DOCUMENTS_TOOL)
 
     _TOOL_REGISTRY = registry
     logger.info(

@@ -1271,6 +1271,92 @@ class DecisionSignalRecord(Base):
     )
 
 
+# ==================================================================
+# 知识库 (Knowledge Base) ORM 模型
+# ==================================================================
+
+
+class KnowledgeDocument(Base):
+    """知识库文档元数据表。
+
+    存储用户上传的文本/Markdown/PDF/URL 文档信息。
+    """
+
+    __tablename__ = "knowledge_documents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    source_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, index=True
+    )  # text/markdown/pdf/url
+    source_url: Mapped[Optional[str]] = mapped_column(String(2048))
+    file_path: Mapped[Optional[str]] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    tags: Mapped[Optional[str]] = mapped_column(Text)  # JSON string
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_naive_now, index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_naive_now, onupdate=utc_naive_now, index=True
+    )
+
+    __table_args__ = (
+        Index("ix_kb_doc_title_created", "title", "created_at"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        tags_list: List[str] = []
+        if self.tags:
+            try:
+                tags_list = json.loads(self.tags)
+            except Exception:
+                pass
+        return {
+            "id": self.id,
+            "title": self.title,
+            "source_type": self.source_type,
+            "source_url": self.source_url,
+            "file_path": self.file_path,
+            "content_hash": self.content_hash,
+            "tags": tags_list,
+            "chunk_count": self.chunk_count,
+            "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class KnowledgeChunk(Base):
+    """知识库文档片段表。
+
+    存储文档切分后的文本片段，用于 FTS5 全文检索。
+    """
+
+    __tablename__ = "knowledge_chunks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("knowledge_documents.id"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_estimate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[Optional[str]] = mapped_column(Text)  # JSON string
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_naive_now, index=True
+    )
+
+    __table_args__ = (
+        Index("ix_kb_chunk_doc_index", "document_id", "chunk_index"),
+    )
+
+
 class _DatabaseManagerMeta(type):
     """Serialize DatabaseManager construction across __new__ and __init__."""
 
@@ -1364,6 +1450,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             Base.metadata.create_all(self._engine)
             self._ensure_llm_usage_telemetry_columns()
             self._ensure_schema_migration_record()
+            self._ensure_knowledge_base_fts()
 
             self._initialized = True
             logger.info(f"数据库初始化完成: {db_url}")
@@ -1462,6 +1549,28 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                             time.sleep(delay)
                         continue
                     raise
+
+    def _ensure_knowledge_base_fts(self) -> None:
+        """Create FTS5 virtual table for knowledge base search if not exists."""
+        if not self._is_sqlite_engine or self._engine is None:
+            return
+        try:
+            with self._engine.begin() as connection:
+                # Check if FTS5 table exists
+                result = connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_chunks_fts'"
+                ).fetchone()
+                if result is None:
+                    connection.exec_driver_sql("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_chunks_fts
+                        USING fts5(content, document_id UNINDEXED, chunk_id UNINDEXED,
+                                   content_rowid UNINDEXED)
+                    """)
+                    logger.info("Created knowledge_chunks_fts virtual table")
+        except Exception as exc:
+            logger.warning(
+                "[Knowledge Base] failed to create FTS5 table: %s", exc
+            )
 
     @classmethod
     def get_instance(cls) -> "DatabaseManager":

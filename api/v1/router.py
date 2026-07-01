@@ -22,6 +22,7 @@ from api.v1.endpoints import (
     decision_signals,
     health,
     history,
+    knowledge,
     portfolio,
     research_framework,
     schedule,
@@ -92,3 +93,7 @@ router.include_router(
 )
 
 router.include_router(schedule.router, prefix="/schedule", tags=["Schedule"])
+
+router.include_router(
+    knowledge.router, prefix="/knowledge-base", tags=["KnowledgeBase"]
+)

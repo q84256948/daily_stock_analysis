@@ -22,6 +22,8 @@ def __getattr__(name: str):
         "StockService": "src.services.stock_service",
         "TaskService": "src.services.task_service",
         "get_task_service": "src.services.task_service",
+        "KnowledgeBaseService": "src.services.knowledge_base_service",
+        "KnowledgeBaseParser": "src.services.knowledge_base_parser",
     }
     if name in _lazy_map:
         import importlib
@@ -37,4 +39,6 @@ __all__ = [
     "StockService",
     "TaskService",
     "get_task_service",
+    "KnowledgeBaseService",
+    "KnowledgeBaseParser",
 ]
