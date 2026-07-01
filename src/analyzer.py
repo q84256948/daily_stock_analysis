@@ -397,7 +397,12 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
 
 # ---------- chip_structure fallback (Issue #589) ----------
 
-_CHIP_KEYS: tuple[str, ...] = ("profit_ratio", "avg_cost", "concentration", "chip_health")
+_CHIP_KEYS: tuple[str, ...] = (
+    "profit_ratio",
+    "avg_cost",
+    "concentration",
+    "chip_health",
+)
 
 
 def _is_value_placeholder(v: Any) -> bool:
@@ -3894,6 +3899,50 @@ class GeminiAnalyzer:
 
                 data = json.loads(json_str)
 
+                # 防御 LLM 偶发返回非 dict（list / 标量 / None）。
+                # 当 LLM 在 integrity retry 上下文里把"补字段"误解为"追加新对象"时，
+                # 偶尔会输出 [ {...}, {...} ]，导致下面 data.get(...) 抛
+                # 'list' object has no attribute 'get'。此处统一降级为 dict，
+                # 优先取包含核心字段的元素（多元素时启发式选择），否则取第一个。
+                if not isinstance(data, dict):
+                    if isinstance(data, list) and data:
+                        candidate = next(
+                            (
+                                x
+                                for x in data
+                                if isinstance(x, dict)
+                                and (
+                                    "sentiment_score" in x
+                                    or "operation_advice" in x
+                                    or "dashboard" in x
+                                    or "code" in x
+                                )
+                            ),
+                            None,
+                        )
+                        if candidate is None:
+                            candidate = next(
+                                (x for x in data if isinstance(x, dict)),
+                                None,
+                            )
+                        if candidate is not None:
+                            logger.warning(
+                                "[LLM解析] LLM 返回 JSON list，自动降级为 dict 元素"
+                                " (list_len=%d, picked_keys=%s, code=%s)",
+                                len(data),
+                                sorted(list(candidate.keys()))[:8],
+                                candidate.get("code", "?"),
+                            )
+                            data = candidate
+                        else:
+                            raise ValueError(
+                                f"LLM returned a JSON list with no dict element (len={len(data)})"
+                            )
+                    else:
+                        raise ValueError(
+                            f"LLM returned non-object JSON: {type(data).__name__}"
+                        )
+
                 # Schema validation (lenient: on failure, continue with raw dict)
                 try:
                     AnalysisReportSchema.model_validate(data)
@@ -4034,6 +4083,29 @@ class GeminiAnalyzer:
         elif "```" in cleaned:
             cleaned = cleaned.replace("```", "")
 
+        # 方案 C（修订）：在原始 cleaned 文本上做一次"裸值类型预检"，
+        # 防止 LLM 偶发返回 `[ {...}, {...} ]` / 纯标量（`42` / `"x"` / `null`）。
+        # 这些形态在下方 `find("{") + rfind("}")` 截取后会被错误地
+        # 还原成 dict（截取了内层 {…}），导致下游 _parse_response 仍按 dict
+        # 处理而忽略 list 语义。此处直接拒收，让 fallback chain 接管。
+        stripped = cleaned.strip()
+        if stripped.startswith("["):
+            raise ValueError("LLM response is a JSON array, not a JSON object")
+        # 标量/裸字符串/null/布尔预检：第一个非空白字符不是 `{` 也不是 `[`，
+        # 且响应里也没有 `{`（防止误伤首部带说明文字的合法对象）。
+        if stripped and stripped[0] != "{" and "{" not in stripped:
+            first = stripped[0]
+            if (
+                first in {'"', "'", "-", "+"}
+                or first.isdigit()
+                or stripped.startswith("null")
+                or stripped.startswith("true")
+                or stripped.startswith("false")
+            ):
+                raise ValueError(
+                    f"LLM response starts with scalar/quote, not JSON object"
+                )
+
         json_start = cleaned.find("{")
         json_end = cleaned.rfind("}") + 1
 
@@ -4042,7 +4114,11 @@ class GeminiAnalyzer:
 
         json_str = cleaned[json_start:json_end]
         json_str = self._fix_json_string(json_str)
-        json.loads(json_str)
+        parsed = json.loads(json_str)
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                f"LLM response parsed to {type(parsed).__name__}, not dict"
+            )
 
     def _parse_text_response(
         self, response_text: str, code: str, name: str
