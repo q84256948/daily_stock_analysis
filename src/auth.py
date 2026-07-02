@@ -212,7 +212,7 @@ def verify_stored_password(password: str) -> bool:
     """Verify password against stored credential even when auth is disabled."""
     if not has_stored_password():
         return False
-    return _verify_password_hash(password, _password_hash_salt, _password_hash_stored)
+    return _verify_password_hash(password, _password_hash_salt, _password_hash_stored)  # type: ignore[reportArgumentType]
 
 
 def is_password_set() -> bool:
@@ -297,7 +297,7 @@ def change_password(current: str, new: str) -> Optional[str]:
 
     if not current or not current.strip():
         return "请输入当前密码"
-    if not _verify_password_hash(current, _password_hash_salt, _password_hash_stored):
+    if not _verify_password_hash(current, _password_hash_salt, _password_hash_stored):  # type: ignore[reportArgumentType]
         return "当前密码错误"
 
     err = _validate_password(new)
