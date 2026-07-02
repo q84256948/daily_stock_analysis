@@ -172,7 +172,9 @@ class StockAnalysisPipeline:
                 bocha_keys=self.config.bocha_api_keys,
                 tavily_keys=self.config.tavily_api_keys,
                 anspire_keys=self.config.anspire_api_keys,
-                x_keys=[self.config.social_sentiment_api_key] if self.config.social_sentiment_api_key else None,
+                x_keys=[self.config.social_sentiment_api_key]
+                if self.config.social_sentiment_api_key
+                else None,
                 x_api_url=self.config.social_sentiment_api_url,
                 brave_keys=self.config.brave_api_keys,
                 serpapi_keys=self.config.serpapi_keys,
@@ -340,7 +342,7 @@ class StockAnalysisPipeline:
             portfolio_context = getattr(self, "portfolio_context", None)
             if not isinstance(portfolio_context, dict):
                 portfolio_context = None
-            market = get_market_for_stock(normalize_stock_code(code))
+            market = get_market_for_stock(normalize_stock_code(code)) or "cn"
             market_phase_context = build_market_phase_context(
                 market=market,
                 current_time=current_time,
@@ -1275,7 +1277,7 @@ class StockAnalysisPipeline:
             self._ensure_agent_history(code)
 
             analysis_context = self._load_agent_analysis_context(code, stock_name)
-            market = get_market_for_stock(normalize_stock_code(code))
+            market = get_market_for_stock(normalize_stock_code(code)) or "cn"
             (
                 analysis_context_pack_summary,
                 analysis_context_pack_overview,
@@ -1830,10 +1832,10 @@ class StockAnalysisPipeline:
                 )
 
         explicit_action = dash.get("action") if isinstance(dash, dict) else None
-        if explicit_action is None and isinstance(
-            getattr(result, "dashboard", None), dict
-        ):
-            explicit_action = result.dashboard.get("action")
+        if explicit_action is None:
+            dashboard_value = result.dashboard
+            if isinstance(dashboard_value, dict):
+                explicit_action = dashboard_value.get("action")
         return populate_decision_action_fields(result, explicit_action=explicit_action)
 
     @staticmethod
@@ -2153,10 +2155,13 @@ class StockAnalysisPipeline:
             return
 
         score = getattr(trend_result, "signal_score", None)
-        try:
-            numeric_score = int(score)
-        except (TypeError, ValueError):
+        if score is None:
             numeric_score = 50
+        else:
+            try:
+                numeric_score = int(score)
+            except (TypeError, ValueError):
+                numeric_score = 50
         result.sentiment_score = numeric_score if numeric_score > 0 else 50
 
         trend_label = StockAnalysisPipeline._trend_label_fallback(
@@ -2295,16 +2300,22 @@ class StockAnalysisPipeline:
         if market and not is_market_open(market, market_today):
             return df
 
-        last_val = df["date"].max()
-        last_date = (
-            last_val.date()
-            if hasattr(last_val, "date")
+        last_val_raw: Any = df["date"].max()
+        last_val_scalar: Any = (
+            last_val_raw.iloc[0] if hasattr(last_val_raw, "iloc") else last_val_raw
+        )
+        last_date_raw: Any = (
+            last_val_scalar.date()
+            if hasattr(last_val_scalar, "date")
             else (
-                last_val
-                if isinstance(last_val, date)
-                else pd.Timestamp(last_val).date()
+                last_val_scalar
+                if isinstance(last_val_scalar, date)
+                else pd.Timestamp(last_val_scalar).date()
             )
         )
+        if not isinstance(last_date_raw, date) or pd.isna(last_date_raw):
+            return df
+        last_date: date = last_date_raw
         yesterday_close = float(df.iloc[-1]["close"]) if len(df) > 0 else price
         open_p = (
             getattr(realtime_quote, "open_price", None)
@@ -2795,7 +2806,7 @@ class StockAnalysisPipeline:
                 logger.info(f"[{code}] 跳过 AI 分析（dry-run 模式）")
                 return None
 
-            analyze_kwargs = {"query_id": effective_query_id}
+            analyze_kwargs: Dict[str, Any] = {"query_id": effective_query_id}
             if current_time is not None:
                 analyze_kwargs["current_time"] = current_time
             result = self.analyze_stock(code, report_type, **analyze_kwargs)
@@ -3396,9 +3407,9 @@ class StockAnalysisPipeline:
                                     code_to_emails[r.code] = (
                                         list(dict.fromkeys(emails)) if emails else None
                                     )
-                            emails_to_results: Dict[Optional[Tuple[Any, ...]], List[Any]] = (
-                                defaultdict(list)
-                            )
+                            emails_to_results: Dict[
+                                Optional[Tuple[Any, ...]], List[Any]
+                            ] = defaultdict(list)
                             for r in results:
                                 recs = code_to_emails.get(r.code)
                                 key = tuple(recs) if recs else None
@@ -3694,9 +3705,10 @@ class StockAnalysisPipeline:
         report_type: ReportType,
     ) -> str:
         """Generate aggregate report with backward-compatible notifier fallback."""
-        generator = getattr(self.notifier, "generate_aggregate_report", None)
+        generator: Any = getattr(self.notifier, "generate_aggregate_report", None)
         if callable(generator):
-            return generator(results, report_type)
+            output: Any = generator(results, report_type)
+            return str(output)
         if report_type == ReportType.BRIEF and hasattr(
             self.notifier, "generate_brief_report"
         ):
