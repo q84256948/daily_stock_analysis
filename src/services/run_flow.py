@@ -74,6 +74,7 @@ _CONTEXT_STATUS_TO_FLOW = {
     "fetch_failed": "failed",
 }
 
+
 def build_task_run_flow_snapshot(
     task: Any,
     *,
@@ -84,13 +85,17 @@ def build_task_run_flow_snapshot(
     flow_status = _map_task_status(status_value)
     task_id = _safe_text(getattr(task, "task_id", None), max_length=96) or "unknown"
     trace_id = _safe_text(getattr(task, "trace_id", None), max_length=96) or task_id
-    stock_code = _safe_text(getattr(task, "stock_code", None), max_length=32) or "unknown"
+    stock_code = (
+        _safe_text(getattr(task, "stock_code", None), max_length=32) or "unknown"
+    )
     stock_name = _safe_text(getattr(task, "stock_name", None), max_length=80)
 
     created_at = _datetime_to_iso(getattr(task, "created_at", None))
     started_at = _datetime_to_iso(getattr(task, "started_at", None))
     completed_at = _datetime_to_iso(getattr(task, "completed_at", None))
-    now_iso = _datetime_to_iso(generated_at or datetime.now()) or datetime.now().isoformat()
+    now_iso = (
+        _datetime_to_iso(generated_at or datetime.now()) or datetime.now().isoformat()
+    )
 
     nodes: Dict[str, Dict[str, Any]] = {}
     edges: List[Dict[str, Any]] = []
@@ -123,7 +128,9 @@ def build_task_run_flow_snapshot(
         status=flow_status,
         started_at=created_at,
         ended_at=completed_at,
-        duration_ms=_elapsed_ms(getattr(task, "created_at", None), getattr(task, "completed_at", None)),
+        duration_ms=_elapsed_ms(
+            getattr(task, "created_at", None), getattr(task, "completed_at", None)
+        ),
         message=getattr(task, "message", None) or _task_status_message(flow_status),
         metadata={
             "progress": getattr(task, "progress", None),
@@ -143,9 +150,18 @@ def build_task_run_flow_snapshot(
             started_at=started_at,
             message=getattr(task, "message", None) or _task_status_message(flow_status),
         )
-        _append_edge(edges, "task_queue", "analysis_pipeline", "control", flow_status, label="调度")
+        _append_edge(
+            edges,
+            "task_queue",
+            "analysis_pipeline",
+            "control",
+            flow_status,
+            label="调度",
+        )
     else:
-        _put_skeleton_tail(nodes, edges, anchor_node_id="task_queue", status=flow_status)
+        _put_skeleton_tail(
+            nodes, edges, anchor_node_id="task_queue", status=flow_status
+        )
 
     _append_task_events(events, task, flow_status)
     _append_active_flow_events(
@@ -161,7 +177,9 @@ def build_task_run_flow_snapshot(
         nodes,
         edges,
         events,
-        elapsed_ms=_elapsed_ms(getattr(task, "created_at", None), getattr(task, "completed_at", None)),
+        elapsed_ms=_elapsed_ms(
+            getattr(task, "created_at", None), getattr(task, "completed_at", None)
+        ),
     )
     return RunFlowSnapshot.model_validate(
         {
@@ -188,14 +206,30 @@ def build_history_run_flow_snapshot(
     generated_at: Optional[datetime] = None,
 ) -> RunFlowSnapshot:
     """Build a run-flow snapshot from a persisted history record."""
-    snapshot = _as_mapping(context_snapshot if context_snapshot is not None else getattr(record, "context_snapshot", None))
-    raw = _as_mapping(raw_result if raw_result is not None else getattr(record, "raw_result", None))
+    snapshot = _as_mapping(
+        context_snapshot
+        if context_snapshot is not None
+        else getattr(record, "context_snapshot", None)
+    )
+    raw = _as_mapping(
+        raw_result if raw_result is not None else getattr(record, "raw_result", None)
+    )
     diagnostics = _as_mapping(snapshot.get("diagnostics")) if snapshot else {}
-    diagnostics = _normalize_history_diagnostics_for_record(record, snapshot, diagnostics)
+    diagnostics = _normalize_history_diagnostics_for_record(
+        record, snapshot, diagnostics
+    )
     overview = extract_analysis_context_pack_overview(snapshot) if snapshot else None
-    overview_metadata = overview.get("metadata") if isinstance((overview or {}).get("metadata"), Mapping) else {}
+    safe_overview = overview if overview is not None else {}
+    raw_overview_metadata = safe_overview.get("metadata")
+    overview_metadata = (
+        raw_overview_metadata if isinstance(raw_overview_metadata, Mapping) else {}
+    )
 
-    query_id = _safe_text(getattr(record, "query_id", None), max_length=96) or diagnostics.get("query_id") or "unknown"
+    query_id = (
+        _safe_text(getattr(record, "query_id", None), max_length=96)
+        or diagnostics.get("query_id")
+        or "unknown"
+    )
     task_id = _safe_text(diagnostics.get("task_id"), max_length=96) or query_id
     trace_id = (
         _safe_text(diagnostics.get("trace_id"), max_length=96)
@@ -209,9 +243,13 @@ def build_history_run_flow_snapshot(
         or _safe_text(raw.get("stock_code") or raw.get("code"), max_length=32)
         or "unknown"
     )
-    stock_name = _safe_text(getattr(record, "name", None), max_length=80) or _safe_text(raw.get("name"), max_length=80)
+    stock_name = _safe_text(getattr(record, "name", None), max_length=80) or _safe_text(
+        raw.get("name"), max_length=80
+    )
     created_at = _datetime_to_iso(getattr(record, "created_at", None))
-    now_iso = _datetime_to_iso(generated_at or datetime.now()) or datetime.now().isoformat()
+    now_iso = (
+        _datetime_to_iso(generated_at or datetime.now()) or datetime.now().isoformat()
+    )
 
     nodes: Dict[str, Dict[str, Any]] = {}
     edges: List[Dict[str, Any]] = []
@@ -229,7 +267,8 @@ def build_history_run_flow_snapshot(
         message="历史分析记录",
         metadata={
             "query_id": query_id,
-            "trigger_source": diagnostics.get("trigger_source") or overview_metadata.get("trigger_source"),
+            "trigger_source": diagnostics.get("trigger_source")
+            or overview_metadata.get("trigger_source"),
             "report_type": getattr(record, "report_type", None),
         },
     )
@@ -281,7 +320,9 @@ def build_history_run_flow_snapshot(
     )
     _append_context_blocks(nodes, edges, events, overview, provider_success_by_block)
     if not any(edge["to"] == "context_pack" for edge in edges):
-        _append_edge(edges, "task_queue", "context_pack", "data", context_status, label="输入")
+        _append_edge(
+            edges, "task_queue", "context_pack", "data", context_status, label="输入"
+        )
 
     last_analysis_node = _append_llm_runs(
         nodes,
@@ -324,7 +365,9 @@ def build_history_run_flow_snapshot(
             message="历史记录已存在",
             metadata={"analysis_history_id": getattr(record, "id", None)},
         )
-        _append_edge(edges, last_analysis_node, "history_save", "data", "success", label="保存")
+        _append_edge(
+            edges, last_analysis_node, "history_save", "data", "success", label="保存"
+        )
         last_artifact_node = "history_save"
 
     notification_count = _append_notification_runs(
@@ -344,12 +387,21 @@ def build_history_run_flow_snapshot(
             status="unknown",
             message="通知结果未记录",
         )
-        _append_edge(edges, last_artifact_node, "notification", "control", "unknown", label="通知")
+        _append_edge(
+            edges,
+            last_artifact_node,
+            "notification",
+            "control",
+            "unknown",
+            label="通知",
+        )
 
     summary = _build_summary(nodes, edges, events)
     status = _history_snapshot_status(nodes, diagnostics, overview)
     if summary.get("model") is None:
-        summary["model"] = _safe_text(normalize_model_used(raw.get("model_used")) if raw else None, max_length=120)
+        summary["model"] = _safe_text(
+            normalize_model_used(raw.get("model_used")) if raw else None, max_length=120
+        )
 
     return RunFlowSnapshot.model_validate(
         {
@@ -391,9 +443,14 @@ def _append_provider_runs(
         attempt_index = attempt_index_by_type[data_type]
         provider = _safe_text(run.get("provider"), max_length=80) or "unknown"
         label = _DATA_TYPE_LABELS.get(data_type, data_type)
-        node_id = f"provider_{_safe_key(data_type)}_{_safe_key(provider)}_{attempt_index}"
+        node_id = (
+            f"provider_{_safe_key(data_type)}_{_safe_key(provider)}_{attempt_index}"
+        )
         success = run.get("success") is True
-        had_previous_failure = data_type in previous_node_by_type and previous_node_by_type[data_type][1].get("success") is False
+        had_previous_failure = (
+            data_type in previous_node_by_type
+            and previous_node_by_type[data_type][1].get("success") is False
+        )
         status = _provider_run_status(run, had_previous_failure=had_previous_failure)
         duration_ms = _safe_int(run.get("latency_ms"))
         timestamp = _datetime_to_iso(run.get("created_at"))
@@ -439,7 +496,9 @@ def _append_provider_runs(
                 edge_kind,
                 status,
                 label="降级" if edge_kind == "fallback" else "重试",
-                message=_safe_text(run.get("fallback_from") or run.get("fallback_to"), max_length=120),
+                message=_safe_text(
+                    run.get("fallback_from") or run.get("fallback_to"), max_length=120
+                ),
             )
         else:
             _append_edge(edges, "task_queue", node_id, "control", status, label="调用")
@@ -447,7 +506,11 @@ def _append_provider_runs(
         if success:
             provider_success_by_block[block_key] = node_id
 
-        severity = "success" if success else ("warning" if success_by_data_type.get(data_type) else "danger")
+        severity = (
+            "success"
+            if success
+            else ("warning" if success_by_data_type.get(data_type) else "danger")
+        )
         _append_event(
             events,
             "provider_run",
@@ -480,14 +543,17 @@ def _append_context_blocks(
 ) -> None:
     if not overview:
         return
-    metadata = overview.get("metadata") if isinstance(overview.get("metadata"), Mapping) else {}
+    raw_metadata = overview.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     overview_timestamp = overview.get("created_at")
     for block in _as_list(overview.get("blocks")):
         block_map = _as_mapping(block)
         key = _safe_key(block_map.get("key"))
         if not key:
             continue
-        status = _CONTEXT_STATUS_TO_FLOW.get(str(block_map.get("status") or ""), "unknown")
+        status = _CONTEXT_STATUS_TO_FLOW.get(
+            str(block_map.get("status") or ""), "unknown"
+        )
         node_id = f"context_block_{key}"
         record_count = metadata.get("news_result_count") if key == "news" else None
         _put_node(
@@ -547,7 +613,9 @@ def _append_llm_runs(
         if not run:
             continue
         call_type = _safe_key(run.get("call_type") or "analysis")
-        model = normalize_model_used(run.get("model")) or normalize_model_used(raw_result.get("model_used"))
+        model = normalize_model_used(run.get("model")) or normalize_model_used(
+            raw_result.get("model_used")
+        )
         provider = _safe_text(run.get("provider"), max_length=80)
         node_id = f"llm_{call_type}_{index}"
         success = run.get("success") is True
@@ -627,7 +695,11 @@ def _append_history_runs(
         status = "success" if success else "failed"
         node_id = "history_save" if index == 1 else f"history_save_{index}"
         timestamp = _datetime_to_iso(run.get("created_at")) or fallback_created_at
-        message = "报告历史已保存" if success else f"报告历史保存失败：{_safe_text(run.get('error_message_sanitized'), max_length=160) or '未知错误'}"
+        message = (
+            "报告历史已保存"
+            if success
+            else f"报告历史保存失败：{_safe_text(run.get('error_message_sanitized'), max_length=160) or '未知错误'}"
+        )
         _put_node(
             nodes,
             node_id,
@@ -698,7 +770,9 @@ def _append_notification_runs(
             status=status,
             provider=channel,
             ended_at=timestamp,
-            attempts=_safe_int(run.get("attempts")) if _safe_int(run.get("attempts")) is not None else 1,
+            attempts=_safe_int(run.get("attempts"))
+            if _safe_int(run.get("attempts")) is not None
+            else 1,
             message=message,
             metadata={
                 "channel": channel,
@@ -713,8 +787,12 @@ def _append_notification_runs(
             "notification_run",
             node_id=node_id,
             timestamp=timestamp,
-            severity="success" if status == "success" else ("warning" if status == "skipped" else "danger"),
-            title="通知发送成功" if status == "success" else ("通知跳过" if status == "skipped" else "通知失败"),
+            severity="success"
+            if status == "success"
+            else ("warning" if status == "skipped" else "danger"),
+            title="通知发送成功"
+            if status == "success"
+            else ("通知跳过" if status == "skipped" else "通知失败"),
             message=message,
             metadata={
                 "channel": channel,
@@ -750,13 +828,18 @@ def _normalize_history_diagnostics_for_record(
     code = _safe_text(getattr(record, "code", None), max_length=32)
     report_kind = _safe_key(snapshot.get("report_kind")) if snapshot else ""
 
-    if report_type == "market_review" or report_kind == "market_review" or (code or "").upper() == "MARKET":
+    if (
+        report_type == "market_review"
+        or report_kind == "market_review"
+        or (code or "").upper() == "MARKET"
+    ):
         normalized["stock_code"] = "MARKET"
         normalized.setdefault("scope", "market_review")
         normalized["provider_runs"] = [
             run
             for run in _as_list(normalized.get("provider_runs"))
-            if _safe_key(_as_mapping(run).get("data_type")) not in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
+            if _safe_key(_as_mapping(run).get("data_type"))
+            not in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
         ]
         return normalized
 
@@ -777,7 +860,8 @@ def _normalize_history_diagnostics_for_record(
         [
             run
             for run in _as_list(normalized.get("provider_runs"))
-            if _safe_key(_as_mapping(run).get("data_type")) in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
+            if _safe_key(_as_mapping(run).get("data_type"))
+            in _STOCK_CONTEXT_PROVIDER_DATA_TYPES
         ]
     )
     if first_stock_data_at is not None:
@@ -785,7 +869,9 @@ def _normalize_history_diagnostics_for_record(
             run
             for run in _as_list(normalized.get("provider_runs"))
             if _safe_key(_as_mapping(run).get("data_type")) != "news_search"
-            or not _timestamp_before(_as_mapping(run).get("created_at"), first_stock_data_at)
+            or not _timestamp_before(
+                _as_mapping(run).get("created_at"), first_stock_data_at
+            )
         ]
     return normalized
 
@@ -793,7 +879,9 @@ def _normalize_history_diagnostics_for_record(
 def _first_timestamp(items: List[Any]) -> Optional[datetime]:
     timestamps = [
         parsed
-        for parsed in (_datetime_for_elapsed(_as_mapping(item).get("created_at")) for item in items)
+        for parsed in (
+            _datetime_for_elapsed(_as_mapping(item).get("created_at")) for item in items
+        )
         if parsed is not None
     ]
     return min(timestamps) if timestamps else None
@@ -854,10 +942,19 @@ def _put_skeleton_tail(
         status=downstream_status,
         message="尚未记录通知结果",
     )
-    _append_edge(edges, anchor_node_id, "context_pack", "data", downstream_status, label="输入")
+    _append_edge(
+        edges, anchor_node_id, "context_pack", "data", downstream_status, label="输入"
+    )
     _append_edge(edges, "context_pack", "llm", "data", downstream_status, label="生成")
     _append_edge(edges, "llm", "history_save", "data", downstream_status, label="保存")
-    _append_edge(edges, "history_save", "notification", "control", downstream_status, label="通知")
+    _append_edge(
+        edges,
+        "history_save",
+        "notification",
+        "control",
+        downstream_status,
+        label="通知",
+    )
 
 
 def _prune_active_skeleton_tail(
@@ -867,7 +964,9 @@ def _prune_active_skeleton_tail(
     remove_node_ids = set()
     if "llm" in nodes and any(node_id.startswith("llm_") for node_id in nodes):
         remove_node_ids.add("llm")
-    if "notification" in nodes and any(node_id.startswith("notification_") for node_id in nodes):
+    if "notification" in nodes and any(
+        node_id.startswith("notification_") for node_id in nodes
+    ):
         remove_node_ids.add("notification")
     if not remove_node_ids:
         return
@@ -876,11 +975,14 @@ def _prune_active_skeleton_tail(
     edges[:] = [
         edge
         for edge in edges
-        if edge.get("from") not in remove_node_ids and edge.get("to") not in remove_node_ids
+        if edge.get("from") not in remove_node_ids
+        and edge.get("to") not in remove_node_ids
     ]
 
 
-def _append_task_events(events: List[Dict[str, Any]], task: Any, flow_status: str) -> None:
+def _append_task_events(
+    events: List[Dict[str, Any]], task: Any, flow_status: str
+) -> None:
     _append_event(
         events,
         "task_created",
@@ -978,17 +1080,24 @@ def _append_active_flow_events(
                     attempts=node_payload.get("attempts"),
                     record_count=node_payload.get("record_count"),
                     message=node_payload.get("message") or event.get("message"),
-                    metadata={key: value for key, value in metadata.items() if key != "node"},
+                    metadata={
+                        key: value for key, value in metadata.items() if key != "node"
+                    },
                 )
 
         event_type = _safe_key(event.get("type")) or "event"
         provider_data_type = None
         provider_run = None
-        if event_type in {"provider_run", "provider_run_started"} and node_id and node_id in nodes:
+        if (
+            event_type in {"provider_run", "provider_run_started"}
+            and node_id
+            and node_id in nodes
+        ):
             provider_data_type = _safe_key(metadata.get("data_type") or "provider")
             provider_run = {
                 "provider": metadata.get("provider") or nodes[node_id].get("provider"),
-                "success": event.get("severity") == "success" or nodes[node_id].get("status") in {"success", "fallback"},
+                "success": event.get("severity") == "success"
+                or nodes[node_id].get("status") in {"success", "fallback"},
                 "fallback_from": metadata.get("fallback_from"),
                 "fallback_to": metadata.get("fallback_to"),
             }
@@ -1007,36 +1116,86 @@ def _append_active_flow_events(
                 previous_provider = last_provider_node_by_type.get(provider_data_type)
                 if previous_provider:
                     previous_provider_node, previous_provider_run = previous_provider
-                    edge_kind = _provider_transition_kind(previous_provider_run, provider_run)
+                    edge_kind = _provider_transition_kind(
+                        previous_provider_run, provider_run
+                    )
                     _append_edge(
                         edges,
                         previous_provider_node,
                         node_id,
                         edge_kind,
                         nodes[node_id].get("status", "unknown"),
-                        label="降级" if edge_kind == "fallback" else ("重试" if edge_kind == "retry" else "调用"),
+                        label="降级"
+                        if edge_kind == "fallback"
+                        else ("重试" if edge_kind == "retry" else "调用"),
                     )
                 else:
-                    _append_edge(edges, "task_queue", node_id, "control", nodes[node_id].get("status", "unknown"), label="调用")
+                    _append_edge(
+                        edges,
+                        "task_queue",
+                        node_id,
+                        "control",
+                        nodes[node_id].get("status", "unknown"),
+                        label="调用",
+                    )
                 last_provider_node_by_type[provider_data_type] = (node_id, provider_run)
             elif event_type in {"llm_run", "llm_run_started"}:
-                anchor = "analysis_pipeline" if "analysis_pipeline" in nodes else "task_queue"
-                _append_edge(edges, anchor, node_id, "data", nodes[node_id].get("status", "unknown"), label="生成")
+                anchor = (
+                    "analysis_pipeline"
+                    if "analysis_pipeline" in nodes
+                    else "task_queue"
+                )
+                _append_edge(
+                    edges,
+                    anchor,
+                    node_id,
+                    "data",
+                    nodes[node_id].get("status", "unknown"),
+                    label="生成",
+                )
                 last_llm_node = node_id
             elif event_type == "history_run":
-                anchor = last_llm_node or ("analysis_pipeline" if "analysis_pipeline" in nodes else "task_queue")
-                _append_edge(edges, anchor, node_id, "data", nodes[node_id].get("status", "unknown"), label="保存")
+                anchor = last_llm_node or (
+                    "analysis_pipeline"
+                    if "analysis_pipeline" in nodes
+                    else "task_queue"
+                )
+                _append_edge(
+                    edges,
+                    anchor,
+                    node_id,
+                    "data",
+                    nodes[node_id].get("status", "unknown"),
+                    label="保存",
+                )
                 last_history_node = node_id
             elif event_type == "notification_run":
-                anchor = last_history_node or last_llm_node or ("analysis_pipeline" if "analysis_pipeline" in nodes else "task_queue")
-                _append_edge(edges, anchor, node_id, "control", nodes[node_id].get("status", "unknown"), label="通知")
+                anchor = (
+                    last_history_node
+                    or last_llm_node
+                    or (
+                        "analysis_pipeline"
+                        if "analysis_pipeline" in nodes
+                        else "task_queue"
+                    )
+                )
+                _append_edge(
+                    edges,
+                    anchor,
+                    node_id,
+                    "control",
+                    nodes[node_id].get("status", "unknown"),
+                    label="通知",
+                )
             known_node_ids.add(node_id)
 
         _append_external_event(events, event)
 
 
 def _append_external_event(events: List[Dict[str, Any]], event: Dict[str, Any]) -> None:
-    event_id = _safe_text(event.get("id"), max_length=96) or f"flow_{len(events) + 1:04d}"
+    event_id = (
+        _safe_text(event.get("id"), max_length=96) or f"flow_{len(events) + 1:04d}"
+    )
     if any(existing.get("id") == event_id for existing in events):
         return
     metadata = _sanitize_metadata(event.get("metadata") or {})
@@ -1046,7 +1205,9 @@ def _append_external_event(events: List[Dict[str, Any]], event: Dict[str, Any]) 
         {
             "id": event_id,
             "timestamp": _datetime_to_iso(event.get("timestamp")),
-            "severity": event.get("severity") if event.get("severity") in {"info", "success", "warning", "danger"} else "info",
+            "severity": event.get("severity")
+            if event.get("severity") in {"info", "success", "warning", "danger"}
+            else "info",
             "type": _safe_key(event.get("type")) or "event",
             "node_id": _safe_text(event.get("node_id"), max_length=120),
             "title": _safe_text(event.get("title"), max_length=100) or "运行事件",
@@ -1076,7 +1237,9 @@ def _provider_run_status(run: Dict[str, Any], *, had_previous_failure: bool) -> 
     return "failed"
 
 
-def _provider_transition_kind(previous_run: Dict[str, Any], current_run: Dict[str, Any]) -> str:
+def _provider_transition_kind(
+    previous_run: Dict[str, Any], current_run: Dict[str, Any]
+) -> str:
     previous_provider = _safe_text(previous_run.get("provider"), max_length=80)
     current_provider = _safe_text(current_run.get("provider"), max_length=80)
     if previous_run.get("fallback_to") or current_run.get("fallback_from"):
@@ -1104,7 +1267,9 @@ def _history_snapshot_status(
         for node in nodes.values()
     ):
         return "failed"
-    if any(status in {"failed", "timeout", "degraded", "fallback"} for status in statuses):
+    if any(
+        status in {"failed", "timeout", "degraded", "fallback"} for status in statuses
+    ):
         return "degraded"
     return "success"
 
@@ -1113,12 +1278,17 @@ def _context_pack_status(overview: Optional[Dict[str, Any]]) -> str:
     if not overview:
         return "unknown"
     block_statuses = [
-        _CONTEXT_STATUS_TO_FLOW.get(str(_as_mapping(block).get("status") or ""), "unknown")
+        _CONTEXT_STATUS_TO_FLOW.get(
+            str(_as_mapping(block).get("status") or ""), "unknown"
+        )
         for block in _as_list(overview.get("blocks"))
     ]
     if not block_statuses:
         return "unknown"
-    if any(status in {"failed", "fallback", "degraded", "skipped"} for status in block_statuses):
+    if any(
+        status in {"failed", "fallback", "degraded", "skipped"}
+        for status in block_statuses
+    ):
         return "degraded"
     if all(status == "success" for status in block_statuses):
         return "success"
@@ -1158,22 +1328,32 @@ def _context_block_message(block: Dict[str, Any]) -> str:
     return f"输入块状态为 {status or 'unknown'}"
 
 
-def _provider_run_message(label: str, provider: str, run: Dict[str, Any], *, success: bool) -> str:
+def _provider_run_message(
+    label: str, provider: str, run: Dict[str, Any], *, success: bool
+) -> str:
     if success:
         record_count = _safe_int(run.get("record_count"))
         suffix = f"，返回 {record_count} 条" if record_count is not None else ""
         return f"{label} {provider} 成功{suffix}"
-    error = _safe_text(run.get("error_message_sanitized") or run.get("error_type"), max_length=160)
+    error = _safe_text(
+        run.get("error_message_sanitized") or run.get("error_type"), max_length=160
+    )
     return f"{label} {provider} 失败：{error or '未知错误'}"
 
 
-def _llm_run_message(model: Optional[str], run: Dict[str, Any], *, success: bool) -> str:
-    display_model = _safe_text(model or run.get("provider") or "unknown", max_length=120)
+def _llm_run_message(
+    model: Optional[str], run: Dict[str, Any], *, success: bool
+) -> str:
+    display_model = _safe_text(
+        model or run.get("provider") or "unknown", max_length=120
+    )
     if success:
         if run.get("fallback_model"):
             return f"LLM {display_model} 成功，期间发生模型切换"
         return f"LLM {display_model} 成功"
-    error = _safe_text(run.get("error_message_sanitized") or run.get("error_type"), max_length=160)
+    error = _safe_text(
+        run.get("error_message_sanitized") or run.get("error_type"), max_length=160
+    )
     return f"LLM {display_model} 失败：{error or '未知错误'}"
 
 
@@ -1183,7 +1363,9 @@ def _notification_run_message(channel: str, run: Dict[str, Any], status: str) ->
     if status == "skipped":
         return f"{channel} 通知跳过"
     if status == "failed":
-        error = _safe_text(run.get("error_message_sanitized") or run.get("status"), max_length=160)
+        error = _safe_text(
+            run.get("error_message_sanitized") or run.get("status"), max_length=160
+        )
         return f"{channel} 通知失败：{error or '未知错误'}"
     return f"{channel} 通知结果未知"
 
@@ -1206,10 +1388,10 @@ def _build_summary(
     if elapsed_ms is None:
         elapsed_ms = _events_elapsed_ms(events)
     if elapsed_ms is None and max_duration >= 0:
-        elapsed_ms = sum(
-            _safe_int(node.get("duration_ms")) or 0
-            for node in nodes.values()
-        ) or None
+        elapsed_ms = (
+            sum(_safe_int(node.get("duration_ms")) or 0 for node in nodes.values())
+            or None
+        )
 
     failed_attempts = sum(
         1
@@ -1218,11 +1400,11 @@ def _build_summary(
         and node.get("kind") in {"data_source", "model", "artifact", "notification"}
     )
     fallback_count = sum(
-        1
-        for edge in edges
-        if edge.get("kind") in {"fallback", "retry"}
+        1 for edge in edges if edge.get("kind") in {"fallback", "retry"}
     )
-    data_source_count = sum(1 for node in nodes.values() if node.get("kind") == "data_source")
+    data_source_count = sum(
+        1 for node in nodes.values() if node.get("kind") == "data_source"
+    )
     model = next(
         (
             _safe_text(node.get("provider"), max_length=120)
@@ -1274,7 +1456,9 @@ def _put_node(
         "message": _safe_text(message, max_length=220),
         "metadata": _sanitize_metadata(metadata or {}),
     }
-    nodes[node_id] = {key: value for key, value in payload.items() if value not in (None, {}, [])}
+    nodes[node_id] = {
+        key: value for key, value in payload.items() if value not in (None, {}, [])
+    }
 
 
 def _append_edge(
@@ -1308,7 +1492,9 @@ def _append_edge(
             "id": edge_id,
             "from": from_node,
             "to": to_node,
-            "kind": kind if kind in {"data", "control", "fallback", "retry"} else "data",
+            "kind": kind
+            if kind in {"data", "control", "fallback", "retry"}
+            else "data",
             "status": _valid_status(status),
             "label": _safe_text(label, max_length=40),
             "message": _safe_text(message, max_length=180),
@@ -1346,7 +1532,9 @@ def _append_event(
         {
             "id": event_id,
             "timestamp": _datetime_to_iso(timestamp),
-            "severity": severity if severity in {"info", "success", "warning", "danger"} else "info",
+            "severity": severity
+            if severity in {"info", "success", "warning", "danger"}
+            else "info",
             "type": _safe_key(event_type) or "event",
             "node_id": node_id,
             "title": _safe_text(title, max_length=100) or event_type,

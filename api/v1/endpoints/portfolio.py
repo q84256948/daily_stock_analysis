@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import JSONResponse
@@ -103,12 +103,16 @@ def create_account(request: PortfolioAccountCreateRequest) -> PortfolioAccountIt
     summary="List portfolio accounts",
 )
 def list_accounts(
-    include_inactive: bool = Query(False, description="Whether to include inactive accounts"),
+    include_inactive: bool = Query(
+        False, description="Whether to include inactive accounts"
+    ),
 ) -> PortfolioAccountListResponse:
     service = PortfolioService()
     try:
         rows = service.list_accounts(include_inactive=include_inactive)
-        return PortfolioAccountListResponse(accounts=[PortfolioAccountItem(**item) for item in rows])
+        return PortfolioAccountListResponse(
+            accounts=[PortfolioAccountItem(**item) for item in rows]
+        )
     except Exception as exc:
         raise _internal_error("List accounts failed", exc)
 
@@ -116,10 +120,16 @@ def list_accounts(
 @router.put(
     "/accounts/{account_id}",
     response_model=PortfolioAccountItem,
-    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Update portfolio account",
 )
-def update_account(account_id: int, request: PortfolioAccountUpdateRequest) -> PortfolioAccountItem:
+def update_account(
+    account_id: int, request: PortfolioAccountUpdateRequest
+) -> PortfolioAccountItem:
     service = PortfolioService()
     try:
         updated = service.update_account(
@@ -163,7 +173,11 @@ def delete_account(account_id: int):
 @router.post(
     "/trades",
     response_model=PortfolioEventCreatedResponse,
-    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Record trade event",
 )
 def create_trade(request: PortfolioTradeCreateRequest) -> PortfolioEventCreatedResponse:
@@ -232,7 +246,11 @@ def list_trades(
 @router.delete(
     "/trades/{trade_id}",
     response_model=PortfolioDeleteResponse,
-    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Delete trade event",
 )
 def delete_trade(trade_id: int) -> PortfolioDeleteResponse:
@@ -253,10 +271,16 @@ def delete_trade(trade_id: int) -> PortfolioDeleteResponse:
 @router.post(
     "/cash-ledger",
     response_model=PortfolioEventCreatedResponse,
-    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Record cash event",
 )
-def create_cash_ledger(request: PortfolioCashLedgerCreateRequest) -> PortfolioEventCreatedResponse:
+def create_cash_ledger(
+    request: PortfolioCashLedgerCreateRequest,
+) -> PortfolioEventCreatedResponse:
     service = PortfolioService()
     try:
         data = service.record_cash_ledger(
@@ -286,7 +310,9 @@ def list_cash_ledger(
     account_id: Optional[int] = Query(None, description="Optional account id"),
     date_from: Optional[date] = Query(None, description="Cash event date from"),
     date_to: Optional[date] = Query(None, description="Cash event date to"),
-    direction: Optional[str] = Query(None, description="Optional direction filter: in/out"),
+    direction: Optional[str] = Query(
+        None, description="Optional direction filter: in/out"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> PortfolioCashLedgerListResponse:
@@ -310,7 +336,11 @@ def list_cash_ledger(
 @router.delete(
     "/cash-ledger/{entry_id}",
     response_model=PortfolioDeleteResponse,
-    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Delete cash ledger event",
 )
 def delete_cash_ledger(entry_id: int) -> PortfolioDeleteResponse:
@@ -318,7 +348,9 @@ def delete_cash_ledger(entry_id: int) -> PortfolioDeleteResponse:
     try:
         ok = service.delete_cash_ledger_event(entry_id)
         if not ok:
-            raise api_error(404, "not_found", f"Cash ledger entry not found: {entry_id}")
+            raise api_error(
+                404, "not_found", f"Cash ledger entry not found: {entry_id}"
+            )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
         raise _conflict_error(error="portfolio_busy", message=str(exc))
@@ -331,10 +363,16 @@ def delete_cash_ledger(entry_id: int) -> PortfolioDeleteResponse:
 @router.post(
     "/corporate-actions",
     response_model=PortfolioEventCreatedResponse,
-    responses={400: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Record corporate action event",
 )
-def create_corporate_action(request: PortfolioCorporateActionCreateRequest) -> PortfolioEventCreatedResponse:
+def create_corporate_action(
+    request: PortfolioCorporateActionCreateRequest,
+) -> PortfolioEventCreatedResponse:
     service = PortfolioService()
     try:
         data = service.record_corporate_action(
@@ -365,8 +403,12 @@ def create_corporate_action(request: PortfolioCorporateActionCreateRequest) -> P
 )
 def list_corporate_actions(
     account_id: Optional[int] = Query(None, description="Optional account id"),
-    date_from: Optional[date] = Query(None, description="Corporate action effective date from"),
-    date_to: Optional[date] = Query(None, description="Corporate action effective date to"),
+    date_from: Optional[date] = Query(
+        None, description="Corporate action effective date from"
+    ),
+    date_to: Optional[date] = Query(
+        None, description="Corporate action effective date to"
+    ),
     symbol: Optional[str] = Query(None, description="Optional stock symbol filter"),
     action_type: Optional[str] = Query(None, description="Optional action type filter"),
     page: int = Query(1, ge=1),
@@ -393,7 +435,11 @@ def list_corporate_actions(
 @router.delete(
     "/corporate-actions/{action_id}",
     response_model=PortfolioDeleteResponse,
-    responses={404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Delete corporate action event",
 )
 def delete_corporate_action(action_id: int) -> PortfolioDeleteResponse:
@@ -401,7 +447,9 @@ def delete_corporate_action(action_id: int) -> PortfolioDeleteResponse:
     try:
         ok = service.delete_corporate_action_event(action_id)
         if not ok:
-            raise api_error(404, "not_found", f"Corporate action not found: {action_id}")
+            raise api_error(
+                404, "not_found", f"Corporate action not found: {action_id}"
+            )
         return PortfolioDeleteResponse(deleted=1)
     except PortfolioBusyError as exc:
         raise _conflict_error(error="portfolio_busy", message=str(exc))
@@ -418,7 +466,9 @@ def delete_corporate_action(action_id: int) -> PortfolioDeleteResponse:
     summary="Get portfolio snapshot",
 )
 def get_snapshot(
-    account_id: Optional[int] = Query(None, description="Optional account id, default returns all accounts"),
+    account_id: Optional[int] = Query(
+        None, description="Optional account id, default returns all accounts"
+    ),
     as_of: Optional[date] = Query(None, description="Snapshot date, default today"),
     cost_method: str = Query("fifo", description="Cost method: fifo or avg"),
 ) -> PortfolioSnapshotResponse:
@@ -440,13 +490,22 @@ def get_snapshot(
     "/positions/{symbol}/analysis",
     status_code=202,
     response_model=TaskAccepted,
-    responses={400: {"model": ErrorResponse}, 404: {"model": ErrorResponse}, 409: {"model": DuplicateTaskErrorResponse}, 500: {"model": ErrorResponse}},
+    responses={
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+        409: {"model": DuplicateTaskErrorResponse},
+        500: {"model": ErrorResponse},
+    },
     summary="Submit manual analysis for a held portfolio position",
 )
-def analyze_position(symbol: str, request: PortfolioPositionAnalysisRequest) -> TaskAccepted | JSONResponse:
+def analyze_position(
+    symbol: str, request: PortfolioPositionAnalysisRequest
+) -> TaskAccepted | JSONResponse:
     service = PortfolioService()
     try:
-        context = _resolve_position_analysis_context(service, symbol=symbol, account_id=request.account_id)
+        context = _resolve_position_analysis_context(
+            service, symbol=symbol, account_id=request.account_id
+        )
     except HTTPException:
         raise
     except ValueError as exc:
@@ -482,7 +541,7 @@ def analyze_position(symbol: str, request: PortfolioPositionAnalysisRequest) -> 
         trace_id=task.trace_id or task.task_id,
         status="pending",
         message=f"分析任务已加入队列: {task.stock_code}",
-        analysis_phase=task.analysis_phase,
+        analysis_phase=cast(Any, task.analysis_phase),
     )
     return response
 
@@ -515,7 +574,9 @@ def _resolve_position_analysis_context(
             matches.append((account, position, position_symbol))
 
     if not matches:
-        raise api_error(404, "not_found", f"No non-zero portfolio position for {target}")
+        raise api_error(
+            404, "not_found", f"No non-zero portfolio position for {target}"
+        )
     if account_id is None:
         account_ids = {
             int(account.get("account_id"))
@@ -569,7 +630,9 @@ def parse_csv_import(
             record_count=parsed["record_count"],
             skipped_count=parsed["skipped_count"],
             error_count=parsed["error_count"],
-            records=[_serialize_import_record(item) for item in parsed.get("records", [])],
+            records=[
+                _serialize_import_record(item) for item in parsed.get("records", [])
+            ],
             errors=list(parsed.get("errors", [])),
         )
     except ValueError as exc:
@@ -587,7 +650,9 @@ def parse_csv_import(
 def list_csv_brokers() -> PortfolioImportBrokerListResponse:
     importer = PortfolioImportService()
     try:
-        return PortfolioImportBrokerListResponse(brokers=importer.list_supported_brokers())
+        return PortfolioImportBrokerListResponse(
+            brokers=cast(Any, importer.list_supported_brokers())
+        )
     except Exception as exc:
         raise _internal_error("List CSV brokers failed", exc)
 
@@ -654,7 +719,9 @@ def get_risk_report(
 ) -> PortfolioRiskResponse:
     service = PortfolioRiskService()
     try:
-        data = service.get_risk_report(account_id=account_id, as_of=as_of, cost_method=cost_method)
+        data = service.get_risk_report(
+            account_id=account_id, as_of=as_of, cost_method=cost_method
+        )
         return PortfolioRiskResponse(**data)
     except ValueError as exc:
         raise _bad_request(exc)

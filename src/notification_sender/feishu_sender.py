@@ -6,6 +6,7 @@
 1. 通过 webhook 发送飞书消息
 2. 通过飞书应用机器人（App Bot）发送消息（lark-oapi SDK）
 """
+
 import base64
 import hashlib
 import hmac
@@ -50,7 +51,10 @@ try:
     LARK_DOMAIN = _SDK_LARK_DOMAIN
     FEISHU_SDK_AVAILABLE = True
 except ImportError:
-    pass
+    CreateMessageRequest = None  # type: ignore[assignment,misc]
+    CreateMessageRequestBody = None  # type: ignore[assignment,misc]
+    _lark = None  # type: ignore[assignment]
+    FEISHU_SDK_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -65,7 +69,6 @@ _NO_CLIENT = object()
 
 
 class FeishuSender:
-
     def __init__(self, config: Config):
         """
         Initialise Feishu sender.
@@ -79,18 +82,26 @@ class FeishuSender:
         """
         # -- Webhook mode --
         self._feishu_url = getattr(config, "feishu_webhook_url", None)
-        self._feishu_secret = (getattr(config, "feishu_webhook_secret", None) or "").strip()
-        self._feishu_keyword = (getattr(config, "feishu_webhook_keyword", None) or "").strip()
+        self._feishu_secret = (
+            getattr(config, "feishu_webhook_secret", None) or ""
+        ).strip()
+        self._feishu_keyword = (
+            getattr(config, "feishu_webhook_keyword", None) or ""
+        ).strip()
         self._feishu_max_bytes = getattr(config, "feishu_max_bytes", 20000)
         self._webhook_verify_ssl = getattr(config, "webhook_verify_ssl", True)
 
         # -- App Bot mode --
         self._feishu_app_id = (getattr(config, "feishu_app_id", None) or "").strip()
-        self._feishu_app_secret = (getattr(config, "feishu_app_secret", None) or "").strip()
+        self._feishu_app_secret = (
+            getattr(config, "feishu_app_secret", None) or ""
+        ).strip()
         self._feishu_chat_id = (getattr(config, "feishu_chat_id", None) or "").strip()
         self._feishu_receive_id_type = (
-            getattr(config, "feishu_receive_id_type", None) or "chat_id"
-        ).strip().lower()
+            (getattr(config, "feishu_receive_id_type", None) or "chat_id")
+            .strip()
+            .lower()
+        )
         if self._feishu_receive_id_type not in ("chat_id", "open_id"):
             logger.warning(
                 "无效的 FEISHU_RECEIVE_ID_TYPE=%s，回退为 chat_id",
@@ -99,12 +110,15 @@ class FeishuSender:
             self._feishu_receive_id_type = "chat_id"
         # domain_name must be "feishu" or "lark"; anything else defaulted to feishu.
         raw_domain = (
-            getattr(config, "feishu_domain", None) or os.getenv("FEISHU_DOMAIN", "feishu")
-        ).strip().lower()
-        if raw_domain not in ("feishu", "lark"):
-            logger.warning(
-                "无效的 FEISHU_DOMAIN=%s，回退为 feishu", raw_domain
+            (
+                getattr(config, "feishu_domain", None)
+                or os.getenv("FEISHU_DOMAIN", "feishu")
             )
+            .strip()
+            .lower()
+        )
+        if raw_domain not in ("feishu", "lark"):
+            logger.warning("无效的 FEISHU_DOMAIN=%s，回退为 feishu", raw_domain)
             raw_domain = "feishu"
         self._feishu_domain = FEISHU_DOMAIN if raw_domain == "feishu" else LARK_DOMAIN
 
@@ -194,7 +208,9 @@ class FeishuSender:
                     .log_level(_lark.LogLevel.WARNING)
                     .build()
                 )
-                logger.info("飞书 App Bot 客户端初始化成功 (domain=%s)", self._feishu_domain)
+                logger.info(
+                    "飞书 App Bot 客户端初始化成功 (domain=%s)", self._feishu_domain
+                )
             except Exception as e:
                 logger.error("飞书 App Bot 客户端初始化失败: %s", e)
                 self._app_client = None
@@ -218,9 +234,7 @@ class FeishuSender:
         content_bytes = len(formatted.encode("utf-8"))
 
         if content_bytes > self._feishu_max_bytes:
-            logger.info(
-                "App Bot 消息超长 (%d 字节)，将分批发送", content_bytes
-            )
+            logger.info("App Bot 消息超长 (%d 字节)，将分批发送", content_bytes)
             return self._app_send_chunked(client, formatted)
 
         return self._app_send_once(client, formatted)
@@ -268,8 +282,10 @@ class FeishuSender:
         deterministic and a construction error is a programming error, not
         a transient failure.
         """
-        if client is None:
+        if client is None or not FEISHU_SDK_AVAILABLE:
             return False
+        assert CreateMessageRequest is not None
+        assert CreateMessageRequestBody is not None
 
         send_uuid = str(uuid_mod.uuid4())
         try:
@@ -298,7 +314,10 @@ class FeishuSender:
             except Exception as e:
                 logger.warning(
                     "App Bot 发送异常 (attempt=%d/%d): %s: %s",
-                    attempt + 1, _APP_SEND_RETRIES, type(e).__name__, e,
+                    attempt + 1,
+                    _APP_SEND_RETRIES,
+                    type(e).__name__,
+                    e,
                 )
                 if attempt < _APP_SEND_RETRIES - 1:
                     time.sleep(
@@ -317,12 +336,16 @@ class FeishuSender:
             except (AttributeError, Exception):
                 log_id = "N/A"
             status = "code=%s, msg=%s, log_id=%s" % (
-                resp.code, resp.msg, log_id,
+                resp.code,
+                resp.msg,
+                log_id,
             )
             last_status = status
             logger.warning(
                 "App Bot 发送失败 (attempt=%d/%d): %s",
-                attempt + 1, _APP_SEND_RETRIES, status,
+                attempt + 1,
+                _APP_SEND_RETRIES,
+                status,
             )
 
             if attempt < _APP_SEND_RETRIES - 1:
@@ -340,7 +363,9 @@ class FeishuSender:
     # Public API
     # ------------------------------------------------------------------
 
-    def send_to_feishu(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+    def send_to_feishu(
+        self, content: str, *, timeout_seconds: Optional[float] = None
+    ) -> bool:
         """
         Push a message to Feishu.
 
@@ -363,7 +388,9 @@ class FeishuSender:
     # Webhook path (legacy, unchanged)
     # ------------------------------------------------------------------
 
-    def _send_via_webhook(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+    def _send_via_webhook(
+        self, content: str, *, timeout_seconds: Optional[float] = None
+    ) -> bool:
         """Legacy webhook send path."""
         formatted_content = format_feishu_markdown(content)
 
@@ -385,20 +412,31 @@ class FeishuSender:
                     min_chunk_bytes,
                 )
                 return False
-            logger.info("飞书消息内容超长(%d字节/%d字符)，将分批发送", content_bytes, len(content))
+            logger.info(
+                "飞书消息内容超长(%d字节/%d字符)，将分批发送",
+                content_bytes,
+                len(content),
+            )
             return self._send_feishu_chunked(formatted_content, effective_max_bytes)
 
         try:
-            return self._send_feishu_message(formatted_content, timeout_seconds=timeout_seconds)
+            return self._send_feishu_message(
+                formatted_content, timeout_seconds=timeout_seconds
+            )
         except Exception as e:
             logger.error("发送飞书消息失败: %s", e)
             return False
 
     def _send_feishu_chunked(self, content: str, max_bytes: int) -> bool:
         try:
-            chunks = chunk_content_by_max_bytes(content, max_bytes, add_page_marker=True)
+            chunks = chunk_content_by_max_bytes(
+                content, max_bytes, add_page_marker=True
+            )
         except ValueError as e:
-            logger.error("飞书消息分片失败，单片预算不足以安全分页（关键词过长或 max_bytes 过小）: %s", e)
+            logger.error(
+                "飞书消息分片失败，单片预算不足以安全分页（关键词过长或 max_bytes 过小）: %s",
+                e,
+            )
             return False
 
         total_chunks = len(chunks)
@@ -417,8 +455,14 @@ class FeishuSender:
                 time.sleep(1)
         return success_count == total_chunks
 
-    def _send_feishu_message(self, content: str, *, timeout_seconds: Optional[float] = None) -> bool:
+    def _send_feishu_message(
+        self, content: str, *, timeout_seconds: Optional[float] = None
+    ) -> bool:
         """Send a single Feishu webhook message (interactive card, fallback text)."""
+        feishu_url = self._feishu_url
+        if not feishu_url:
+            logger.warning("FEISHU_WEBHOOK_URL 未配置，跳过 Webhook 推送")
+            return False
         prepared_content = self._apply_keyword_prefix(content)
         security_fields = self._build_security_fields()
 
@@ -427,26 +471,34 @@ class FeishuSender:
             request_payload.update(security_fields)
             try:
                 response = requests.post(
-                    self._feishu_url,
+                    feishu_url,
                     json=request_payload,
                     timeout=timeout_seconds or _WEBHOOK_SEND_TIMEOUT_SECONDS,
                     verify=self._webhook_verify_ssl,
                 )
-            except (requests.exceptions.ConnectionError,
-                     requests.exceptions.Timeout,
-                     requests.exceptions.RequestException) as e:
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.RequestException,
+            ) as e:
                 logger.error("飞书 Webhook 网络请求异常: %s", e)
                 return False
             if response.status_code == 200:
                 try:
                     result = response.json()
                 except (ValueError, AttributeError):
-                    logger.error("飞书 Webhook 返回非 JSON 响应: %s", response.text[:200])
+                    logger.error(
+                        "飞书 Webhook 返回非 JSON 响应: %s", response.text[:200]
+                    )
                     return False
                 if not isinstance(result, dict):
-                    logger.error("飞书 Webhook 返回非预期格式: %s", type(result).__name__)
+                    logger.error(
+                        "飞书 Webhook 返回非预期格式: %s", type(result).__name__
+                    )
                     return False
-                code = result.get("code") if "code" in result else result.get("StatusCode")
+                code = (
+                    result.get("code") if "code" in result else result.get("StatusCode")
+                )
                 if code == 0:
                     logger.info("飞书 Webhook 消息发送成功")
                     return True
@@ -459,7 +511,10 @@ class FeishuSender:
             logger.error("飞书 Webhook 请求失败: HTTP %d", response.status_code)
             return False
 
-        card_payload = {"msg_type": "interactive", "card": self._build_card_body(prepared_content)}
+        card_payload = {
+            "msg_type": "interactive",
+            "card": self._build_card_body(prepared_content),
+        }
 
         if _post_payload(card_payload):
             return True

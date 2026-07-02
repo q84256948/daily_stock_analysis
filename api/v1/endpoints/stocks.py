@@ -75,13 +75,13 @@ def _write_watchlist_codes(service: SystemConfigService, codes: list[Any]) -> No
 
 # Stock code validation patterns (aligned with frontend validateStockCode)
 _STOCK_CODE_RE = re.compile(
-    r"^(?:\d{6}"                              # A-share 6-digit
-    r"|(?:SH|SZ|BJ)\d{6}"                     # exchange-prefixed A-share
-    r"|\d{6}\.(?:SH|SZ|SS|BJ)"                # exchange-suffixed A-share
-    r"|\d{1,5}\.HK"                           # HK suffix format
-    r"|HK\d{1,5}"                             # HK prefix format
-    r"|\d{5}"                                 # bare 5-digit HK code
-    r"|[A-Z]{1,5}(?:\.(?:US|[A-Z]))?"         # US ticker
+    r"^(?:\d{6}"  # A-share 6-digit
+    r"|(?:SH|SZ|BJ)\d{6}"  # exchange-prefixed A-share
+    r"|\d{6}\.(?:SH|SZ|SS|BJ)"  # exchange-suffixed A-share
+    r"|\d{1,5}\.HK"  # HK suffix format
+    r"|HK\d{1,5}"  # HK prefix format
+    r"|\d{5}"  # bare 5-digit HK code
+    r"|[A-Z]{1,5}(?:\.(?:US|[A-Z]))?"  # US ticker
     r")$",
     re.IGNORECASE,
 )
@@ -140,7 +140,10 @@ def extract_from_image(
     if not file or not file.filename:
         raise HTTPException(
             status_code=400,
-            detail={"error": "bad_request", "message": "未提供文件，请使用表单字段 file 上传图片"},
+            detail={
+                "error": "bad_request",
+                "message": "未提供文件，请使用表单字段 file 上传图片",
+            },
         )
 
     content_type = (file.content_type or "").split(";")[0].strip().lower()
@@ -176,16 +179,19 @@ def extract_from_image(
     try:
         items, raw_text = extract_stock_codes_from_image(data, content_type)
         extract_items = [
-            ExtractItem(code=code, name=name, confidence=conf) for code, name, conf in items
+            ExtractItem(code=code, name=name, confidence=conf)
+            for code, name, conf in items
         ]
-        codes = [i.code for i in extract_items]
+        codes = [i.code for i in extract_items if i.code is not None]
         return ExtractFromImageResponse(
             codes=codes,
             items=extract_items,
             raw_text=raw_text if include_raw else None,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail={"error": "extract_failed", "message": str(e)})
+        raise HTTPException(
+            status_code=400, detail={"error": "extract_failed", "message": str(e)}
+        )
     except Exception as e:
         logger.error(f"图片提取失败: {e}", exc_info=True)
         raise HTTPException(
@@ -228,7 +234,10 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
         if not text or not isinstance(text, str):
             raise HTTPException(
                 status_code=400,
-                detail={"error": "bad_request", "message": "未提供 text，请使用 {\"text\": \"...\"}"},
+                detail={
+                    "error": "bad_request",
+                    "message": '未提供 text，请使用 {"text": "..."}',
+                },
             )
         try:
             items = parse_import_from_text(text)
@@ -239,14 +248,19 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
                 text_bytes,
                 e,
             )
-            raise HTTPException(status_code=400, detail={"error": "parse_failed", "message": str(e)})
+            raise HTTPException(
+                status_code=400, detail={"error": "parse_failed", "message": str(e)}
+            )
     elif "multipart" in content_type:
         form = await request.form()
-        file = form.get("file")
+        file: Any = form.get("file") if hasattr(form, "get") else None
         if not file or not hasattr(file, "read"):
             raise HTTPException(
                 status_code=400,
-                detail={"error": "bad_request", "message": "未提供文件，请使用表单字段 file"},
+                detail={
+                    "error": "bad_request",
+                    "message": "未提供文件，请使用表单字段 file",
+                },
             )
         file_size = getattr(file, "size", None)
         if isinstance(file_size, int) and file_size > MAX_FILE_BYTES:
@@ -294,19 +308,20 @@ async def parse_import(request: Request) -> ExtractFromImageResponse:
                 len(data),
                 e,
             )
-            raise HTTPException(status_code=400, detail={"error": "parse_failed", "message": str(e)})
+            raise HTTPException(
+                status_code=400, detail={"error": "parse_failed", "message": str(e)}
+            )
     else:
         raise HTTPException(
             status_code=400,
             detail={
                 "error": "bad_request",
-                "message": "请使用 multipart/form-data 上传文件，或 application/json 提交 {\"text\": \"...\"}",
+                "message": '请使用 multipart/form-data 上传文件，或 application/json 提交 {"text": "..."}',
             },
         )
 
     extract_items = [
-        ExtractItem(code=code, name=name, confidence=conf)
-        for code, name, conf in items
+        ExtractItem(code=code, name=name, confidence=conf) for code, name, conf in items
     ]
     codes = list(dict.fromkeys(i.code for i in extract_items if i.code))
     return ExtractFromImageResponse(codes=codes, items=extract_items, raw_text=None)
@@ -327,12 +342,17 @@ def get_watchlist(
 ) -> WatchlistResponse:
     try:
         codes = _read_watchlist_codes(service)
-        return WatchlistResponse(stock_codes=codes, message=f"当前自选 {len(codes)} 只股票")
+        return WatchlistResponse(
+            stock_codes=codes, message=f"当前自选 {len(codes)} 只股票"
+        )
     except Exception as e:
         logger.error(f"获取自选队列失败: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail={"error": "internal_error", "message": f"获取自选队列失败: {str(e)}"},
+            detail={
+                "error": "internal_error",
+                "message": f"获取自选队列失败: {str(e)}",
+            },
         )
 
 
@@ -358,7 +378,9 @@ def add_to_watchlist(
         if _watchlist_match_key(validated) not in existing_keys:
             codes.append(request.stock_code.strip())
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已加入 {request.stock_code.strip()}")
+        return WatchlistResponse(
+            stock_codes=codes, message=f"已加入 {request.stock_code.strip()}"
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -393,7 +415,9 @@ def remove_from_watchlist(
             idx = existing_keys.index(requested_key)
             codes.pop(idx)
             _write_watchlist_codes(service, codes)
-        return WatchlistResponse(stock_codes=codes, message=f"已移除 {request.stock_code.strip()}")
+        return WatchlistResponse(
+            stock_codes=codes, message=f"已移除 {request.stock_code.strip()}"
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -413,38 +437,38 @@ def remove_from_watchlist(
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取股票实时行情",
-    description="获取指定股票的最新行情数据"
+    description="获取指定股票的最新行情数据",
 )
 def get_stock_quote(stock_code: str) -> StockQuote:
     """
     获取股票实时行情
-    
+
     获取指定股票的最新行情数据
-    
+
     Args:
         stock_code: 股票代码（如 600519、00700、AAPL）
-        
+
     Returns:
         StockQuote: 实时行情数据
-        
+
     Raises:
         HTTPException: 404 - 股票不存在
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_realtime_quote(stock_code)
-        
+
         if result is None:
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "not_found",
-                    "message": f"未找到股票 {stock_code} 的行情数据"
-                }
+                    "message": f"未找到股票 {stock_code} 的行情数据",
+                },
             )
-        
+
         return StockQuote(
             stock_code=result.get("stock_code", stock_code),
             stock_name=result.get("stock_name"),
@@ -457,9 +481,9 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             prev_close=result.get("prev_close"),
             volume=result.get("volume"),
             amount=result.get("amount"),
-            update_time=result.get("update_time")
+            update_time=result.get("update_time"),
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -468,8 +492,8 @@ def get_stock_quote(stock_code: str) -> StockQuote:
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"获取实时行情失败: {str(e)}"
-            }
+                "message": f"获取实时行情失败: {str(e)}",
+            },
         )
 
 
@@ -482,36 +506,36 @@ def get_stock_quote(stock_code: str) -> StockQuote:
         500: {"description": "服务器错误", "model": ErrorResponse},
     },
     summary="获取股票历史行情",
-    description="获取指定股票的历史 K 线数据"
+    description="获取指定股票的历史 K 线数据",
 )
 def get_stock_history(
     stock_code: str,
-    period: str = Query("daily", description="K 线周期", pattern="^(daily|weekly|monthly)$"),
-    days: int = Query(30, ge=1, le=365, description="获取天数")
+    period: str = Query(
+        "daily", description="K 线周期", pattern="^(daily|weekly|monthly)$"
+    ),
+    days: int = Query(30, ge=1, le=365, description="获取天数"),
 ) -> StockHistoryResponse:
     """
     获取股票历史行情
-    
+
     获取指定股票的历史 K 线数据
-    
+
     Args:
         stock_code: 股票代码
         period: K 线周期 (daily/weekly/monthly)
         days: 获取天数
-        
+
     Returns:
         StockHistoryResponse: 历史行情数据
     """
     try:
         service = StockService()
-        
+
         # 使用 def 而非 async def，FastAPI 自动在线程池中执行
         result = service.get_history_data(
-            stock_code=stock_code,
-            period=period,
-            days=days
+            stock_code=stock_code, period=period, days=days
         )
-        
+
         # 转换为响应模型
         data = [
             KLineData(
@@ -522,26 +546,22 @@ def get_stock_history(
                 close=item.get("close"),
                 volume=item.get("volume"),
                 amount=item.get("amount"),
-                change_percent=item.get("change_percent")
+                change_percent=item.get("change_percent"),
             )
             for item in result.get("data", [])
         ]
-        
+
         return StockHistoryResponse(
             stock_code=stock_code,
             stock_name=result.get("stock_name"),
             period=period,
-            data=data
+            data=data,
         )
-    
+
     except ValueError as e:
         # period 参数不支持的错误（如 weekly/monthly）
         raise HTTPException(
-            status_code=422,
-            detail={
-                "error": "unsupported_period",
-                "message": str(e)
-            }
+            status_code=422, detail={"error": "unsupported_period", "message": str(e)}
         )
     except Exception as e:
         logger.error(f"获取历史行情失败: {e}", exc_info=True)
@@ -549,6 +569,6 @@ def get_stock_history(
             status_code=500,
             detail={
                 "error": "internal_error",
-                "message": f"获取历史行情失败: {str(e)}"
-            }
+                "message": f"获取历史行情失败: {str(e)}",
+            },
         )

@@ -76,7 +76,9 @@ class BeliefLedger(Base):
             "sentiment_score": self.sentiment_score,
             "macro_score": self.macro_score,
             "future_returns": self.future_returns,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": self.created_at.isoformat()
+            if self.created_at is not None
+            else None,
         }
 
 
@@ -117,7 +119,9 @@ class BeliefLedgerRepo:
             .first()
         )
 
-    def get_high_edge(self, min_edge: float = 0.1, limit: int = 20) -> List[BeliefLedger]:
+    def get_high_edge(
+        self, min_edge: float = 0.1, limit: int = 20
+    ) -> List[BeliefLedger]:
         """Get records with high edge"""
         return (
             self.db.query(BeliefLedger)
@@ -132,7 +136,7 @@ class BeliefLedgerRepo:
         record = self.get_by_id(id)
         if not record:
             return False
-        record.future_returns = future_returns
+        setattr(record, "future_returns", future_returns)
         self.db.commit()
         return True
 

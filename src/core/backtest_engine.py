@@ -91,8 +91,17 @@ class BacktestEngine:
     # English patterns include trailing space in their canonical form; rstrip is
     # applied during matching so "do not" matches prefix "do not " or "do not".
     _NEGATION_PATTERNS = (
-        "not", "don't", "do not", "no", "never", "avoid",  # English
-        "不要", "不", "别", "勿", "没有",  # Chinese
+        "not",
+        "don't",
+        "do not",
+        "no",
+        "never",
+        "avoid",  # English
+        "不要",
+        "不",
+        "别",
+        "勿",
+        "没有",  # Chinese
     )
 
     _NEGATION_CONNECTOR_WORDS = (
@@ -114,8 +123,9 @@ class BacktestEngine:
         text = cls._normalize_text(operation_advice)
         if cls._matches_intent(text, cls._BEARISH_KEYWORDS):
             return "down"
-        if cls._first_intent_position(text, cls._WAIT_KEYWORDS) is not None:
-            wait_pos = cls._first_intent_position(text, cls._WAIT_KEYWORDS)
+        wait_pos_outer = cls._first_intent_position(text, cls._WAIT_KEYWORDS)
+        if wait_pos_outer is not None:
+            wait_pos = wait_pos_outer
             bullish_pos = cls._first_intent_position(text, cls._BULLISH_KEYWORDS)
             hold_pos = cls._first_intent_position(text, cls._HOLD_KEYWORDS)
             if (bullish_pos is None or wait_pos < bullish_pos) and (
@@ -147,7 +157,9 @@ class BacktestEngine:
                 hold_pos is None or wait_pos < hold_pos
             ):
                 return "cash"
-        if cls._matches_intent(text, cls._BULLISH_KEYWORDS) or cls._matches_intent(text, cls._HOLD_KEYWORDS):
+        if cls._matches_intent(text, cls._BULLISH_KEYWORDS) or cls._matches_intent(
+            text, cls._HOLD_KEYWORDS
+        ):
             return "long"
         if cls._matches_intent(text, cls._WAIT_KEYWORDS):
             return "cash"
@@ -177,7 +189,9 @@ class BacktestEngine:
             return {
                 "analysis_date": analysis_date,
                 "operation_advice": operation_advice,
-                "position_recommendation": cls.infer_position_recommendation(operation_advice),
+                "position_recommendation": cls.infer_position_recommendation(
+                    operation_advice
+                ),
                 "direction_expected": cls.infer_direction_expected(operation_advice),
                 "eval_status": "error",
             }
@@ -190,7 +204,9 @@ class BacktestEngine:
             return {
                 "analysis_date": analysis_date,
                 "operation_advice": operation_advice,
-                "position_recommendation": cls.infer_position_recommendation(operation_advice),
+                "position_recommendation": cls.infer_position_recommendation(
+                    operation_advice
+                ),
                 "direction_expected": cls.infer_direction_expected(operation_advice),
                 "eval_status": "insufficient_data",
                 "eval_window_days": eval_days,
@@ -241,7 +257,9 @@ class BacktestEngine:
         elif simulated_exit_price is None:
             simulated_return_pct = None
         else:
-            simulated_return_pct = (simulated_exit_price - start_price) / start_price * 100
+            simulated_return_pct = (
+                (simulated_exit_price - start_price) / start_price * 100
+            )
 
         return {
             "analysis_date": analysis_date,
@@ -286,35 +304,59 @@ class BacktestEngine:
 
         total = len(results_list)
         completed = [r for r in results_list if (r.eval_status or "") == "completed"]
-        insufficient_count = sum(1 for r in results_list if (r.eval_status or "") == "insufficient_data")
+        insufficient_count = sum(
+            1 for r in results_list if (r.eval_status or "") == "insufficient_data"
+        )
 
-        long_count = sum(1 for r in completed if (r.position_recommendation or "") == "long")
-        cash_count = sum(1 for r in completed if (r.position_recommendation or "") == "cash")
+        long_count = sum(
+            1 for r in completed if (r.position_recommendation or "") == "long"
+        )
+        cash_count = sum(
+            1 for r in completed if (r.position_recommendation or "") == "cash"
+        )
 
         win_count = sum(1 for r in completed if (r.outcome or "") == "win")
         loss_count = sum(1 for r in completed if (r.outcome or "") == "loss")
         neutral_count = sum(1 for r in completed if (r.outcome or "") == "neutral")
 
-        direction_denominator = sum(1 for r in completed if r.direction_correct is not None)
+        direction_denominator = sum(
+            1 for r in completed if r.direction_correct is not None
+        )
         direction_numerator = sum(1 for r in completed if r.direction_correct is True)
         direction_accuracy_pct = (
-            round(direction_numerator / direction_denominator * 100, 2) if direction_denominator else None
+            round(direction_numerator / direction_denominator * 100, 2)
+            if direction_denominator
+            else None
         )
 
         win_loss_denominator = win_count + loss_count
-        win_rate_pct = round(win_count / win_loss_denominator * 100, 2) if win_loss_denominator else None
-        neutral_rate_pct = round(neutral_count / len(completed) * 100, 2) if completed else None
+        win_rate_pct = (
+            round(win_count / win_loss_denominator * 100, 2)
+            if win_loss_denominator
+            else None
+        )
+        neutral_rate_pct = (
+            round(neutral_count / len(completed) * 100, 2) if completed else None
+        )
 
         avg_stock_return_pct = cls._average([r.stock_return_pct for r in completed])
-        avg_simulated_return_pct = cls._average([r.simulated_return_pct for r in completed])
+        avg_simulated_return_pct = cls._average(
+            [r.simulated_return_pct for r in completed]
+        )
 
         stop_applicable = [
             r
             for r in completed
-            if (r.position_recommendation or "") == "long" and r.hit_stop_loss is not None
+            if (r.position_recommendation or "") == "long"
+            and r.hit_stop_loss is not None
         ]
         stop_loss_trigger_rate = (
-            round(sum(1 for r in stop_applicable if r.hit_stop_loss is True) / len(stop_applicable) * 100, 2)
+            round(
+                sum(1 for r in stop_applicable if r.hit_stop_loss is True)
+                / len(stop_applicable)
+                * 100,
+                2,
+            )
             if stop_applicable
             else None
         )
@@ -322,11 +364,14 @@ class BacktestEngine:
         take_profit_applicable = [
             r
             for r in completed
-            if (r.position_recommendation or "") == "long" and r.hit_take_profit is not None
+            if (r.position_recommendation or "") == "long"
+            and r.hit_take_profit is not None
         ]
         take_profit_trigger_rate = (
             round(
-                sum(1 for r in take_profit_applicable if r.hit_take_profit is True) / len(take_profit_applicable) * 100,
+                sum(1 for r in take_profit_applicable if r.hit_take_profit is True)
+                / len(take_profit_applicable)
+                * 100,
                 2,
             )
             if take_profit_applicable
@@ -341,7 +386,11 @@ class BacktestEngine:
         ]
         ambiguous_rate = (
             round(
-                sum(1 for r in any_target_applicable if (r.first_hit or "") == "ambiguous")
+                sum(
+                    1
+                    for r in any_target_applicable
+                    if (r.first_hit or "") == "ambiguous"
+                )
                 / len(any_target_applicable)
                 * 100,
                 2,
@@ -353,7 +402,8 @@ class BacktestEngine:
             [
                 float(r.first_hit_trading_days)
                 for r in any_target_applicable
-                if r.first_hit_trading_days is not None and (r.first_hit or "") in ("stop_loss", "take_profit", "ambiguous")
+                if r.first_hit_trading_days is not None
+                and (r.first_hit or "") in ("stop_loss", "take_profit", "ambiguous")
             ]
         )
 
@@ -401,7 +451,9 @@ class BacktestEngine:
         return cls._first_intent_position(text, keywords) is not None
 
     @classmethod
-    def _first_intent_position(cls, text: str, keywords: Sequence[str]) -> Optional[int]:
+    def _first_intent_position(
+        cls, text: str, keywords: Sequence[str]
+    ) -> Optional[int]:
         """Return the earliest match position for intent keywords, or None."""
         if not text:
             return None
@@ -469,7 +521,7 @@ class BacktestEngine:
             if neg_idx < 0:
                 continue
 
-            suffix_gap = lookback[neg_idx + len(neg):].strip()
+            suffix_gap = lookback[neg_idx + len(neg) :].strip()
             if not suffix_gap:
                 return True
             if any(ch in suffix_gap for ch in "，,。；;:!?！？"):
@@ -496,7 +548,11 @@ class BacktestEngine:
         if not text or not keyword:
             return False
         if bool(re.search(r"[a-z]", keyword)):
-            return bool(re.search(rf"(?<![a-zA-Z0-9_]){re.escape(keyword)}(?![a-zA-Z0-9_])", text))
+            return bool(
+                re.search(
+                    rf"(?<![a-zA-Z0-9_]){re.escape(keyword)}(?![a-zA-Z0-9_])", text
+                )
+            )
         return keyword in text
 
     @classmethod
@@ -600,7 +656,9 @@ class BacktestEngine:
             low = bar.low
             high = bar.high
             stop_hit = stop_loss is not None and low is not None and low <= stop_loss
-            tp_hit = take_profit is not None and high is not None and high >= take_profit
+            tp_hit = (
+                take_profit is not None and high is not None and high >= take_profit
+            )
 
             if stop_hit:
                 hit_sl = True
@@ -652,8 +710,12 @@ class BacktestEngine:
         breakdown: Dict[str, Dict[str, int]] = {}
         for row in results:
             raw_advice = row.operation_advice
-            advice = (raw_advice if isinstance(raw_advice, str) else str(raw_advice or "")).strip() or "(unknown)"
-            bucket = breakdown.setdefault(advice, {"total": 0, "win": 0, "loss": 0, "neutral": 0})
+            advice = (
+                raw_advice if isinstance(raw_advice, str) else str(raw_advice or "")
+            ).strip() or "(unknown)"
+            bucket = breakdown.setdefault(
+                advice, {"total": 0, "win": 0, "loss": 0, "neutral": 0}
+            )
             bucket["total"] += 1
             outcome = (row.outcome or "").strip()
             if outcome in ("win", "loss", "neutral"):

@@ -420,7 +420,7 @@ class Scheduler:
         """获取下次执行时间"""
         jobs = self.schedule.get_jobs()
         if jobs:
-            next_run = min(job.next_run for job in jobs)
+            next_run = min(job.next_run for job in jobs if job.next_run is not None)
             return next_run.strftime("%Y-%m-%d %H:%M:%S")
         return "未设置"
 

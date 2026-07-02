@@ -91,7 +91,9 @@ class PortfolioAgent(BaseAgent):
         stock_opinions = ctx.data.get("stock_opinions", {})
         stock_list = ctx.data.get("stock_list", [])
 
-        parts = [f"Analyze the following portfolio of {len(stock_list) or len(stock_opinions)} stocks:\n"]
+        parts = [
+            f"Analyze the following portfolio of {len(stock_list) or len(stock_opinions)} stocks:\n"
+        ]
 
         if stock_opinions:
             for code, opinion in stock_opinions.items():
@@ -122,17 +124,17 @@ class PortfolioAgent(BaseAgent):
 
         return "\n".join(parts)
 
-    def post_process(self, ctx: AgentContext, raw_response: str) -> Optional[AgentOpinion]:
+    def post_process(self, ctx: AgentContext, raw_text: str) -> Optional[AgentOpinion]:
         """Extract portfolio assessment and store in context."""
-        data = try_parse_json(raw_response)
+        data = try_parse_json(raw_text)
         if data is None:
             logger.debug("[PortfolioAgent] post_process: failed to parse JSON")
             return AgentOpinion(
                 agent_name="portfolio",
                 signal="hold",
                 confidence=0.3,
-                reasoning=raw_response[:500],
-                raw_data={"raw": raw_response[:1000]},
+                reasoning=raw_text[:500],
+                raw_data={"raw": raw_text[:1000]},
             )
 
         # Store portfolio assessment in context
@@ -149,6 +151,6 @@ class PortfolioAgent(BaseAgent):
             agent_name="portfolio",
             signal=signal,
             confidence=0.6,
-            reasoning=data.get("summary", raw_response[:300]),
+            reasoning=data.get("summary", raw_text[:300]),
             raw_data=data,
         )

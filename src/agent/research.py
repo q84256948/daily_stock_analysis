@@ -33,6 +33,34 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TOKEN_BUDGET = 30000
 
 
+def _filter_tool_registry(
+    registry: ToolRegistry,
+    tool_names: Optional[List[str]],
+    agent_name: str,
+) -> ToolRegistry:
+    """Mirror of BaseAgent._filtered_registry usable from non-BaseAgent classes.
+
+    Returns a new :class:`ToolRegistry` restricted to ``tool_names``. When
+    ``tool_names`` is ``None`` the input ``registry`` is returned unchanged.
+    """
+    if tool_names is None:
+        return registry
+    from src.agent.tools.registry import ToolRegistry as TR
+
+    filtered: ToolRegistry = TR()
+    for name in tool_names:
+        tool_def = registry.get(name)
+        if tool_def:
+            filtered.register(tool_def)
+        else:
+            logger.warning(
+                "[%s] requested tool '%s' not found in registry",
+                agent_name,
+                name,
+            )
+    return filtered
+
+
 class ResearchAgent:
     """Multi-turn deep research agent.
 
@@ -102,16 +130,24 @@ class ResearchAgent:
                 timeout_seconds=timeout_seconds,
             )
         if progress_callback:
-            progress_callback({"type": "research_phase", "phase": "decompose", "message": "Decomposing research query..."})
+            progress_callback(
+                {
+                    "type": "research_phase",
+                    "phase": "decompose",
+                    "message": "Decomposing research query...",
+                }
+            )
 
         sub_questions = self._decompose_query(
             query,
             context,
-            timeout_seconds=self._remaining_timeout_seconds(started_at, timeout_seconds),
+            timeout_seconds=self._remaining_timeout_seconds(
+                started_at, timeout_seconds
+            ),
         )
         tokens_used += sub_questions.get("tokens", 0)
 
-        questions = sub_questions.get("questions", [query])[:self.max_sub_questions]
+        questions = sub_questions.get("questions", [query])[: self.max_sub_questions]
         if sub_questions.get("timed_out"):
             return self._build_timeout_result(
                 query=query,
@@ -135,22 +171,30 @@ class ResearchAgent:
                     timeout_seconds=timeout_seconds,
                 )
             if tokens_used >= self.token_budget:
-                logger.warning("[ResearchAgent] token budget exceeded (%d/%d), stopping", tokens_used, self.token_budget)
+                logger.warning(
+                    "[ResearchAgent] token budget exceeded (%d/%d), stopping",
+                    tokens_used,
+                    self.token_budget,
+                )
                 break
 
             if progress_callback:
-                progress_callback({
-                    "type": "research_phase",
-                    "phase": "search",
-                    "message": f"Researching ({i + 1}/{len(questions)}): {question[:60]}...",
-                    "progress": (i + 1) / len(questions),
-                })
+                progress_callback(
+                    {
+                        "type": "research_phase",
+                        "phase": "search",
+                        "message": f"Researching ({i + 1}/{len(questions)}): {question[:60]}...",
+                        "progress": (i + 1) / len(questions),
+                    }
+                )
 
             finding = self._research_sub_question(
                 question,
                 context,
                 tokens_used,
-                timeout_seconds=self._remaining_timeout_seconds(started_at, timeout_seconds),
+                timeout_seconds=self._remaining_timeout_seconds(
+                    started_at, timeout_seconds
+                ),
             )
             tokens_used += finding.get("tokens", 0)
             if finding.get("timed_out"):
@@ -175,14 +219,22 @@ class ResearchAgent:
                 timeout_seconds=timeout_seconds,
             )
         if progress_callback:
-            progress_callback({"type": "research_phase", "phase": "synthesize", "message": "Synthesising research report..."})
+            progress_callback(
+                {
+                    "type": "research_phase",
+                    "phase": "synthesize",
+                    "message": "Synthesising research report...",
+                }
+            )
 
         report = (
             self._synthesise_report(
                 query,
                 all_findings,
                 context,
-                timeout_seconds=self._remaining_timeout_seconds(started_at, timeout_seconds),
+                timeout_seconds=self._remaining_timeout_seconds(
+                    started_at, timeout_seconds
+                ),
             )
             if all_findings
             else {"content": "No findings gathered.", "tokens": 0}
@@ -211,7 +263,9 @@ class ResearchAgent:
         )
 
     @staticmethod
-    def _remaining_timeout_seconds(started_at: float, timeout_seconds: Optional[float]) -> Optional[float]:
+    def _remaining_timeout_seconds(
+        started_at: float, timeout_seconds: Optional[float]
+    ) -> Optional[float]:
         """Return remaining overall time budget for the research task."""
         if timeout_seconds is None:
             return None
@@ -220,11 +274,15 @@ class ResearchAgent:
     @staticmethod
     def _is_timed_out(started_at: float, timeout_seconds: Optional[float]) -> bool:
         """Return whether the overall research deadline has been exceeded."""
-        remaining = ResearchAgent._remaining_timeout_seconds(started_at, timeout_seconds)
+        remaining = ResearchAgent._remaining_timeout_seconds(
+            started_at, timeout_seconds
+        )
         return remaining is not None and remaining <= 0
 
     @staticmethod
-    def _resolve_step_timeout(default_timeout: int, timeout_seconds: Optional[float]) -> Optional[int]:
+    def _resolve_step_timeout(
+        default_timeout: int, timeout_seconds: Optional[float]
+    ) -> Optional[int]:
         """Clamp one stage timeout to the remaining overall research budget."""
         if timeout_seconds is None:
             return default_timeout
@@ -254,8 +312,16 @@ class ResearchAgent:
         timeout_seconds: Optional[float],
     ) -> ResearchResult:
         """Build a structured timeout result without leaving detached work behind."""
-        timeout_label = f"{timeout_seconds}s" if timeout_seconds is not None else "the configured limit"
-        logger.warning("[ResearchAgent] timed out after %s for query: %s", timeout_label, query[:120])
+        timeout_label = (
+            f"{timeout_seconds}s"
+            if timeout_seconds is not None
+            else "the configured limit"
+        )
+        logger.warning(
+            "[ResearchAgent] timed out after %s for query: %s",
+            timeout_label,
+            query[:120],
+        )
         return ResearchResult(
             success=False,
             report="",
@@ -327,14 +393,19 @@ Return a JSON object:
 
             # Parse JSON
             if raw.startswith("```"):
-                raw = re.sub(r'^```(?:json)?\s*', '', raw)
-                raw = re.sub(r'\s*```$', '', raw)
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
             parsed = json.loads(raw)
             return {"questions": parsed.get("questions", [query]), "tokens": tokens}
         except Exception as exc:
             logger.warning("[ResearchAgent] decompose failed: %s", exc)
             if timeout_seconds is not None and self._looks_like_timeout_error(exc):
-                return {"questions": [query], "tokens": 0, "timed_out": True, "error": str(exc)}
+                return {
+                    "questions": [query],
+                    "tokens": 0,
+                    "timed_out": True,
+                    "error": str(exc),
+                }
             return {"questions": [query], "tokens": 0}
 
     def _research_sub_question(
@@ -368,7 +439,10 @@ Token budget remaining: ~{remaining_budget}
 
         messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"Research question: {question}{stock_context}"},
+            {
+                "role": "user",
+                "content": f"Research question: {question}{stock_context}",
+            },
         ]
 
         try:
@@ -407,7 +481,13 @@ Token budget remaining: ~{remaining_budget}
                     "timed_out": True,
                     "error": str(exc),
                 }
-            return {"question": question, "content": "", "tokens": 0, "success": False, "error": str(exc)}
+            return {
+                "question": question,
+                "content": "",
+                "tokens": 0,
+                "success": False,
+                "error": str(exc),
+            }
 
     def _synthesise_report(
         self,
@@ -419,7 +499,8 @@ Token budget remaining: ~{remaining_budget}
         """Synthesise all findings into a coherent research report."""
         findings_text = "\n\n".join(
             f"### Sub-question: {f['question']}\n{f.get('content', 'No data')}"
-            for f in findings if f.get("content")
+            for f in findings
+            if f.get("content")
         )
 
         system = """\
@@ -437,7 +518,10 @@ Use Markdown formatting.  Be concise but thorough.
 """
         messages = [
             {"role": "system", "content": system},
-            {"role": "user", "content": f"Original query: {original_query}\n\n## Research Findings\n\n{findings_text}"},
+            {
+                "role": "user",
+                "content": f"Original query: {original_query}\n\n## Research Findings\n\n{findings_text}",
+            },
         ]
 
         try:
@@ -456,7 +540,12 @@ Use Markdown formatting.  Be concise but thorough.
         except Exception as exc:
             logger.warning("[ResearchAgent] synthesis failed: %s", exc)
             if timeout_seconds is not None and self._looks_like_timeout_error(exc):
-                return {"content": "", "tokens": 0, "timed_out": True, "error": str(exc)}
+                return {
+                    "content": "",
+                    "tokens": 0,
+                    "timed_out": True,
+                    "error": str(exc),
+                }
             return {"content": findings_text, "tokens": 0, "error": str(exc)}
 
     def _filtered_registry(self) -> ToolRegistry:
@@ -464,9 +553,10 @@ Use Markdown formatting.  Be concise but thorough.
 
         Reuses the same filtering logic as :meth:`BaseAgent._filtered_registry`.
         """
-        from src.agent.agents.base_agent import BaseAgent
         # Borrow the shared implementation; it respects self.tool_names / self.tool_registry.
-        return BaseAgent._filtered_registry(self)
+        return _filter_tool_registry(
+            self.tool_registry, self.tool_names, self.agent_name
+        )
 
 
 @dataclass

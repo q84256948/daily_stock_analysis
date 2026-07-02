@@ -63,7 +63,11 @@ class AskCommand(BotCommand):
             token = rest_args[0]
             prev = raw_codes_parts[-1].rstrip()
 
-            if token.lower() == "vs" and len(rest_args) > 1 and code_like.match(rest_args[1]):
+            if (
+                token.lower() == "vs"
+                and len(rest_args) > 1
+                and code_like.match(rest_args[1])
+            ):
                 raw_codes_parts.append(rest_args[1])
                 rest_args = rest_args[2:]
                 continue
@@ -87,7 +91,9 @@ class AskCommand(BotCommand):
 
     def _parse_stock_codes(self, raw: str) -> List[str]:
         """Parse one or more stock codes from the first argument."""
-        parts = [p.strip().upper() for p in raw.replace("，", ",").split(",") if p.strip()]
+        parts = [
+            p.strip().upper() for p in raw.replace("，", ",").split(",") if p.strip()
+        ]
         return [canonical_stock_code(part) for part in parts]
 
     def _validate_single_code(self, code: str) -> Optional[str]:
@@ -129,7 +135,9 @@ class AskCommand(BotCommand):
             sm = get_skill_manager()
             return list(sm.list_skills())
         except Exception as e:
-            logger.warning("_load_skills failed: Failed to load skills: %s", e, exc_info=True)
+            logger.warning(
+                "_load_skills failed: Failed to load skills: %s", e, exc_info=True
+            )
             return []
 
     @classmethod
@@ -139,7 +147,11 @@ class AskCommand(BotCommand):
 
             return get_primary_default_skill_id(cls._load_skills())
         except Exception as e:
-            logger.warning("_get_default_skill_id failed: Failed to resolve default skill id: %s", e, exc_info=True)
+            logger.warning(
+                "_get_default_skill_id failed: Failed to resolve default skill id: %s",
+                e,
+                exc_info=True,
+            )
             return ""
 
     @classmethod
@@ -149,7 +161,9 @@ class AskCommand(BotCommand):
             skill_id = str(getattr(skill, "name", "")).strip()
             if not skill_id:
                 continue
-            aliases = [skill_id, getattr(skill, "display_name", "")] + list(getattr(skill, "aliases", []) or [])
+            aliases = [skill_id, getattr(skill, "display_name", "")] + list(
+                getattr(skill, "aliases", []) or []
+            )
             for alias in aliases:
                 alias_text = str(alias).strip()
                 if alias_text:
@@ -165,7 +179,9 @@ class AskCommand(BotCommand):
             return default_skill_id
 
         skill_text = " ".join(args[1:]).strip()
-        available_ids = {str(getattr(skill, "name", "")).strip() for skill in self._load_skills()}
+        available_ids = {
+            str(getattr(skill, "name", "")).strip() for skill in self._load_skills()
+        }
         if skill_text in available_ids:
             return skill_text
 
@@ -214,10 +230,16 @@ class AskCommand(BotCommand):
 
         raw_code_str, remaining_args = self._merge_code_args(args)
         codes = self._parse_stock_codes(raw_code_str)
-        skill_id = self._parse_skill(["placeholder"] + remaining_args) if remaining_args else self._get_default_skill_id()
+        skill_id = (
+            self._parse_skill(["placeholder"] + remaining_args)
+            if remaining_args
+            else self._get_default_skill_id()
+        )
         skill_text = " ".join(remaining_args).strip()
 
-        logger.info("[AskCommand] Stocks: %s, Skill: %s, Extra: %s", codes, skill_id, skill_text)
+        logger.info(
+            "[AskCommand] Stocks: %s, Skill: %s, Extra: %s", codes, skill_id, skill_text
+        )
 
         if len(codes) == 1:
             return self._analyze_single(config, message, codes[0], skill_id, skill_text)
@@ -236,9 +258,13 @@ class AskCommand(BotCommand):
         try:
             from src.agent.factory import build_agent_executor
 
-            executor = build_agent_executor(config, skills=[skill_id] if skill_id else None)
+            executor = build_agent_executor(
+                config, skills=[skill_id] if skill_id else None
+            )
             user_msg = self._build_user_message(code, skill_id, skill_text)
-            session_id = f"{message.platform}_{message.user_id}:ask_{code}_{uuid.uuid4()}"
+            session_id = (
+                f"{message.platform}_{message.user_id}:ask_{code}_{uuid.uuid4()}"
+            )
             result = executor.chat(
                 message=user_msg,
                 session_id=session_id,
@@ -265,7 +291,11 @@ class AskCommand(BotCommand):
         skill_text: str,
     ) -> BotResponse:
         """Analyze multiple stocks in parallel and produce a comparison summary."""
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
+        from concurrent.futures import (
+            ThreadPoolExecutor,
+            TimeoutError as FutureTimeoutError,
+            as_completed,
+        )
 
         skill_name = self._resolve_skill_name(skill_id)
         results: Dict[str, Dict[str, Any]] = {}
@@ -276,12 +306,16 @@ class AskCommand(BotCommand):
         platform = message.platform
         user_id = message.user_id
 
-        def _run_one(stock_code: str) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
+        def _run_one(
+            stock_code: str,
+        ) -> Tuple[str, Optional[Dict[str, Any]], Optional[str]]:
             try:
                 from src.agent.conversation import conversation_manager
                 from src.agent.factory import build_agent_executor
 
-                executor = build_agent_executor(config, skills=[skill_id] if skill_id else None)
+                executor = build_agent_executor(
+                    config, skills=[skill_id] if skill_id else None
+                )
                 user_msg = self._build_user_message(stock_code, skill_id, skill_text)
                 session_id = f"{platform}_{user_id}:ask_{stock_code}_{uuid.uuid4()}"
                 conversation_manager.add_message(session_id, "user", user_msg)
@@ -291,9 +325,15 @@ class AskCommand(BotCommand):
                     context=self._build_execution_context(stock_code, skill_id),
                 )
                 if result.success or self._should_accept_fallback_content(result):
-                    dashboard = result.dashboard if isinstance(result.dashboard, dict) else None
-                    formatted_analysis = self._format_stock_result(stock_code, dashboard, result.content)
-                    conversation_manager.add_message(session_id, "assistant", formatted_analysis)
+                    dashboard = (
+                        result.dashboard if isinstance(result.dashboard, dict) else None
+                    )
+                    formatted_analysis = self._format_stock_result(
+                        stock_code, dashboard, result.content
+                    )
+                    conversation_manager.add_message(
+                        session_id, "assistant", formatted_analysis
+                    )
                     return (
                         stock_code,
                         {
@@ -301,9 +341,13 @@ class AskCommand(BotCommand):
                             "dashboard": dashboard,
                             "signal": self._extract_signal(dashboard),
                             "confidence": self._extract_confidence(dashboard),
-                            "summary": self._extract_summary(stock_code, dashboard, result.content),
+                            "summary": self._extract_summary(
+                                stock_code, dashboard, result.content
+                            ),
                             "markdown": formatted_analysis,
-                            "stock_name": self._extract_stock_name(stock_code, dashboard),
+                            "stock_name": self._extract_stock_name(
+                                stock_code, dashboard
+                            ),
                             "risk_flags": self._extract_risk_flags(dashboard),
                         },
                         None,
@@ -331,7 +375,10 @@ class AskCommand(BotCommand):
                     code = future_map[future]
                     errors[code] = f"执行异常: {exc}"
         except FutureTimeoutError:
-            logger.warning("[AskCommand] Multi-stock analysis hit overall timeout (%.1fs)", overall_timeout_s)
+            logger.warning(
+                "[AskCommand] Multi-stock analysis hit overall timeout (%.1fs)",
+                overall_timeout_s,
+            )
             for future, code in future_map.items():
                 if code in results or code in errors:
                     continue
@@ -355,7 +402,9 @@ class AskCommand(BotCommand):
 
         parts = [f"📊 **多股对比分析** | 技能: {skill_name}", f"{'─' * 30}", ""]
 
-        remaining_timeout_s = max(0.0, overall_timeout_s - (time.monotonic() - started_at))
+        remaining_timeout_s = max(
+            0.0, overall_timeout_s - (time.monotonic() - started_at)
+        )
         portfolio_section = self._build_portfolio_section(
             config,
             codes,
@@ -374,9 +423,17 @@ class AskCommand(BotCommand):
                     item = results[code]
                     signal = item.get("signal") or "unknown"
                     confidence = item.get("confidence")
-                    confidence_text = f"{confidence:.0%}" if isinstance(confidence, (int, float)) else "-"
-                    summary_line = str(item.get("summary") or "分析完成").replace("|", "/")[:80]
-                    parts.append(f"| {code} | {signal} | {confidence_text} | {summary_line} |")
+                    confidence_text = (
+                        f"{confidence:.0%}"
+                        if isinstance(confidence, (int, float))
+                        else "-"
+                    )
+                    summary_line = str(item.get("summary") or "分析完成").replace(
+                        "|", "/"
+                    )[:80]
+                    parts.append(
+                        f"| {code} | {signal} | {confidence_text} | {summary_line} |"
+                    )
                 elif code in errors:
                     parts.append(f"| {code} | error | - | ⚠️ {errors[code][:40]} |")
             parts.append("")
@@ -407,7 +464,9 @@ class AskCommand(BotCommand):
         return error == "Failed to parse dashboard JSON from agent response"
 
     @staticmethod
-    def _extract_stock_name(stock_code: str, dashboard: Optional[Dict[str, Any]]) -> str:
+    def _extract_stock_name(
+        stock_code: str, dashboard: Optional[Dict[str, Any]]
+    ) -> str:
         if isinstance(dashboard, dict):
             stock_name = dashboard.get("stock_name")
             if isinstance(stock_name, str) and stock_name.strip():
@@ -429,7 +488,7 @@ class AskCommand(BotCommand):
 
         score = dashboard.get("sentiment_score")
         try:
-            return max(0.0, min(1.0, float(score) / 100.0))
+            return max(0.0, min(1.0, float(score or 0) / 100.0))
         except (TypeError, ValueError):
             pass
 
@@ -437,7 +496,9 @@ class AskCommand(BotCommand):
         return {"高": 0.85, "中": 0.65, "低": 0.45}.get(level)
 
     @staticmethod
-    def _extract_summary(stock_code: str, dashboard: Optional[Dict[str, Any]], raw_content: str) -> str:
+    def _extract_summary(
+        stock_code: str, dashboard: Optional[Dict[str, Any]], raw_content: str
+    ) -> str:
         if isinstance(dashboard, dict):
             for key in ("analysis_summary", "risk_warning", "trend_prediction"):
                 value = dashboard.get(key)
@@ -455,12 +516,18 @@ class AskCommand(BotCommand):
 
         for line in raw_content.splitlines():
             stripped = line.strip()
-            if stripped and len(stripped) > 4 and not stripped.startswith(("{", "}", "\"")):
+            if (
+                stripped
+                and len(stripped) > 4
+                and not stripped.startswith(("{", "}", '"'))
+            ):
                 return stripped[:120]
         return f"{stock_code} 分析完成"
 
     @staticmethod
-    def _extract_risk_flags(dashboard: Optional[Dict[str, Any]]) -> List[Dict[str, str]]:
+    def _extract_risk_flags(
+        dashboard: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, str]]:
         if not isinstance(dashboard, dict):
             return []
 
@@ -473,11 +540,23 @@ class AskCommand(BotCommand):
             intelligence = {}
         for alert in intelligence.get("risk_alerts", [])[:5]:
             if isinstance(alert, str) and alert.strip():
-                flags.append({"category": "portfolio_input", "description": alert.strip(), "severity": "medium"})
+                flags.append(
+                    {
+                        "category": "portfolio_input",
+                        "description": alert.strip(),
+                        "severity": "medium",
+                    }
+                )
 
         risk_warning = dashboard.get("risk_warning")
         if isinstance(risk_warning, str) and risk_warning.strip():
-            flags.append({"category": "portfolio_input", "description": risk_warning.strip(), "severity": "medium"})
+            flags.append(
+                {
+                    "category": "portfolio_input",
+                    "description": risk_warning.strip(),
+                    "severity": "medium",
+                }
+            )
         return flags
 
     @staticmethod
@@ -501,13 +580,15 @@ class AskCommand(BotCommand):
         )
         for prefix in prefixes:
             if text.startswith(prefix):
-                stripped = text[len(prefix):].strip()
+                stripped = text[len(prefix) :].strip()
                 return stripped or None
 
         return text
 
     @staticmethod
-    def _format_stock_result(stock_code: str, dashboard: Optional[Dict[str, Any]], raw_content: str) -> str:
+    def _format_stock_result(
+        stock_code: str, dashboard: Optional[Dict[str, Any]], raw_content: str
+    ) -> str:
         if not isinstance(dashboard, dict):
             content = raw_content
             if len(content) > 800:
@@ -516,7 +597,11 @@ class AskCommand(BotCommand):
 
         lines = []
         stock_name = dashboard.get("stock_name")
-        if isinstance(stock_name, str) and stock_name.strip() and stock_name.strip() != stock_code:
+        if (
+            isinstance(stock_name, str)
+            and stock_name.strip()
+            and stock_name.strip() != stock_code
+        ):
             lines.append(f"**名称**: {stock_name.strip()}")
 
         decision = dashboard.get("decision_type")
@@ -525,8 +610,16 @@ class AskCommand(BotCommand):
         if isinstance(decision, str):
             lines.append(
                 f"**结论**: {decision}"
-                + (f" | **置信度**: {confidence:.0%}" if isinstance(confidence, (int, float)) else "")
-                + (f" | **趋势**: {trend}" if isinstance(trend, str) and trend.strip() else "")
+                + (
+                    f" | **置信度**: {confidence:.0%}"
+                    if isinstance(confidence, (int, float))
+                    else ""
+                )
+                + (
+                    f" | **趋势**: {trend}"
+                    if isinstance(trend, str) and trend.strip()
+                    else ""
+                )
             )
 
         summary = AskCommand._extract_summary(stock_code, dashboard, raw_content)
@@ -571,7 +664,9 @@ class AskCommand(BotCommand):
             return ""
 
         if timeout_s is not None and timeout_s <= 0:
-            logger.info("[AskCommand] Skip portfolio overlay because no timeout budget remains")
+            logger.info(
+                "[AskCommand] Skip portfolio overlay because no timeout budget remains"
+            )
             return ""
 
         def _render_overlay() -> str:
@@ -624,13 +719,19 @@ class AskCommand(BotCommand):
                 lines.append(f"- 组合风险分: {risk_score}")
             sector_warnings = assessment.get("sector_warnings") or []
             if sector_warnings:
-                lines.append(f"- 行业集中: {'；'.join(str(item) for item in sector_warnings[:3])}")
+                lines.append(
+                    f"- 行业集中: {'；'.join(str(item) for item in sector_warnings[:3])}"
+                )
             correlation_warnings = assessment.get("correlation_warnings") or []
             if correlation_warnings:
-                lines.append(f"- 相关性风险: {'；'.join(str(item) for item in correlation_warnings[:3])}")
+                lines.append(
+                    f"- 相关性风险: {'；'.join(str(item) for item in correlation_warnings[:3])}"
+                )
             rebalance = assessment.get("rebalance_suggestions") or []
             if rebalance:
-                lines.append(f"- 调仓建议: {'；'.join(str(item) for item in rebalance[:3])}")
+                lines.append(
+                    f"- 调仓建议: {'；'.join(str(item) for item in rebalance[:3])}"
+                )
             positions = assessment.get("positions") or []
             if positions:
                 position_parts = []
@@ -659,14 +760,19 @@ class AskCommand(BotCommand):
                 logger.warning("[AskCommand] Portfolio overlay failed: %s", exc)
                 return ""
 
-        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+        from concurrent.futures import (
+            ThreadPoolExecutor,
+            TimeoutError as FutureTimeoutError,
+        )
 
         pool = ThreadPoolExecutor(max_workers=1)
         future = pool.submit(_render_overlay)
         try:
             return future.result(timeout=timeout_s)
         except FutureTimeoutError:
-            logger.warning("[AskCommand] Portfolio overlay timed out after %.2fs", timeout_s)
+            logger.warning(
+                "[AskCommand] Portfolio overlay timed out after %.2fs", timeout_s
+            )
             return ""
         except Exception as exc:
             logger.warning("[AskCommand] Portfolio overlay failed: %s", exc)

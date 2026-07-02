@@ -108,7 +108,7 @@ class AnalysisContextPack(_AnalysisContextModel):
     pack_version: Literal["1.0"] = PACK_VERSION
     phase: Optional[Dict[str, Any]] = None
     blocks: Dict[str, AnalysisContextBlock] = Field(default_factory=dict)
-    data_quality: DataQuality = Field(default_factory=DataQuality)
+    data_quality: DataQuality = Field(default_factory=lambda: DataQuality())  # type: ignore[call-arg]
     metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

@@ -11,10 +11,10 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 import litellm
-from litellm import Router
+from litellm.router import Router
 
 from src.config import (
     extra_litellm_params,
@@ -32,8 +32,15 @@ from src.agent.provider_trace import (
     trace_model_matches,
 )
 from src.llm.errors import call_litellm_with_param_recovery
-from src.llm.generation_params import apply_litellm_generation_params, resolve_litellm_wire_model
-from src.llm.usage import attach_message_hmacs, extract_usage_payload, normalize_litellm_usage
+from src.llm.generation_params import (
+    apply_litellm_generation_params,
+    resolve_litellm_wire_model,
+)
+from src.llm.usage import (
+    attach_message_hmacs,
+    extract_usage_payload,
+    normalize_litellm_usage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +62,11 @@ def _resolve_litellm_exception(name: str) -> type[BaseException]:
 # Unified response types
 # ============================================================
 
+
 @dataclass
 class ToolCall:
     """A single tool call requested by the LLM."""
+
     id: str
     name: str
     arguments: Dict[str, Any]
@@ -68,14 +77,21 @@ class ToolCall:
 @dataclass
 class LLMResponse:
     """Normalized response from any LLM provider."""
-    content: Optional[str] = None          # text response (final answer)
+
+    content: Optional[str] = None  # text response (final answer)
     tool_calls: List[ToolCall] = field(default_factory=list)  # tool calls to execute
-    reasoning_content: Optional[str] = None  # Chain-of-thought (CoT) from DeepSeek thinking mode; must be passed back in multi-turn assistant messages; None for other providers
-    provider_blocks: List[Dict[str, Any]] = field(default_factory=list)  # Opaque provider content blocks (e.g. Claude thinking/redacted_thinking)
-    usage: Dict[str, Any] = field(default_factory=dict)       # token usage info
-    provider: str = ""                     # which provider handled this call
-    model: str = ""                        # full model name used (e.g. gemini/gemini-2.0-flash), for report meta
-    raw: Any = None                        # raw provider response for debugging
+    reasoning_content: Optional[str] = (
+        None  # Chain-of-thought (CoT) from DeepSeek thinking mode; must be passed back in multi-turn assistant messages; None for other providers
+    )
+    provider_blocks: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # Opaque provider content blocks (e.g. Claude thinking/redacted_thinking)
+    usage: Dict[str, Any] = field(default_factory=dict)  # token usage info
+    provider: str = ""  # which provider handled this call
+    model: str = (
+        ""  # full model name used (e.g. gemini/gemini-2.0-flash), for report meta
+    )
+    raw: Any = None  # raw provider response for debugging
 
 
 # Models that auto-return reasoning_content; do NOT send extra_body (may cause 400).
@@ -110,8 +126,8 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict[str, Any]] = {
         # changes above 512K; see comment block above.
         "context_window": 512000,
         "max_tokens": 128000,
-        "input_cost_per_token": 0.0000006,   # $0.6 / 1M tokens (<=512K input bucket)
-        "output_cost_per_token": 0.0000024,   # $2.4 / 1M tokens (<=512K input bucket)
+        "input_cost_per_token": 0.0000006,  # $0.6 / 1M tokens (<=512K input bucket)
+        "output_cost_per_token": 0.0000024,  # $2.4 / 1M tokens (<=512K input bucket)
     },
     "MiniMax-M2.7": {
         "supports_function_calling": True,
@@ -120,8 +136,8 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict[str, Any]] = {
         "supports_audio_output": False,
         "context_window": 100000,
         "max_tokens": 10000,
-        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens
-        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens
+        "input_cost_per_token": 0.0000003,  # $0.3 / 1M tokens
+        "output_cost_per_token": 0.0000012,  # $1.2 / 1M tokens
     },
     # Legacy model retained for backward compatibility with existing user
     # configs; values match the previous M2.5 entry to avoid silently
@@ -133,8 +149,8 @@ _CUSTOM_MODEL_PRICING: Dict[str, dict[str, Any]] = {
         "supports_audio_output": False,
         "context_window": 245760,
         "max_tokens": 8192,
-        "input_cost_per_token": 0.0000003,   # $0.3 / 1M tokens (legacy)
-        "output_cost_per_token": 0.0000012,   # $1.2 / 1M tokens (legacy)
+        "input_cost_per_token": 0.0000003,  # $0.3 / 1M tokens (legacy)
+        "output_cost_per_token": 0.0000012,  # $1.2 / 1M tokens (legacy)
     },
 }
 
@@ -253,7 +269,9 @@ def _model_matches(model: str, entries: List[str]) -> bool:
     return False
 
 
-def _get_opt_in_payload(model: str, opt_in: Dict[str, dict[str, Any]]) -> Optional[dict[str, Any]]:
+def _get_opt_in_payload(
+    model: str, opt_in: Dict[str, dict[str, Any]]
+) -> Optional[dict[str, Any]]:
     """Return extra_body payload for opt-in thinking models, or None."""
     if not model:
         return None
@@ -317,6 +335,7 @@ def resolve_fallback_litellm_wire_models(
 # LLM Tool Adapter
 # ============================================================
 
+
 class LLMToolAdapter:
     """Unified adapter for tool-calling via LiteLLM.
 
@@ -328,7 +347,7 @@ class LLMToolAdapter:
     def __init__(self, config=None):
         config = config or get_config()
         self._config = config
-        self._router = None          # litellm Router (multi-key primary model)
+        self._router = None  # litellm Router (multi-key primary model)
         self._legacy_router_model_list: List[Dict[str, Any]] = []
         self._litellm_available = False
         self._register_custom_model_pricing()
@@ -342,18 +361,18 @@ class LLMToolAdapter:
         """
         for model_name, pricing in _CUSTOM_MODEL_PRICING.items():
             try:
-                litellm.register_model(
-                    {
-                        model_name: pricing
-                    }
-                )
+                litellm.register_model({model_name: pricing})
                 logger.debug(f"Registered custom pricing for {model_name}")
             except Exception as e:
-                logger.debug(f"Model {model_name} may already be registered or pricing error: {e}")
+                logger.debug(
+                    f"Model {model_name} may already be registered or pricing error: {e}"
+                )
+
     def _has_channel_config(self) -> bool:
         """Check if multi-channel config (channels / YAML) is active."""
         return bool(self._config.llm_model_list) and not all(
-            e.get('model_name', '').startswith('__legacy_') for e in self._config.llm_model_list
+            e.get("model_name", "").startswith("__legacy_")
+            for e in self._config.llm_model_list
         )
 
     def _init_litellm(self) -> None:
@@ -375,9 +394,9 @@ class LLMToolAdapter:
                 routing_strategy="simple-shuffle",
                 num_retries=2,
             )
-            unique_models = list(dict.fromkeys(
-                e['litellm_params']['model'] for e in model_list
-            ))
+            unique_models = list(
+                dict.fromkeys(e["litellm_params"]["model"] for e in model_list)
+            )
             logger.info(
                 f"Agent LLM: Router initialized from channels/YAML — "
                 f"{len(model_list)} deployment(s), models: {unique_models}"
@@ -454,7 +473,9 @@ class LLMToolAdapter:
         Returns:
             LLMResponse with either content (final answer) or tool_calls.
         """
-        return self.call_completion(messages, tools=tools, provider=provider, timeout=timeout)
+        return self.call_completion(
+            messages, tools=tools, provider=provider, timeout=timeout
+        )
 
     def call_text(
         self,
@@ -503,7 +524,9 @@ class LLMToolAdapter:
         for idx, model in enumerate(models_to_try):
             remaining_timeout = timeout
             if timeout is not None and timeout > 0:
-                remaining_timeout = max(0.0, float(timeout) - (time.time() - started_at))
+                remaining_timeout = max(
+                    0.0, float(timeout) - (time.time() - started_at)
+                )
                 if remaining_timeout <= 0:
                     last_error = TimeoutError(
                         f"LLM completion timed out before trying fallback model {model}"
@@ -533,14 +556,20 @@ class LLMToolAdapter:
                     if should_backoff:
                         backoff_sleep = min(2.0, (time.time() - started_at) * 0.1 + 0.5)
                         if timeout is not None and timeout > 0:
-                            remaining_timeout = max(0.0, float(timeout) - (time.time() - started_at))
+                            remaining_timeout = max(
+                                0.0, float(timeout) - (time.time() - started_at)
+                            )
                             if remaining_timeout > 0:
                                 time.sleep(min(backoff_sleep, remaining_timeout))
                         else:
                             time.sleep(backoff_sleep)
                     continue
-                if isinstance(e, _resolve_litellm_exception("ContextWindowExceededError")):
-                    logger.warning("Agent LLM context window exceeded on %s: %s", model, e)
+                if isinstance(
+                    e, _resolve_litellm_exception("ContextWindowExceededError")
+                ):
+                    logger.warning(
+                        "Agent LLM context window exceeded on %s: %s", model, e
+                    )
                     last_error = e
                     continue
                 logger.warning("Agent LLM call failed with %s: %s", model, e)
@@ -593,15 +622,20 @@ class LLMToolAdapter:
 
         # Use Router for primary model (multi-key), direct litellm for others
         use_channel_router = self._has_channel_config()
-        _router_model_names = set(get_configured_llm_models(self._config.llm_model_list))
+        _router_model_names = set(
+            get_configured_llm_models(self._config.llm_model_list)
+        )
         agent_primary_model = get_effective_agent_primary_model(self._config)
-        uses_router = (
-            bool(use_channel_router and self._router and model in _router_model_names)
-            or bool(self._router and model == agent_primary_model and not use_channel_router)
+        uses_router = bool(
+            use_channel_router and self._router and model in _router_model_names
+        ) or bool(
+            self._router and model == agent_primary_model and not use_channel_router
         )
         recovery_model_list = self._config.llm_model_list
         if self._router and model == agent_primary_model and not use_channel_router:
-            recovery_model_list = self._legacy_router_model_list or self._config.llm_model_list
+            recovery_model_list = (
+                self._legacy_router_model_list or self._config.llm_model_list
+            )
         if not uses_router:
             keys = get_api_keys_for_model(model, self._config)
             if keys:
@@ -618,8 +652,9 @@ class LLMToolAdapter:
         )
         if use_channel_router and self._router and model in _router_model_names:
             # Channel / YAML path: Router manages all models in its model_list
+            router = cast(Router, self._router)
             response = call_litellm_with_param_recovery(
-                lambda kwargs: self._router.completion(**kwargs),
+                lambda kwargs: router.completion(**kwargs),
                 model=model,
                 call_kwargs=call_kwargs,
                 model_list=recovery_model_list,
@@ -627,8 +662,9 @@ class LLMToolAdapter:
             )
         elif self._router and model == agent_primary_model and not use_channel_router:
             # Legacy path: Router for primary model multi-key
+            router = cast(Router, self._router)
             response = call_litellm_with_param_recovery(
-                lambda kwargs: self._router.completion(**kwargs),
+                lambda kwargs: router.completion(**kwargs),
                 model=model,
                 call_kwargs=call_kwargs,
                 model_list=recovery_model_list,
@@ -675,11 +711,15 @@ class LLMToolAdapter:
             if not trace_matches_target:
                 continue
             if msg["role"] == "tool":
-                openai_messages.append({
-                    "role": "tool",
-                    "tool_call_id": msg.get("tool_call_id", ""),
-                    "content": msg["content"] if isinstance(msg["content"], str) else json.dumps(msg["content"]),
-                })
+                openai_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": msg.get("tool_call_id", ""),
+                        "content": msg["content"]
+                        if isinstance(msg["content"], str)
+                        else json.dumps(msg["content"]),
+                    }
+                )
             elif msg["role"] == "assistant" and msg.get("tool_calls"):
                 openai_tc = []
                 for tc in msg["tool_calls"]:
@@ -691,7 +731,9 @@ class LLMToolAdapter:
                             "arguments": json.dumps(tc["arguments"]),
                         },
                     }
-                    provider_specific_fields = dict(tc.get("provider_specific_fields") or {})
+                    provider_specific_fields = dict(
+                        tc.get("provider_specific_fields") or {}
+                    )
                     sig = tc.get("thought_signature")
                     if sig is not None:
                         provider_specific_fields.setdefault("thought_signature", sig)
@@ -712,10 +754,12 @@ class LLMToolAdapter:
                     openai_msg["reasoning_content"] = msg["reasoning_content"]
                 openai_messages.append(openai_msg)
             else:
-                openai_messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"],
-                })
+                openai_messages.append(
+                    {
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    }
+                )
         return openai_messages
 
     def _trace_provider_for_target(self, target_model: Optional[str]) -> str:
@@ -772,20 +816,24 @@ class LLMToolAdapter:
                 if sig is None:
                     sig = getattr(tc, "thought_signature", None)
 
-                tool_calls.append(ToolCall(
-                    id=tc.id,
-                    name=tc.function.name,
-                    arguments=args,
-                    thought_signature=sig,
-                    provider_specific_fields=provider_specific_fields,
-                ))
+                tool_calls.append(
+                    ToolCall(
+                        id=tc.id,
+                        name=tc.function.name,
+                        arguments=args,
+                        thought_signature=sig,
+                        provider_specific_fields=provider_specific_fields,
+                    )
+                )
 
         usage_model_list = (
             model_list
             if model_list is not None
             else getattr(getattr(self, "_config", None), "llm_model_list", []) or []
         )
-        usage_model, provider_name = resolved_model_provider_identity(model, usage_model_list)
+        usage_model, provider_name = resolved_model_provider_identity(
+            model, usage_model_list
+        )
         usage_payload = extract_usage_payload(response)
         if usage_payload:
             usage = normalize_litellm_usage(
@@ -846,4 +894,6 @@ def register_fallback_model_pricing(models: Iterable[str]) -> None:
             _FALLBACK_MODEL_PRICING_REGISTERED.add(wire_model)
             logger.debug("Registered fallback pricing for %s", wire_model)
         except Exception as exc:
-            logger.debug("Fallback pricing registration skipped for %s: %s", wire_model, exc)
+            logger.debug(
+                "Fallback pricing registration skipped for %s: %s", wire_model, exc
+            )

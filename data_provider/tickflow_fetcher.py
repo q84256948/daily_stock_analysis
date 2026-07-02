@@ -99,14 +99,10 @@ class TickFlowFetcher(BaseFetcher):
     def _fetch_raw_data(
         self, stock_code: str, start_date: str, end_date: str
     ) -> pd.DataFrame:
-        raise DataFetchError(
-            "TickFlowFetcher P0 only supports market review endpoints"
-        )
+        raise DataFetchError("TickFlowFetcher P0 only supports market review endpoints")
 
     def _normalize_data(self, df: pd.DataFrame, stock_code: str) -> pd.DataFrame:
-        raise DataFetchError(
-            "TickFlowFetcher P0 only supports market review endpoints"
-        )
+        raise DataFetchError("TickFlowFetcher P0 only supports market review endpoints")
 
     @staticmethod
     def _safe_float(value: Any) -> Optional[float]:
@@ -125,7 +121,7 @@ class TickFlowFetcher(BaseFetcher):
         return ratio * 100.0
 
     @staticmethod
-    def _extract_name(quote: Dict[str, Any]) -> str:
+    def _extract_name(quote: Any) -> str:
         ext = quote.get("ext") or {}
         name = ext.get("name") or quote.get("name") or ""
         return str(name).strip()
@@ -134,9 +130,7 @@ class TickFlowFetcher(BaseFetcher):
     def _is_universe_permission_error(exc: Exception) -> bool:
         status_code = getattr(exc, "status_code", None)
         code = str(getattr(exc, "code", "") or "").upper()
-        message = (
-            f"{getattr(exc, 'message', '')} {exc}"
-        ).strip().lower()
+        message = (f"{getattr(exc, 'message', '')} {exc}").strip().lower()
 
         if status_code == 403:
             return True
@@ -186,7 +180,7 @@ class TickFlowFetcher(BaseFetcher):
             return None
 
         symbols = [symbol for symbol, _, _ in _CN_MAIN_INDEX_QUOTES]
-        quotes: List[Dict[str, Any]] = []
+        quotes: List[Any] = []
         for offset in range(0, len(symbols), _MAX_SYMBOLS_PER_QUOTE_REQUEST):
             batch_symbols = symbols[offset : offset + _MAX_SYMBOLS_PER_QUOTE_REQUEST]
             batch_quotes = client.quotes.get(symbols=batch_symbols)
@@ -254,10 +248,7 @@ class TickFlowFetcher(BaseFetcher):
         now = monotonic()
         if self._universe_query_supported is False:
             checked_at = self._universe_query_checked_at or 0.0
-            if (
-                now - checked_at
-                < _UNIVERSE_PERMISSION_NEGATIVE_CACHE_TTL_SECONDS
-            ):
+            if now - checked_at < _UNIVERSE_PERMISSION_NEGATIVE_CACHE_TTL_SECONDS:
                 return None
             self._universe_query_supported = None
             self._universe_query_checked_at = None
@@ -305,7 +296,12 @@ class TickFlowFetcher(BaseFetcher):
             last_price = self._safe_float(quote.get("last_price"))
             prev_close = self._safe_float(quote.get("prev_close"))
 
-            if last_price is None or prev_close is None or amount is None or amount <= 0:
+            if (
+                last_price is None
+                or prev_close is None
+                or amount is None
+                or amount <= 0
+            ):
                 continue
 
             name = self._extract_name(quote)
@@ -316,9 +312,7 @@ class TickFlowFetcher(BaseFetcher):
             limit_up = self._round_limit_price(prev_close, ratio)
             limit_down = math.floor(prev_close * (1 - ratio) * 100 + 0.5) / 100.0
             limit_up_tolerance = round(abs(prev_close * (1 + ratio) - limit_up), 10)
-            limit_down_tolerance = round(
-                abs(prev_close * (1 - ratio) - limit_down), 10
-            )
+            limit_down_tolerance = round(abs(prev_close * (1 - ratio) - limit_down), 10)
 
             valid_rows += 1
 

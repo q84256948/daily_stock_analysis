@@ -17,7 +17,7 @@ import random
 import re
 import sys
 import time
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from src.config import Config, get_config
 
@@ -169,7 +169,9 @@ def _parse_items_from_text(text: str) -> List[Tuple[str, Optional[str], str]]:
             from json_repair import repair_json
 
             parsed_data = repair_json(cleaned, return_objects=True)
-            logger.debug("[ImageExtractor] json.loads failed, repaired malformed JSON response")
+            logger.debug(
+                "[ImageExtractor] json.loads failed, repaired malformed JSON response"
+            )
         except Exception:
             parsed_data = None
 
@@ -211,7 +213,9 @@ def _resolve_vision_model() -> str:
     """Determine the litellm model to use for vision."""
     cfg = get_config()
     # Prefer explicit vision model, then OPENAI_VISION_MODEL alias, then primary litellm model
-    model = (cfg.vision_model or cfg.openai_vision_model or cfg.litellm_model or "").strip()
+    model = (
+        cfg.vision_model or cfg.openai_vision_model or cfg.litellm_model or ""
+    ).strip()
     if not model:
         # Fallback: infer from available keys
         if cfg.gemini_api_keys:
@@ -235,7 +239,9 @@ def _get_api_keys_for_model(model: str, cfg: Config) -> List[str]:
     return [k for k in cfg.openai_api_keys if k and len(k) >= 8]
 
 
-def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] = None) -> str:
+def _call_litellm_vision(
+    image_b64: str, mime_type: str, api_key: Optional[str] = None
+) -> str:
     """Extract stock codes from an image using litellm (all providers via OpenAI vision format)."""
     global litellm
     cfg = get_config()
@@ -265,7 +271,11 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
         "timeout": VISION_API_TIMEOUT,
     }
     # Add api_base and custom headers for OpenAI-compatible providers
-    if not model.startswith("gemini/") and not model.startswith("anthropic/") and not model.startswith("vertex_ai/"):
+    if (
+        not model.startswith("gemini/")
+        and not model.startswith("anthropic/")
+        and not model.startswith("vertex_ai/")
+    ):
         if cfg.openai_base_url:
             call_kwargs["api_base"] = cfg.openai_base_url
         if cfg.openai_base_url and "aihubmix.com" in cfg.openai_base_url:
@@ -273,10 +283,12 @@ def _call_litellm_vision(image_b64: str, mime_type: str, api_key: Optional[str] 
 
     if getattr(litellm, "completion", None) is None:
         import litellm as litellm_module
+
         litellm = litellm_module
-    response = litellm.completion(**call_kwargs)
-    if response and response.choices and response.choices[0].message.content:
-        return response.choices[0].message.content
+    response = cast(Any, litellm).completion(**call_kwargs)
+    choices = getattr(response, "choices", None) if response is not None else None
+    if choices and choices[0].message.content:
+        return choices[0].message.content
     raise ValueError("LiteLLM vision returned empty response")
 
 
@@ -331,8 +343,10 @@ def extract_stock_codes_from_image(
         except Exception as e:
             last_error = e
             if attempt < 2:
-                delay = 2 ** attempt
-                logger.warning(f"[ImageExtractor] 尝试 {attempt + 1}/3 失败，{delay}s 后重试: {e}")
+                delay = 2**attempt
+                logger.warning(
+                    f"[ImageExtractor] 尝试 {attempt + 1}/3 失败，{delay}s 后重试: {e}"
+                )
                 time.sleep(delay)
 
     raise ValueError(

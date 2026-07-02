@@ -123,7 +123,7 @@ class AnnualReportProvider:
         """Extract text from PDF bytes"""
         try:
             import io
-            from pypdf import PdfReader
+            from pypdf import PdfReader  # type: ignore[import-not-found]
 
             reader = PdfReader(io.BytesIO(content))
             text_parts = []

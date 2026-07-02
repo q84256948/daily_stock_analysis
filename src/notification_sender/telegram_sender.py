@@ -6,6 +6,7 @@ Telegram 发送提醒服务
 1. 通过 Telegram Bot API 发送 文本消息
 2. 通过 Telegram Bot API 发送 图片消息
 """
+
 import logging
 from typing import Any, Optional
 import requests
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramSender:
-
     def __init__(self, config: Config):
         """
         初始化 Telegram 配置
@@ -28,14 +28,16 @@ class TelegramSender:
             config: 配置对象
         """
         self._telegram_config = {
-            'bot_token': getattr(config, 'telegram_bot_token', None),
-            'chat_id': getattr(config, 'telegram_chat_id', None),
-            'message_thread_id': getattr(config, 'telegram_message_thread_id', None),
+            "bot_token": getattr(config, "telegram_bot_token", None),
+            "chat_id": getattr(config, "telegram_chat_id", None),
+            "message_thread_id": getattr(config, "telegram_message_thread_id", None),
         }
 
     def _is_telegram_configured(self) -> bool:
         """检查 Telegram 配置是否完整"""
-        return bool(self._telegram_config['bot_token'] and self._telegram_config['chat_id'])
+        return bool(
+            self._telegram_config["bot_token"] and self._telegram_config["chat_id"]
+        )
 
     def send_to_telegram(
         self,
@@ -62,7 +64,9 @@ class TelegramSender:
         Returns:
             是否发送成功
         """
-        target_chat_id = chat_id if chat_id is not None else self._telegram_config.get("chat_id")
+        target_chat_id = (
+            chat_id if chat_id is not None else self._telegram_config.get("chat_id")
+        )
         target_message_thread_id = (
             message_thread_id
             if message_thread_id is not None
@@ -73,7 +77,7 @@ class TelegramSender:
             logger.warning("Telegram 配置不完整，跳过推送")
             return False
 
-        bot_token = self._telegram_config['bot_token']
+        bot_token = self._telegram_config["bot_token"]
         chat_id = target_chat_id
         message_thread_id = target_message_thread_id
 
@@ -84,16 +88,34 @@ class TelegramSender:
             # Telegram 消息最大长度 4096 字符
             max_length = 4096
 
+            if chat_id is None:
+                logger.warning("Telegram chat_id 未配置，跳过 Telegram 推送")
+                return False
+
             if len(content) <= max_length:
                 # 单条消息发送
-                return self._send_telegram_message(api_url, chat_id, content, message_thread_id, timeout_seconds=timeout_seconds)
+                return self._send_telegram_message(
+                    api_url,
+                    chat_id,
+                    content,
+                    message_thread_id,
+                    timeout_seconds=timeout_seconds,
+                )
             else:
                 # 分段发送长消息
-                return self._send_telegram_chunked(api_url, chat_id, content, max_length, message_thread_id, timeout_seconds=timeout_seconds)
+                return self._send_telegram_chunked(
+                    api_url,
+                    chat_id,
+                    content,
+                    max_length,
+                    message_thread_id,
+                    timeout_seconds=timeout_seconds,
+                )
 
         except Exception as e:
             logger.error(f"发送 Telegram 消息失败: {e}")
             import traceback
+
             logger.debug(traceback.format_exc())
             return False
 
@@ -114,48 +136,61 @@ class TelegramSender:
             "chat_id": chat_id,
             "text": telegram_text,
             "parse_mode": "Markdown",
-            "disable_web_page_preview": True
+            "disable_web_page_preview": True,
         }
 
         if message_thread_id:
-            payload['message_thread_id'] = message_thread_id
+            payload["message_thread_id"] = message_thread_id
 
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
-                response = requests.post(api_url, json=payload, timeout=timeout_seconds or 10)
-            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                response = requests.post(
+                    api_url, json=payload, timeout=timeout_seconds or 10
+                )
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as e:
                 if attempt < max_retries:
-                    delay = 2 ** attempt  # 2s, 4s
-                    logger.warning(f"Telegram request failed (attempt {attempt}/{max_retries}): {e}, "
-                                   f"retrying in {delay}s...")
+                    delay = 2**attempt  # 2s, 4s
+                    logger.warning(
+                        f"Telegram request failed (attempt {attempt}/{max_retries}): {e}, "
+                        f"retrying in {delay}s..."
+                    )
                     time.sleep(delay)
                     continue
                 else:
-                    logger.error(f"Telegram request failed after {max_retries} attempts: {e}")
+                    logger.error(
+                        f"Telegram request failed after {max_retries} attempts: {e}"
+                    )
                     return False
 
             if response.status_code == 200:
                 result = response.json()
-                if result.get('ok'):
+                if result.get("ok"):
                     logger.info("Telegram 消息发送成功")
                     return True
                 else:
-                    error_desc = result.get('description', '未知错误')
+                    error_desc = result.get("description", "未知错误")
                     logger.error(f"Telegram 返回错误: {error_desc}")
 
                     # If Markdown parsing failed, fall back to plain text
                     if self._should_fallback_to_plain_text(error_desc=error_desc):
-                        if self._send_plain_text_fallback(api_url, payload, text, timeout_seconds=timeout_seconds):
+                        if self._send_plain_text_fallback(
+                            api_url, payload, text, timeout_seconds=timeout_seconds
+                        ):
                             return True
 
                     return False
             elif response.status_code == 429:
                 # Rate limited — respect Retry-After header
-                retry_after = int(response.headers.get('Retry-After', 2 ** attempt))
+                retry_after = int(response.headers.get("Retry-After", 2**attempt))
                 if attempt < max_retries:
-                    logger.warning(f"Telegram rate limited, retrying in {retry_after}s "
-                                   f"(attempt {attempt}/{max_retries})...")
+                    logger.warning(
+                        f"Telegram rate limited, retrying in {retry_after}s "
+                        f"(attempt {attempt}/{max_retries})..."
+                    )
                     time.sleep(retry_after)
                     continue
                 else:
@@ -163,13 +198,17 @@ class TelegramSender:
                     return False
             else:
                 if attempt < max_retries and response.status_code >= 500:
-                    delay = 2 ** attempt
-                    logger.warning(f"Telegram server error HTTP {response.status_code} "
-                                   f"(attempt {attempt}/{max_retries}), retrying in {delay}s...")
+                    delay = 2**attempt
+                    logger.warning(
+                        f"Telegram server error HTTP {response.status_code} "
+                        f"(attempt {attempt}/{max_retries}), retrying in {delay}s..."
+                    )
                     time.sleep(delay)
                     continue
                 if self._should_fallback_to_plain_text(response_text=response.text):
-                    if self._send_plain_text_fallback(api_url, payload, text, timeout_seconds=timeout_seconds):
+                    if self._send_plain_text_fallback(
+                        api_url, payload, text, timeout_seconds=timeout_seconds
+                    ):
                         return True
                 logger.error(f"Telegram 请求失败: HTTP {response.status_code}")
                 logger.error(f"响应内容: {response.text}")
@@ -178,7 +217,9 @@ class TelegramSender:
         return False
 
     @staticmethod
-    def _should_fallback_to_plain_text(error_desc: str = "", response_text: str = "") -> bool:
+    def _should_fallback_to_plain_text(
+        error_desc: str = "", response_text: str = ""
+    ) -> bool:
         """Detect Telegram Markdown parsing failures that should retry as plain text."""
         haystack = f"{error_desc}\n{response_text}".lower()
         markers = (
@@ -202,11 +243,13 @@ class TelegramSender:
         """Retry Telegram send without parse_mode when Markdown parsing fails."""
         logger.info("Telegram Markdown 解析失败，尝试使用纯文本格式重新发送...")
         plain_payload = dict(payload)
-        plain_payload.pop('parse_mode', None)
-        plain_payload['text'] = text
+        plain_payload.pop("parse_mode", None)
+        plain_payload["text"] = text
 
         try:
-            response = requests.post(api_url, json=plain_payload, timeout=timeout_seconds or 10)
+            response = requests.post(
+                api_url, json=plain_payload, timeout=timeout_seconds or 10
+            )
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             logger.error(f"Telegram plain-text fallback failed: {e}")
             return False
@@ -219,7 +262,7 @@ class TelegramSender:
                 logger.error(f"响应内容: {response.text}")
                 return False
 
-            if result.get('ok'):
+            if result.get("ok"):
                 logger.info("Telegram 消息发送成功（纯文本）")
                 return True
 
@@ -258,7 +301,13 @@ class TelegramSender:
                 if current_chunk:
                     chunk_content = "\n---\n".join(current_chunk)
                     logger.info(f"发送 Telegram 消息块 {chunk_index}...")
-                    if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id, timeout_seconds=timeout_seconds):
+                    if not self._send_telegram_message(
+                        api_url,
+                        chat_id,
+                        chunk_content,
+                        message_thread_id,
+                        timeout_seconds=timeout_seconds,
+                    ):
                         all_success = False
                     chunk_index += 1
 
@@ -273,7 +322,13 @@ class TelegramSender:
         if current_chunk:
             chunk_content = "\n---\n".join(current_chunk)
             logger.info(f"发送 Telegram 消息块 {chunk_index}...")
-            if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id, timeout_seconds=timeout_seconds):
+            if not self._send_telegram_message(
+                api_url,
+                chat_id,
+                chunk_content,
+                message_thread_id,
+                timeout_seconds=timeout_seconds,
+            ):
                 all_success = False
 
         return all_success
@@ -282,17 +337,17 @@ class TelegramSender:
         """Send image via Telegram sendPhoto API (Issue #289)."""
         if not self._is_telegram_configured():
             return False
-        bot_token = self._telegram_config['bot_token']
-        chat_id = self._telegram_config['chat_id']
-        message_thread_id = self._telegram_config.get('message_thread_id')
+        bot_token = self._telegram_config["bot_token"]
+        chat_id = self._telegram_config["chat_id"]
+        message_thread_id = self._telegram_config.get("message_thread_id")
         api_url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
         try:
             data = {"chat_id": chat_id}
             if message_thread_id:
-                data['message_thread_id'] = message_thread_id
+                data["message_thread_id"] = message_thread_id
             files = {"photo": ("report.png", image_bytes, "image/png")}
             response = requests.post(api_url, data=data, files=files, timeout=30)
-            if response.status_code == 200 and response.json().get('ok'):
+            if response.status_code == 200 and response.json().get("ok"):
                 logger.info("Telegram 图片发送成功")
                 return True
             logger.error("Telegram 图片发送失败: %s", response.text[:200])
@@ -313,24 +368,27 @@ class TelegramSender:
         result = text
 
         # 移除 # 标题标记（Telegram 不支持）
-        result = re.sub(r'^#{1,6}\s+', '', result, flags=re.MULTILINE)
+        result = re.sub(r"^#{1,6}\s+", "", result, flags=re.MULTILINE)
 
         # 转换 **bold** 为 *bold*
-        result = re.sub(r'\*\*(.+?)\*\*', r'*\1*', result)
+        result = re.sub(r"\*\*(.+?)\*\*", r"*\1*", result)
 
         # Escape special characters for Telegram Markdown, but preserve link syntax [text](url)
         # Step 1: temporarily protect markdown links
         import uuid as _uuid
+
         _link_placeholder = f"__LINK_{_uuid.uuid4().hex[:8]}__"
         _links = []
+
         def _save_link(m):
             _links.append(m.group(0))
             return f"{_link_placeholder}{len(_links) - 1}"
-        result = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _save_link, result)
+
+        result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _save_link, result)
 
         # Step 2: escape remaining special chars
-        for char in ['[', ']', '(', ')']:
-            result = result.replace(char, f'\\{char}')
+        for char in ["[", "]", "(", ")"]:
+            result = result.replace(char, f"\\{char}")
 
         # Step 3: restore links
         for i, link in enumerate(_links):

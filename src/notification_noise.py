@@ -26,7 +26,9 @@ except Exception:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 NOTIFICATION_SEVERITIES: Tuple[str, ...] = ("info", "warning", "error", "critical")
-NOTIFICATION_SEVERITY_RANK = {severity: index for index, severity in enumerate(NOTIFICATION_SEVERITIES)}
+NOTIFICATION_SEVERITY_RANK = {
+    severity: index for index, severity in enumerate(NOTIFICATION_SEVERITIES)
+}
 DEFAULT_NOTIFICATION_SEVERITY_BY_ROUTE = {
     "report": "info",
     "alert": "warning",
@@ -85,7 +87,9 @@ def is_supported_notification_severity(value: object) -> bool:
     return str(value or "").strip().lower() in NOTIFICATION_SEVERITY_RANK
 
 
-def normalize_notification_severity(route_type: Optional[str], severity: Optional[str] = None) -> str:
+def normalize_notification_severity(
+    route_type: Optional[str], severity: Optional[str] = None
+) -> str:
     """Normalize explicit severity, or derive a default from route type."""
     explicit = str(severity or "").strip().lower()
     if explicit in NOTIFICATION_SEVERITY_RANK:
@@ -105,7 +109,9 @@ def parse_notification_quiet_hours(value: Optional[str]) -> Optional[Tuple[int, 
     if not match:
         raise ValueError("NOTIFICATION_QUIET_HOURS must be in HH:MM-HH:MM format")
 
-    start_hour, start_minute, end_hour, end_minute = [int(group) for group in match.groups()]
+    start_hour, start_minute, end_hour, end_minute = [
+        int(group) for group in match.groups()
+    ]
     return start_hour * 60 + start_minute, end_hour * 60 + end_minute
 
 
@@ -158,11 +164,15 @@ def _timestamp(now: datetime) -> float:
 
 
 def _cleanup_expired(now_ts: float) -> None:
-    expired_dedup = [key for key, expires_at in _dedup_expires_at.items() if expires_at <= now_ts]
+    expired_dedup = [
+        key for key, expires_at in _dedup_expires_at.items() if expires_at <= now_ts
+    ]
     for key in expired_dedup:
         _dedup_expires_at.pop(key, None)
 
-    expired_cooldown = [key for key, expires_at in _cooldown_expires_at.items() if expires_at <= now_ts]
+    expired_cooldown = [
+        key for key, expires_at in _cooldown_expires_at.items() if expires_at <= now_ts
+    ]
     for key in expired_cooldown:
         _cooldown_expires_at.pop(key, None)
 
@@ -232,7 +242,9 @@ def evaluate_notification_noise(
             cooldown_key=cooldown_key,
             now=now,
         )
-    except Exception as exc:  # pragma: no cover - defensive behavior is tested via monkeypatch.
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - defensive behavior is tested via monkeypatch.
         logger.warning("通知降噪判断失败，将继续发送静态通知渠道: %s", exc)
         return NotificationNoiseDecision(
             should_send=True,
@@ -259,7 +271,9 @@ def _evaluate_notification_noise(
     cooldown = max(0, int(getattr(config, "notification_cooldown_seconds", 0) or 0))
     quiet_hours_raw = getattr(config, "notification_quiet_hours", "") or ""
     timezone_name = getattr(config, "notification_timezone", "") or ""
-    min_severity_raw = str(getattr(config, "notification_min_severity", "") or "").strip().lower()
+    min_severity_raw = (
+        str(getattr(config, "notification_min_severity", "") or "").strip().lower()
+    )
 
     effective_now = _resolve_now(timezone_name, now)
     now_ts = _timestamp(effective_now)
@@ -273,8 +287,14 @@ def _evaluate_notification_noise(
 
     if min_severity_raw:
         if min_severity_raw not in NOTIFICATION_SEVERITY_RANK:
-            logger.warning("NOTIFICATION_MIN_SEVERITY=%s 无效，将忽略最低级别过滤", min_severity_raw)
-        elif NOTIFICATION_SEVERITY_RANK[resolved_severity] < NOTIFICATION_SEVERITY_RANK[min_severity_raw]:
+            logger.warning(
+                "NOTIFICATION_MIN_SEVERITY=%s 无效，将忽略最低级别过滤",
+                min_severity_raw,
+            )
+        elif (
+            NOTIFICATION_SEVERITY_RANK[resolved_severity]
+            < NOTIFICATION_SEVERITY_RANK[min_severity_raw]
+        ):
             return NotificationNoiseDecision(
                 should_send=False,
                 reason_code="min_severity",
@@ -345,11 +365,19 @@ def _evaluate_notification_noise(
         reservation_until = now_ts + _INFLIGHT_RESERVATION_SECONDS
         dedup_reserved = dedup_ttl > 0
         cooldown_reserved = cooldown > 0
-        reservation_token = uuid.uuid4().hex if dedup_reserved or cooldown_reserved else None
-        if dedup_reserved:
-            _dedup_inflight_until[dedup_state_key] = (reservation_until, reservation_token)
-        if cooldown_reserved:
-            _cooldown_inflight_until[cooldown_state_key] = (reservation_until, reservation_token)
+        reservation_token = (
+            uuid.uuid4().hex if dedup_reserved or cooldown_reserved else None
+        )
+        if dedup_reserved and reservation_token is not None:
+            _dedup_inflight_until[dedup_state_key] = (
+                reservation_until,
+                reservation_token,
+            )
+        if cooldown_reserved and reservation_token is not None:
+            _cooldown_inflight_until[cooldown_state_key] = (
+                reservation_until,
+                reservation_token,
+            )
 
     return NotificationNoiseDecision(
         should_send=True,
@@ -385,7 +413,9 @@ def release_notification_noise(decision: NotificationNoiseDecision) -> None:
         logger.warning("通知降噪发送中状态释放失败，忽略该错误: %s", exc)
 
 
-def record_notification_noise(decision: NotificationNoiseDecision, now: Optional[datetime] = None) -> None:
+def record_notification_noise(
+    decision: NotificationNoiseDecision, now: Optional[datetime] = None
+) -> None:
     """Record dedup/cooldown state after a static notification send succeeds."""
     if not decision.should_send or decision.evaluated_at is None:
         return
@@ -399,8 +429,12 @@ def record_notification_noise(decision: NotificationNoiseDecision, now: Optional
             _cleanup_expired(now_ts)
             _release_reserved_locked(decision)
             if decision.dedup_ttl_seconds > 0 and decision.dedup_key:
-                _dedup_expires_at[decision.dedup_key] = now_ts + decision.dedup_ttl_seconds
+                _dedup_expires_at[decision.dedup_key] = (
+                    now_ts + decision.dedup_ttl_seconds
+                )
             if decision.cooldown_seconds > 0 and decision.cooldown_key:
-                _cooldown_expires_at[decision.cooldown_key] = now_ts + decision.cooldown_seconds
+                _cooldown_expires_at[decision.cooldown_key] = (
+                    now_ts + decision.cooldown_seconds
+                )
     except Exception as exc:  # pragma: no cover - defensive branch.
         logger.warning("通知降噪状态记录失败，忽略该错误: %s", exc)

@@ -14,7 +14,7 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -40,6 +40,7 @@ SESSION_PREFIX = "zhengxi"
 # ============================================================
 # Schemas
 # ============================================================
+
 
 class ZhengxiChatRequest(BaseModel):
     message: str
@@ -75,6 +76,7 @@ class ZhengxiSessionMessagesResponse(BaseModel):
 # Helpers
 # ============================================================
 
+
 def _ensure_zhengxi_session_id(session_id: Optional[str]) -> str:
     """保证 session_id 带 ``zhengxi:`` 前缀，缺失则生成。"""
     prefix = f"{SESSION_PREFIX}:"
@@ -92,11 +94,12 @@ def _strip_zhengxi_prefix(session_id: str) -> str:
     的无前缀格式一致——避免刷新后 ``loadInitialSession`` 因前缀不匹配而无法恢复会话。
     """
     prefix = f"{SESSION_PREFIX}:"
-    return session_id[len(prefix):] if session_id.startswith(prefix) else session_id
+    return session_id[len(prefix) :] if session_id.startswith(prefix) else session_id
 
 
 def _build_executor(config):
     from src.agent.factory import build_zhengxi_executor
+
     return build_zhengxi_executor(config)
 
 
@@ -108,6 +111,7 @@ def _require_agent(config) -> None:
 # ============================================================
 # Chat (non-streaming)
 # ============================================================
+
 
 @router.post("/chat", response_model=ZhengxiChatResponse)
 async def zhengxi_chat(request: ZhengxiChatRequest):
@@ -141,6 +145,7 @@ async def zhengxi_chat(request: ZhengxiChatRequest):
 # Chat (SSE streaming)
 # ============================================================
 
+
 @router.post("/chat/stream")
 async def zhengxi_chat_stream(request: ZhengxiChatRequest):
     """郑希投研问答 SSE 流式端点。
@@ -170,14 +175,16 @@ async def zhengxi_chat_stream(request: ZhengxiChatRequest):
                 context=request.context,
             )
             asyncio.run_coroutine_threadsafe(
-                queue.put({
-                    "type": "done",
-                    "success": result.success,
-                    "content": result.content,
-                    "error": result.error,
-                    "total_steps": result.total_steps,
-                    "session_id": session_id,
-                }),
+                queue.put(
+                    {
+                        "type": "done",
+                        "success": result.success,
+                        "content": result.content,
+                        "error": result.error,
+                        "total_steps": result.total_steps,
+                        "session_id": session_id,
+                    }
+                ),
                 loop,
             )
         except Exception as exc:
@@ -194,9 +201,13 @@ async def zhengxi_chat_stream(request: ZhengxiChatRequest):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=300.0)
                 except asyncio.TimeoutError:
-                    yield "data: " + json.dumps(
-                        {"type": "error", "message": "分析超时"}, ensure_ascii=False
-                    ) + "\n\n"
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {"type": "error", "message": "分析超时"}, ensure_ascii=False
+                        )
+                        + "\n\n"
+                    )
                     break
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 if event.get("type") in ("done", "error"):
@@ -224,6 +235,7 @@ async def zhengxi_chat_stream(request: ZhengxiChatRequest):
 # Session CRUD（会话隔离：固定 zhengxi 前缀）
 # ============================================================
 
+
 @router.get("/chat/sessions", response_model=ZhengxiSessionsResponse)
 async def list_zhengxi_sessions(limit: int = 50):
     """郑希会话列表（固定按 ``zhengxi`` 前缀过滤，与问股隔离）。
@@ -232,22 +244,26 @@ async def list_zhengxi_sessions(limit: int = 50):
     格式保持一致，确保刷新后 ``loadInitialSession`` 能正确恢复当前会话。
     """
     from src.storage import get_db
+
     sessions = get_db().get_chat_sessions(
         limit=limit,
         session_prefix=SESSION_PREFIX,
     )
     for s in sessions:
         s["session_id"] = _strip_zhengxi_prefix(s["session_id"])
-    return ZhengxiSessionsResponse(sessions=sessions)
+    return ZhengxiSessionsResponse(sessions=cast(Any, sessions))
 
 
-@router.get("/chat/sessions/{session_id}", response_model=ZhengxiSessionMessagesResponse)
+@router.get(
+    "/chat/sessions/{session_id}", response_model=ZhengxiSessionMessagesResponse
+)
 async def get_zhengxi_session_messages(session_id: str, limit: int = 100):
     """获取单个郑希会话的完整消息。
 
     容忍前端传入无前缀 session_id（与 list 返回格式一致），内部统一补前缀后查 DB。
     """
     from src.storage import get_db
+
     full_id = _ensure_zhengxi_session_id(session_id)
     messages = get_db().get_conversation_messages(full_id, limit=limit)
     return ZhengxiSessionMessagesResponse(
@@ -262,6 +278,7 @@ async def delete_zhengxi_session(session_id: str):
     容忍前端传入无前缀 session_id，内部统一补前缀后删除。
     """
     from src.storage import get_db
+
     full_id = _ensure_zhengxi_session_id(session_id)
     count = get_db().delete_conversation_session(full_id)
     return {"deleted": count}

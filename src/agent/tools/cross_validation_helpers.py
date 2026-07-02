@@ -18,7 +18,11 @@ import logging
 from threading import Lock
 from typing import Any, Dict, Iterable, List, Optional
 
-from data_provider.cross_source_validator import AnchorReading, CrossSourceValidator
+from data_provider.cross_source_validator import (
+    AnchorReading,
+    CrossSourceValidator,
+    SourceAdapter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +37,16 @@ def reset_validator() -> None:
         _validator_instance = None
 
 
-def _build_sources(config: Any) -> list[Any]:
+def _build_sources(config: Any) -> List[SourceAdapter]:
     """构建数据源列表：MX 主源 + iFinD 验证源（配置 endpoint+token 时）。"""
     from data_provider.mx_data_adapter import MXSource
 
-    sources = [MXSource()]  # 无 key 时 available=False，read 返回 None
-    if getattr(config, "ifind_mcp_endpoint", None) and getattr(config, "ifind_mcp_token", None):
+    sources: List[SourceAdapter] = [
+        MXSource()
+    ]  # 无 key 时 available=False，read 返回 None
+    if getattr(config, "ifind_mcp_endpoint", None) and getattr(
+        config, "ifind_mcp_token", None
+    ):
         from data_provider.ifind_fundamental_adapter import IfindFetcher, IfindSource
 
         fetcher = IfindFetcher(

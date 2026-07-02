@@ -107,7 +107,10 @@ class SystemConfigService:
 
     _DISPLAY_KEY_ALIASES: Dict[str, Tuple[str, ...]] = {
         "AGENT_SKILL_DIR": ("AGENT_SKILL_DIR", "AGENT_STRATEGY_DIR"),
-        "AGENT_SKILL_AUTOWEIGHT": ("AGENT_SKILL_AUTOWEIGHT", "AGENT_STRATEGY_AUTOWEIGHT"),
+        "AGENT_SKILL_AUTOWEIGHT": (
+            "AGENT_SKILL_AUTOWEIGHT",
+            "AGENT_STRATEGY_AUTOWEIGHT",
+        ),
         "AGENT_SKILL_ROUTING": ("AGENT_SKILL_ROUTING", "AGENT_STRATEGY_ROUTING"),
     }
     _DISPLAY_VALUE_ALIASES: Dict[str, Dict[str, str]] = {
@@ -190,7 +193,11 @@ class SystemConfigService:
         "pushplus": (("PUSHPLUS_TOKEN",),),
         "serverchan3": (("SERVERCHAN3_SENDKEY",),),
         "custom": (("CUSTOM_WEBHOOK_URLS",),),
-        "discord": (("DISCORD_WEBHOOK_URL",), ("DISCORD_BOT_TOKEN", "DISCORD_MAIN_CHANNEL_ID"), ("DISCORD_BOT_TOKEN", "DISCORD_CHANNEL_ID")),
+        "discord": (
+            ("DISCORD_WEBHOOK_URL",),
+            ("DISCORD_BOT_TOKEN", "DISCORD_MAIN_CHANNEL_ID"),
+            ("DISCORD_BOT_TOKEN", "DISCORD_CHANNEL_ID"),
+        ),
         "slack": (("SLACK_WEBHOOK_URL",), ("SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID")),
         "astrbot": (("ASTRBOT_URL",),),
     }
@@ -205,7 +212,11 @@ class SystemConfigService:
         "pushplus": ("PUSHPLUS_TOPIC",),
         "serverchan3": ("SERVERCHAN3_SENDKEY",),
         "custom": ("CUSTOM_WEBHOOK_URLS",),
-        "discord": ("DISCORD_WEBHOOK_URL", "DISCORD_MAIN_CHANNEL_ID", "DISCORD_CHANNEL_ID"),
+        "discord": (
+            "DISCORD_WEBHOOK_URL",
+            "DISCORD_MAIN_CHANNEL_ID",
+            "DISCORD_CHANNEL_ID",
+        ),
         "slack": ("SLACK_WEBHOOK_URL", "SLACK_CHANNEL_ID"),
         "astrbot": ("ASTRBOT_URL",),
     }
@@ -234,7 +245,9 @@ class SystemConfigService:
         return alias_map.get(value.strip().lower(), value)
 
     @classmethod
-    def _build_display_config_map(cls, raw_config_map: Dict[str, str]) -> Dict[str, str]:
+    def _build_display_config_map(
+        cls, raw_config_map: Dict[str, str]
+    ) -> Dict[str, str]:
         raw_upper = {key.upper(): value for key, value in raw_config_map.items()}
         aliased_keys = {
             alias
@@ -283,7 +296,9 @@ class SystemConfigService:
         return display_map
 
     @staticmethod
-    def _resolve_display_value(raw_value: str, field_schema: Dict[str, Any], raw_value_exists: bool) -> str:
+    def _resolve_display_value(
+        raw_value: str, field_schema: Dict[str, Any], raw_value_exists: bool
+    ) -> str:
         if raw_value_exists:
             return raw_value
 
@@ -298,7 +313,9 @@ class SystemConfigService:
         return raw_value
 
     @classmethod
-    def _get_schema_config_keys(cls, config_map: Dict[str, str], registered_keys: Set[str]) -> Set[str]:
+    def _get_schema_config_keys(
+        cls, config_map: Dict[str, str], registered_keys: Set[str]
+    ) -> Set[str]:
         """Return keys needed by the Web schema payload.
 
         Ordinary settings must be registry-backed. LLM channel detail keys are
@@ -321,7 +338,9 @@ class SystemConfigService:
         return keys
 
     @classmethod
-    def _build_runtime_display_config_map(cls, saved_config_map: Dict[str, str]) -> Dict[str, str]:
+    def _build_runtime_display_config_map(
+        cls, saved_config_map: Dict[str, str]
+    ) -> Dict[str, str]:
         """Return Web settings values injected through the process environment.
 
         Docker ``env_file`` / ``--env-file`` only populate process environment
@@ -344,17 +363,20 @@ class SystemConfigService:
         for raw_key, raw_value in os.environ.items():
             key = str(raw_key).upper()
             llm_channel_match = cls._WEB_SETTINGS_LLM_CHANNEL_SUPPORT_KEY_RE.match(key)
-            if (
-                key in registered_keys
-                or (llm_channel_match and llm_channel_match.group(1) in channel_names)
+            if key in registered_keys or (
+                llm_channel_match and llm_channel_match.group(1) in channel_names
             ):
                 runtime_map[key] = "" if raw_value is None else str(raw_value)
 
         return cls._build_display_config_map(runtime_map)
 
-    def get_config(self, include_schema: bool = True, mask_token: str = "******") -> Dict[str, Any]:
+    def get_config(
+        self, include_schema: bool = True, mask_token: str = "******"
+    ) -> Dict[str, Any]:
         """Return display config values with mask metadata for server-masked fields."""
-        saved_config_map = self._build_display_config_map(self._manager.read_config_map())
+        saved_config_map = self._build_display_config_map(
+            self._manager.read_config_map()
+        )
         runtime_config_map = self._build_runtime_display_config_map(saved_config_map)
         config_map = {
             **runtime_config_map,
@@ -371,8 +393,7 @@ class SystemConfigService:
         }
 
         schema_by_key: Dict[str, Dict[str, Any]] = {
-            key: get_field_definition(key, config_map.get(key, ""))
-            for key in all_keys
+            key: get_field_definition(key, config_map.get(key, "")) for key in all_keys
         }
 
         items: List[Dict[str, Any]] = []
@@ -380,7 +401,9 @@ class SystemConfigService:
             raw_value_exists = key in saved_config_map
             raw_value = config_map.get(key, "")
             field_schema = schema_by_key[key]
-            display_value = self._resolve_display_value(raw_value, field_schema, raw_value_exists)
+            display_value = self._resolve_display_value(
+                raw_value, field_schema, raw_value_exists
+            )
             is_masked = False
             if key in self._SERVER_MASKED_CONFIG_KEYS and display_value:
                 display_value = mask_token
@@ -397,7 +420,9 @@ class SystemConfigService:
 
         items.sort(
             key=lambda item: (
-                category_orders.get(schema_by_key[item["key"]].get("category", "uncategorized"), 999),
+                category_orders.get(
+                    schema_by_key[item["key"]].get("category", "uncategorized"), 999
+                ),
                 schema_by_key[item["key"]].get("display_order", 9999),
                 item["key"],
             )
@@ -410,7 +435,9 @@ class SystemConfigService:
             "updated_at": self._manager.get_updated_at(),
         }
 
-    def validate(self, items: Sequence[Dict[str, str]], mask_token: str = "******") -> Dict[str, Any]:
+    def validate(
+        self, items: Sequence[Dict[str, str]], mask_token: str = "******"
+    ) -> Dict[str, Any]:
         """Validate submitted items without writing to `.env`."""
         issues = self._collect_issues(items=items, mask_token=mask_token)
         valid = not any(issue["severity"] == "error" for issue in issues)
@@ -438,7 +465,9 @@ class SystemConfigService:
             items=items,
             mask_token=mask_token,
         )
-        missing = self._get_missing_notification_test_keys(normalized_channel, effective_map)
+        missing = self._get_missing_notification_test_keys(
+            normalized_channel, effective_map
+        )
         if missing:
             return self._build_notification_test_result(
                 success=False,
@@ -475,7 +504,9 @@ class SystemConfigService:
                 timeout_seconds=float(timeout_seconds),
             )
         except Exception as exc:
-            logger.warning("Notification channel test failed for %s: %s", normalized_channel, exc)
+            logger.warning(
+                "Notification channel test failed for %s: %s", normalized_channel, exc
+            )
             error_code, retryable = self._classify_notification_exception(exc)
             return self._build_notification_test_result(
                 success=False,
@@ -489,7 +520,9 @@ class SystemConfigService:
                         "channel": normalized_channel,
                         "success": False,
                         "message": str(exc),
-                        "target": self._resolve_notification_test_target(normalized_channel, effective_map),
+                        "target": self._resolve_notification_test_target(
+                            normalized_channel, effective_map
+                        ),
                         "error_code": error_code,
                         "stage": "notification_send",
                         "retryable": retryable,
@@ -584,7 +617,7 @@ class SystemConfigService:
         api_key: str,
         models: Sequence[str] = (),
         timeout_seconds: float = 20.0,
-        ) -> Dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Discover available models from an OpenAI-compatible `/models` endpoint."""
         channel_name = name.strip() or "channel"
         existing_models = [str(m).strip() for m in models if str(m).strip()]
@@ -640,7 +673,9 @@ class SystemConfigService:
                 latency_ms=None,
             )
 
-        api_keys = [segment.strip() for segment in api_key.split(",") if segment.strip()]
+        api_keys = [
+            segment.strip() for segment in api_key.split(",") if segment.strip()
+        ]
         selected_api_key = api_keys[0] if api_keys else ""
         request_headers = {"Accept": "application/json"}
         if selected_api_key:
@@ -676,7 +711,9 @@ class SystemConfigService:
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
         except requests.RequestException as exc:
-            logger.warning("LLM channel model discovery failed for %s: %s", channel_name, exc)
+            logger.warning(
+                "LLM channel model discovery failed for %s: %s", channel_name, exc
+            )
             diagnostic = self._classify_llm_exception(exc)
             return self._build_llm_channel_result(
                 success=False,
@@ -685,7 +722,9 @@ class SystemConfigService:
                 stage="model_discovery",
                 error_code=diagnostic.error_code,
                 retryable=diagnostic.retryable,
-                details=self._merge_llm_diagnostic_details({"endpoint": models_url}, diagnostic),
+                details=self._merge_llm_diagnostic_details(
+                    {"endpoint": models_url}, diagnostic
+                ),
                 resolved_protocol=resolved_protocol or None,
                 models=[],
                 latency_ms=None,
@@ -737,7 +776,11 @@ class SystemConfigService:
                 stage="response_parse",
                 error_code="format_error",
                 retryable=False,
-                details={"endpoint": models_url, "http_status": response.status_code, "reason": "non_json"},
+                details={
+                    "endpoint": models_url,
+                    "http_status": response.status_code,
+                    "reason": "non_json",
+                },
                 resolved_protocol=resolved_protocol or None,
                 models=[],
                 latency_ms=latency_ms,
@@ -752,7 +795,11 @@ class SystemConfigService:
                 stage="response_parse",
                 error_code="empty_response",
                 retryable=False,
-                details={"endpoint": models_url, "http_status": response.status_code, "reason": "empty_models"},
+                details={
+                    "endpoint": models_url,
+                    "http_status": response.status_code,
+                    "reason": "empty_models",
+                },
                 resolved_protocol=resolved_protocol or None,
                 models=[],
                 latency_ms=latency_ms,
@@ -784,7 +831,9 @@ class SystemConfigService:
         capability_checks: Sequence[str] = (),
     ) -> Dict[str, Any]:
         """Run a minimal completion call against one channel definition."""
-        requested_capabilities = self._normalize_llm_capability_checks(capability_checks)
+        requested_capabilities = self._normalize_llm_capability_checks(
+            capability_checks
+        )
         raw_models = [str(model).strip() for model in models if str(model).strip()]
         channel_name = name.strip() or "channel"
         validation_issues = self._validate_llm_channel_definition(
@@ -821,10 +870,17 @@ class SystemConfigService:
                 ),
             )
 
-        resolved_protocol = resolve_llm_channel_protocol(protocol, base_url=base_url, models=raw_models, channel_name=name)
-        resolved_models = [normalize_llm_channel_model(model, resolved_protocol, base_url) for model in raw_models]
+        resolved_protocol = resolve_llm_channel_protocol(
+            protocol, base_url=base_url, models=raw_models, channel_name=name
+        )
+        resolved_models = [
+            normalize_llm_channel_model(model, resolved_protocol, base_url)
+            for model in raw_models
+        ]
         resolved_model = resolved_models[0]
-        api_keys = [segment.strip() for segment in api_key.split(",") if segment.strip()]
+        api_keys = [
+            segment.strip() for segment in api_key.split(",") if segment.strip()
+        ]
         selected_api_key = api_keys[0] if api_keys else ""
 
         call_kwargs: Dict[str, Any] = {
@@ -851,9 +907,12 @@ class SystemConfigService:
             )
 
             # Register fallback pricing for OpenAI-compatible models to prevent cost calculation errors
+            # NOTE: SystemConfigService does not define a ``_config`` attribute; this
+            # branch is intentionally defensive and stays a no-op when absent.
             config_model_list = None
-            if getattr(self, "_config", None) is not None:
-                config_model_list = getattr(self._config, "llm_model_list", None)
+            _maybe_config = getattr(self, "_config", None)
+            if _maybe_config is not None:
+                config_model_list = getattr(_maybe_config, "llm_model_list", None)
             register_fallback_model_pricing(
                 resolve_fallback_litellm_wire_models(
                     resolved_model,
@@ -870,7 +929,9 @@ class SystemConfigService:
                 log_label="[LLM channel test]",
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
-            content, parse_error_code, parse_error, parse_reason = self._extract_llm_completion_content(response)
+            content, parse_error_code, parse_error, parse_reason = (
+                self._extract_llm_completion_content(response)
+            )
             if parse_error_code:
                 message = (
                     "LLM channel returned an empty response"
@@ -930,7 +991,9 @@ class SystemConfigService:
                 stage="chat_completion",
                 error_code=diagnostic.error_code,
                 retryable=diagnostic.retryable,
-                details=self._merge_llm_diagnostic_details({"model": resolved_model}, diagnostic),
+                details=self._merge_llm_diagnostic_details(
+                    {"model": resolved_model}, diagnostic
+                ),
                 resolved_protocol=resolved_protocol or None,
                 resolved_model=resolved_model,
                 latency_ms=None,
@@ -942,8 +1005,14 @@ class SystemConfigService:
             )
 
     @classmethod
-    def _normalize_llm_capability_checks(cls, capability_checks: Sequence[str]) -> List[str]:
-        requested = {str(check).strip().lower() for check in capability_checks if str(check).strip()}
+    def _normalize_llm_capability_checks(
+        cls, capability_checks: Sequence[str]
+    ) -> List[str]:
+        requested = {
+            str(check).strip().lower()
+            for check in capability_checks
+            if str(check).strip()
+        }
         return [check for check in cls._LLM_CAPABILITY_ORDER if check in requested]
 
     @classmethod
@@ -1030,13 +1099,20 @@ class SystemConfigService:
                     selected_api_key=selected_api_key,
                     base_url=base_url,
                     timeout_seconds=timeout_seconds,
-                    messages=[{"role": "user", "content": 'Return exactly this JSON object: {"status":"ok"}'}],
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": 'Return exactly this JSON object: {"status":"ok"}',
+                        }
+                    ],
                     max_tokens=64,
                     extra={"response_format": {"type": "json_object"}},
                 )
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
-            content, parse_error_code, parse_error, parse_reason = cls._extract_llm_completion_content(response)
+            content, parse_error_code, parse_error, parse_reason = (
+                cls._extract_llm_completion_content(response)
+            )
             if parse_error_code:
                 return cls._build_llm_capability_result(
                     capability="json",
@@ -1078,7 +1154,9 @@ class SystemConfigService:
             )
         except Exception as exc:
             diagnostic = cls._classify_llm_capability_exception(exc, "json")
-            return cls._build_llm_capability_result_from_diagnostic("json", diagnostic, str(exc))
+            return cls._build_llm_capability_result_from_diagnostic(
+                "json", diagnostic, str(exc)
+            )
 
     @classmethod
     def _run_tools_capability_check(
@@ -1112,11 +1190,19 @@ class SystemConfigService:
                     selected_api_key=selected_api_key,
                     base_url=base_url,
                     timeout_seconds=timeout_seconds,
-                    messages=[{"role": "user", "content": "Call the dsa_probe_echo tool with text set to ok."}],
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": "Call the dsa_probe_echo tool with text set to ok.",
+                        }
+                    ],
                     max_tokens=64,
                     extra={
                         "tools": tools,
-                        "tool_choice": {"type": "function", "function": {"name": "dsa_probe_echo"}},
+                        "tool_choice": {
+                            "type": "function",
+                            "function": {"name": "dsa_probe_echo"},
+                        },
                     },
                 )
             )
@@ -1141,7 +1227,9 @@ class SystemConfigService:
             )
         except Exception as exc:
             diagnostic = cls._classify_llm_capability_exception(exc, "tools")
-            return cls._build_llm_capability_result_from_diagnostic("tools", diagnostic, str(exc))
+            return cls._build_llm_capability_result_from_diagnostic(
+                "tools", diagnostic, str(exc)
+            )
 
     @classmethod
     def _run_stream_capability_check(
@@ -1192,7 +1280,9 @@ class SystemConfigService:
             )
         except Exception as exc:
             diagnostic = cls._classify_llm_capability_exception(exc, "stream")
-            return cls._build_llm_capability_result_from_diagnostic("stream", diagnostic, str(exc))
+            return cls._build_llm_capability_result_from_diagnostic(
+                "stream", diagnostic, str(exc)
+            )
         finally:
             close_stream = getattr(stream, "close", None)
             if callable(close_stream):
@@ -1223,8 +1313,16 @@ class SystemConfigService:
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": "Reply with OK if this image is visible."},
-                                {"type": "image_url", "image_url": {"url": cls._LLM_CAPABILITY_PROBE_IMAGE}},
+                                {
+                                    "type": "text",
+                                    "text": "Reply with OK if this image is visible.",
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": cls._LLM_CAPABILITY_PROBE_IMAGE
+                                    },
+                                },
                             ],
                         }
                     ],
@@ -1232,7 +1330,9 @@ class SystemConfigService:
                 )
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
-            content, parse_error_code, parse_error, parse_reason = cls._extract_llm_completion_content(response)
+            content, parse_error_code, parse_error, parse_reason = (
+                cls._extract_llm_completion_content(response)
+            )
             if parse_error_code:
                 return cls._build_llm_capability_result(
                     capability="vision",
@@ -1248,11 +1348,16 @@ class SystemConfigService:
                 status="passed",
                 message="Vision capability check passed",
                 latency_ms=latency_ms,
-                details={"reason": "vision_response_received", "response_preview": content[:80]},
+                details={
+                    "reason": "vision_response_received",
+                    "response_preview": content[:80],
+                },
             )
         except Exception as exc:
             diagnostic = cls._classify_llm_capability_exception(exc, "vision")
-            return cls._build_llm_capability_result_from_diagnostic("vision", diagnostic, str(exc))
+            return cls._build_llm_capability_result_from_diagnostic(
+                "vision", diagnostic, str(exc)
+            )
 
     @classmethod
     def _build_llm_capability_completion_kwargs(
@@ -1308,7 +1413,9 @@ class SystemConfigService:
             "stage": f"capability_{capability}",
             "retryable": retryable,
             "latency_ms": latency_ms,
-            "details": cls._sanitize_llm_details({"capability": capability, **(details or {})}),
+            "details": cls._sanitize_llm_details(
+                {"capability": capability, **(details or {})}
+            ),
         }
 
     @classmethod
@@ -1330,18 +1437,32 @@ class SystemConfigService:
 
     @staticmethod
     def _extract_llm_tool_call_names(response: Any) -> List[str]:
-        choices = response.get("choices") if isinstance(response, dict) else getattr(response, "choices", None)
+        choices = (
+            response.get("choices")
+            if isinstance(response, dict)
+            else getattr(response, "choices", None)
+        )
         if not choices:
             return []
         choice = choices[0]
-        message = choice.get("message") if isinstance(choice, dict) else getattr(choice, "message", None)
+        message = (
+            choice.get("message")
+            if isinstance(choice, dict)
+            else getattr(choice, "message", None)
+        )
         if isinstance(message, dict):
             tool_calls = message.get("tool_calls")
         else:
-            tool_calls = getattr(message, "tool_calls", None) if message is not None else None
+            tool_calls = (
+                getattr(message, "tool_calls", None) if message is not None else None
+            )
         names: List[str] = []
         for call in tool_calls or []:
-            function = call.get("function") if isinstance(call, dict) else getattr(call, "function", None)
+            function = (
+                call.get("function")
+                if isinstance(call, dict)
+                else getattr(call, "function", None)
+            )
             if isinstance(function, dict):
                 name = str(function.get("name") or "").strip()
             else:
@@ -1352,23 +1473,45 @@ class SystemConfigService:
 
     @staticmethod
     def _extract_llm_stream_chunk_content(chunk: Any) -> str:
-        choices = chunk.get("choices") if isinstance(chunk, dict) else getattr(chunk, "choices", None)
+        choices = (
+            chunk.get("choices")
+            if isinstance(chunk, dict)
+            else getattr(chunk, "choices", None)
+        )
         if not choices:
             return ""
         choice = choices[0]
-        delta = choice.get("delta") if isinstance(choice, dict) else getattr(choice, "delta", None)
-        message = choice.get("message") if isinstance(choice, dict) else getattr(choice, "message", None)
+        delta = (
+            choice.get("delta")
+            if isinstance(choice, dict)
+            else getattr(choice, "delta", None)
+        )
+        message = (
+            choice.get("message")
+            if isinstance(choice, dict)
+            else getattr(choice, "message", None)
+        )
         for container in (delta, message):
             if not container:
                 continue
-            content = container.get("content") if isinstance(container, dict) else getattr(container, "content", None)
+            content = (
+                container.get("content")
+                if isinstance(container, dict)
+                else getattr(container, "content", None)
+            )
             if content:
                 return str(content)
-        content = choice.get("text") if isinstance(choice, dict) else getattr(choice, "text", None)
+        content = (
+            choice.get("text")
+            if isinstance(choice, dict)
+            else getattr(choice, "text", None)
+        )
         return str(content or "")
 
     @classmethod
-    def _classify_llm_capability_exception(cls, exc: Exception, capability: str) -> _LLMDiagnostic:
+    def _classify_llm_capability_exception(
+        cls, exc: Exception, capability: str
+    ) -> _LLMDiagnostic:
         text = str(exc).lower()
         capability_tokens = {
             "json": ("response_format", "json_object", "json mode"),
@@ -1387,7 +1530,9 @@ class SystemConfigService:
             "not allowed",
         )
         has_unsupported_marker = any(marker in text for marker in unsupported_markers)
-        has_capability_token = any(token in text for token in capability_tokens.get(capability, ()))
+        has_capability_token = any(
+            token in text for token in capability_tokens.get(capability, ())
+        )
         if has_unsupported_marker and (has_capability_token or capability in text):
             return _LLMDiagnostic(
                 "capability_unsupported",
@@ -1552,7 +1697,9 @@ class SystemConfigService:
             )
 
         if "SCHEDULE_TIME" in submitted_keys:
-            schedule_time = (current_map.get("SCHEDULE_TIME", "") or "").strip() or "18:00"
+            schedule_time = (
+                current_map.get("SCHEDULE_TIME", "") or ""
+            ).strip() or "18:00"
             warnings.append(
                 (
                     f"SCHEDULE_TIME={schedule_time} 已写入 .env。"
@@ -1590,7 +1737,11 @@ class SystemConfigService:
         }
         cleared_labels: List[str] = []
         for key, label in runtime_labels.items():
-            if previous_map.get(key, "").strip() and key in updates and not updates[key].strip():
+            if (
+                previous_map.get(key, "").strip()
+                and key in updates
+                and not updates[key].strip()
+            ):
                 cleared_labels.append(label)
 
         removed_fallbacks: List[str] = []
@@ -1605,7 +1756,9 @@ class SystemConfigService:
                 for item in updates["LITELLM_FALLBACK_MODELS"].split(",")
                 if item.strip()
             }
-            removed_fallbacks = [item for item in previous_fallbacks if item not in next_fallbacks]
+            removed_fallbacks = [
+                item for item in previous_fallbacks if item not in next_fallbacks
+            ]
 
         if not cleared_labels and not removed_fallbacks:
             return []
@@ -1661,7 +1814,9 @@ class SystemConfigService:
 
         return updates
 
-    def _collect_issues(self, items: Sequence[Dict[str, str]], mask_token: str) -> List[Dict[str, Any]]:
+    def _collect_issues(
+        self, items: Sequence[Dict[str, str]], mask_token: str
+    ) -> List[Dict[str, Any]]:
         """Collect field-level and cross-field validation issues."""
         saved_config_map = self._manager.read_config_map()
         display_config_map = self._build_display_config_map(saved_config_map)
@@ -1684,13 +1839,21 @@ class SystemConfigService:
 
             updated_map[key] = value
             effective_map[key] = value
-            issues.extend(self._validate_value(key=key, value=value, field_schema=field_schema))
+            issues.extend(
+                self._validate_value(key=key, value=value, field_schema=field_schema)
+            )
 
-        issues.extend(self._validate_cross_field(effective_map=effective_map, updated_keys=set(updated_map.keys())))
+        issues.extend(
+            self._validate_cross_field(
+                effective_map=effective_map, updated_keys=set(updated_map.keys())
+            )
+        )
         return issues
 
     @staticmethod
-    def _validate_value(key: str, value: str, field_schema: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _validate_value(
+        key: str, value: str, field_schema: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """Validate a single field value against schema metadata."""
         issues: List[Dict[str, Any]] = []
         data_type = field_schema.get("data_type", "string")
@@ -1728,7 +1891,9 @@ class SystemConfigService:
                         "actual": value,
                     }
                 ]
-            issues.extend(SystemConfigService._validate_numeric_range(key, numeric, validation))
+            issues.extend(
+                SystemConfigService._validate_numeric_range(key, numeric, validation)
+            )
 
         elif data_type == "number":
             try:
@@ -1744,7 +1909,9 @@ class SystemConfigService:
                         "actual": value,
                     }
                 ]
-            issues.extend(SystemConfigService._validate_numeric_range(key, numeric, validation))
+            issues.extend(
+                SystemConfigService._validate_numeric_range(key, numeric, validation)
+            )
 
         elif data_type == "boolean":
             if value.strip().lower() not in {"true", "false"}:
@@ -1790,10 +1957,15 @@ class SystemConfigService:
             else:
                 if key == "AGENT_EVENT_ALERT_RULES_JSON":
                     try:
-                        from src.agent.events import parse_event_alert_rules, validate_event_alert_rule
+                        from src.agent.events import (
+                            parse_event_alert_rules,
+                            validate_event_alert_rule,
+                        )
 
-                        rule_index = 0
-                        for rule_index, rule in enumerate(parse_event_alert_rules(parsed), start=1):
+                        rule_index: int | None = 0
+                        for rule_index, rule in enumerate(
+                            parse_event_alert_rules(parsed), start=1
+                        ):
                             validate_event_alert_rule(rule)
                     except ValueError as exc:
                         issues.append(
@@ -1803,7 +1975,7 @@ class SystemConfigService:
                                 "message": f"Rule validation failed: {exc}",
                                 "severity": "error",
                                 "expected": "supported EventMonitor rule fields and enum values",
-                                "actual": f"rule #{rule_index or 1}",
+                                "actual": f"rule #{locals().get('rule_index', 0) or 1}",
                             }
                         )
 
@@ -1851,7 +2023,9 @@ class SystemConfigService:
         if "allowed_values" in validation and value:
             delimiter = validation.get("delimiter")
             raw_values = value.split(delimiter) if delimiter else [value]
-            allowed_values = {str(item).strip().lower() for item in validation["allowed_values"]}
+            allowed_values = {
+                str(item).strip().lower() for item in validation["allowed_values"]
+            }
             invalid_values = []
             seen_invalid = set()
             for raw_item in raw_values:
@@ -1868,18 +2042,30 @@ class SystemConfigService:
                         "code": "invalid_allowed_value",
                         "message": "Value contains unsupported item(s)",
                         "severity": "error",
-                        "expected": ",".join(str(item) for item in validation["allowed_values"]),
+                        "expected": ",".join(
+                            str(item) for item in validation["allowed_values"]
+                        ),
                         "actual": ", ".join(invalid_values),
                     }
                 )
 
         if validation.get("item_type") == "url":
             delimiter = validation.get("delimiter", ",")
-            values = [item.strip() for item in value.split(delimiter)] if validation.get("multi_value") else [value.strip()]
-            allowed_schemes = tuple(validation.get("allowed_schemes", ["http", "https"]))
+            values = (
+                [item.strip() for item in value.split(delimiter)]
+                if validation.get("multi_value")
+                else [value.strip()]
+            )
+            allowed_schemes = tuple(
+                validation.get("allowed_schemes", ["http", "https"])
+            )
             invalid_values = [
-                item for item in values
-                if item and not SystemConfigService._is_valid_url(item, allowed_schemes=allowed_schemes)
+                item
+                for item in values
+                if item
+                and not SystemConfigService._is_valid_url(
+                    item, allowed_schemes=allowed_schemes
+                )
             ]
             if invalid_values:
                 issues.append(
@@ -1894,8 +2080,12 @@ class SystemConfigService:
                 )
 
         if key == "NTFY_URL" and value.strip():
-            allowed_schemes = tuple(validation.get("allowed_schemes", ["http", "https"]))
-            if SystemConfigService._is_valid_url(value.strip(), allowed_schemes=allowed_schemes):
+            allowed_schemes = tuple(
+                validation.get("allowed_schemes", ["http", "https"])
+            )
+            if SystemConfigService._is_valid_url(
+                value.strip(), allowed_schemes=allowed_schemes
+            ):
                 ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(value)
                 if not ntfy_server_url or not ntfy_topic:
                     issues.append(
@@ -1910,8 +2100,12 @@ class SystemConfigService:
                     )
 
         if key == "GOTIFY_URL" and value.strip():
-            allowed_schemes = tuple(validation.get("allowed_schemes", ["http", "https"]))
-            if SystemConfigService._is_valid_url(value.strip(), allowed_schemes=allowed_schemes):
+            allowed_schemes = tuple(
+                validation.get("allowed_schemes", ["http", "https"])
+            )
+            if SystemConfigService._is_valid_url(
+                value.strip(), allowed_schemes=allowed_schemes
+            ):
                 gotify_endpoint = resolve_gotify_message_endpoint(value)
                 if not gotify_endpoint:
                     issues.append(
@@ -1944,7 +2138,9 @@ class SystemConfigService:
         return json.dumps(parsed, ensure_ascii=False, separators=(",", ":"))
 
     @staticmethod
-    def _validate_numeric_range(key: str, numeric_value: float, validation: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _validate_numeric_range(
+        key: str, numeric_value: float, validation: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         issues: List[Dict[str, Any]] = []
         min_value = validation.get("min")
         max_value = validation.get("max")
@@ -2016,11 +2212,16 @@ class SystemConfigService:
         return ascii_host or None
 
     @staticmethod
-    def _is_valid_llm_base_url(value: str, allowed_schemes: Tuple[str, ...] = ("http", "https")) -> bool:
+    def _is_valid_llm_base_url(
+        value: str, allowed_schemes: Tuple[str, ...] = ("http", "https")
+    ) -> bool:
         """Return True when an LLM base URL is safe to parse consistently."""
         if not value:
             return False
-        if any(char == "\\" or char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value):
+        if any(
+            char == "\\" or char.isspace() or ord(char) < 32 or ord(char) == 127
+            for char in value
+        ):
             return False
 
         try:
@@ -2032,7 +2233,11 @@ class SystemConfigService:
 
         if parsed.scheme not in allowed_schemes or not parsed.netloc or not host:
             return False
-        if "@" in parsed.netloc or parsed.username is not None or parsed.password is not None:
+        if (
+            "@" in parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             return False
         if SystemConfigService._is_noncanonical_ipv4_numeric_host(host):
             return False
@@ -2053,7 +2258,9 @@ class SystemConfigService:
         allowed_keys = set(self._NOTIFICATION_TEST_KEY_MAP)
         effective = {
             key: value
-            for key, value in self._build_display_config_map(self._manager.read_config_map()).items()
+            for key, value in self._build_display_config_map(
+                self._manager.read_config_map()
+            ).items()
             if key in allowed_keys
         }
 
@@ -2085,7 +2292,9 @@ class SystemConfigService:
 
         missing_by_group: List[List[str]] = []
         for group in groups:
-            missing = [key for key in group if not (effective_map.get(key) or "").strip()]
+            missing = [
+                key for key in group if not (effective_map.get(key) or "").strip()
+            ]
             if not missing:
                 return []
             missing_by_group.append(missing)
@@ -2127,13 +2336,20 @@ class SystemConfigService:
         for key, (attr, value_type) in self._NOTIFICATION_TEST_KEY_MAP.items():
             if key not in effective_map:
                 continue
-            if key == "DISCORD_CHANNEL_ID" and (effective_map.get("DISCORD_MAIN_CHANNEL_ID") or "").strip():
+            if (
+                key == "DISCORD_CHANNEL_ID"
+                and (effective_map.get("DISCORD_MAIN_CHANNEL_ID") or "").strip()
+            ):
                 continue
             raw_value = effective_map.get(key, "")
-            kwargs[attr] = self._parse_notification_test_value(key, raw_value, value_type)
+            kwargs[attr] = self._parse_notification_test_value(
+                key, raw_value, value_type
+            )
         return Config(**kwargs)
 
-    def _parse_notification_test_value(self, key: str, value: str, value_type: str) -> Any:
+    def _parse_notification_test_value(
+        self, key: str, value: str, value_type: str
+    ) -> Any:
         if value_type == "csv":
             return self._split_csv(value)
         if value_type == "bool":
@@ -2184,15 +2400,23 @@ class SystemConfigService:
                 timeout_seconds=timeout_seconds,
             )
             latency_ms = int((time.perf_counter() - started_at) * 1000)
-            success_count = sum(1 for attempt in attempts if bool(attempt.get("success")))
+            success_count = sum(
+                1 for attempt in attempts if bool(attempt.get("success"))
+            )
             total_count = len(attempts)
             success = success_count > 0
             if success_count == total_count and total_count > 0:
-                message = f"自定义 Webhook 通知测试成功（{success_count}/{total_count}）"
+                message = (
+                    f"自定义 Webhook 通知测试成功（{success_count}/{total_count}）"
+                )
             elif success_count > 0:
-                message = f"自定义 Webhook 通知测试部分成功（{success_count}/{total_count}）"
+                message = (
+                    f"自定义 Webhook 通知测试部分成功（{success_count}/{total_count}）"
+                )
             else:
-                message = f"自定义 Webhook 通知测试失败（{success_count}/{total_count}）"
+                message = (
+                    f"自定义 Webhook 通知测试失败（{success_count}/{total_count}）"
+                )
             return self._build_notification_test_result(
                 success=success,
                 message=message,
@@ -2204,18 +2428,42 @@ class SystemConfigService:
             )
 
         dispatch = {
-            "wechat": lambda: WechatSender(config).send_to_wechat(titled_content, timeout_seconds=timeout_seconds),
-            "feishu": lambda: FeishuSender(config).send_to_feishu(titled_content, timeout_seconds=timeout_seconds),
-            "telegram": lambda: TelegramSender(config).send_to_telegram(titled_content, timeout_seconds=timeout_seconds),
-            "email": lambda: EmailSender(config).send_to_email(content, subject=title, timeout_seconds=timeout_seconds),
-            "pushover": lambda: PushoverSender(config).send_to_pushover(content, title=title, timeout_seconds=timeout_seconds),
-            "ntfy": lambda: NtfySender(config).send_to_ntfy(content, title=title, timeout_seconds=timeout_seconds),
-            "gotify": lambda: GotifySender(config).send_to_gotify(content, title=title, timeout_seconds=timeout_seconds),
-            "pushplus": lambda: PushplusSender(config).send_to_pushplus(content, title=title, timeout_seconds=timeout_seconds),
-            "serverchan3": lambda: Serverchan3Sender(config).send_to_serverchan3(content, title=title, timeout_seconds=timeout_seconds),
-            "discord": lambda: DiscordSender(config).send_to_discord(titled_content, timeout_seconds=timeout_seconds),
-            "slack": lambda: SlackSender(config).send_to_slack(titled_content, timeout_seconds=timeout_seconds),
-            "astrbot": lambda: AstrbotSender(config).send_to_astrbot(titled_content, timeout_seconds=timeout_seconds),
+            "wechat": lambda: WechatSender(config).send_to_wechat(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
+            "feishu": lambda: FeishuSender(config).send_to_feishu(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
+            "telegram": lambda: TelegramSender(config).send_to_telegram(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
+            "email": lambda: EmailSender(config).send_to_email(
+                content, subject=title, timeout_seconds=timeout_seconds
+            ),
+            "pushover": lambda: PushoverSender(config).send_to_pushover(
+                content, title=title, timeout_seconds=timeout_seconds
+            ),
+            "ntfy": lambda: NtfySender(config).send_to_ntfy(
+                content, title=title, timeout_seconds=timeout_seconds
+            ),
+            "gotify": lambda: GotifySender(config).send_to_gotify(
+                content, title=title, timeout_seconds=timeout_seconds
+            ),
+            "pushplus": lambda: PushplusSender(config).send_to_pushplus(
+                content, title=title, timeout_seconds=timeout_seconds
+            ),
+            "serverchan3": lambda: Serverchan3Sender(config).send_to_serverchan3(
+                content, title=title, timeout_seconds=timeout_seconds
+            ),
+            "discord": lambda: DiscordSender(config).send_to_discord(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
+            "slack": lambda: SlackSender(config).send_to_slack(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
+            "astrbot": lambda: AstrbotSender(config).send_to_astrbot(
+                titled_content, timeout_seconds=timeout_seconds
+            ),
         }
 
         ok = bool(dispatch[channel]())
@@ -2246,13 +2494,17 @@ class SystemConfigService:
         content = content.strip()
         return f"{title}\n\n{content}" if title else content
 
-    def _resolve_notification_test_target(self, channel: str, effective_map: Dict[str, str]) -> str:
+    def _resolve_notification_test_target(
+        self, channel: str, effective_map: Dict[str, str]
+    ) -> str:
         for key in self._NOTIFICATION_TEST_TARGET_KEYS.get(channel, ()):
             raw_value = (effective_map.get(key) or "").strip()
             if not raw_value:
                 continue
             if key == "CUSTOM_WEBHOOK_URLS":
-                first_url = self._split_csv(raw_value)[0] if self._split_csv(raw_value) else ""
+                first_url = (
+                    self._split_csv(raw_value)[0] if self._split_csv(raw_value) else ""
+                )
                 return self._mask_notification_target(first_url, source_key=key)
             return self._mask_notification_target(raw_value, source_key=key)
         return channel
@@ -2269,7 +2521,9 @@ class SystemConfigService:
         latency_ms: Optional[int],
         attempts: Sequence[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        sanitized_attempts = [cls._sanitize_notification_attempt(attempt) for attempt in attempts]
+        sanitized_attempts = [
+            cls._sanitize_notification_attempt(attempt) for attempt in attempts
+        ]
         return {
             "success": success,
             "message": cls._sanitize_notification_text(message),
@@ -2286,7 +2540,9 @@ class SystemConfigService:
         if "message" in sanitized:
             sanitized["message"] = cls._sanitize_notification_text(sanitized["message"])
         if "target" in sanitized:
-            sanitized["target"] = cls._mask_notification_target(str(sanitized.get("target") or ""))
+            sanitized["target"] = cls._mask_notification_target(
+                str(sanitized.get("target") or "")
+            )
         return sanitized
 
     @classmethod
@@ -2295,7 +2551,11 @@ class SystemConfigService:
         if not sanitized:
             return ""
         sanitized = re.sub(r"(?i)(bearer\s+)[a-z0-9._\-:]+", r"\1[REDACTED]", sanitized)
-        sanitized = re.sub(r"(?i)(token|secret|password|sendkey)([=:]\s*)[^\s,;&]+", r"\1\2[REDACTED]", sanitized)
+        sanitized = re.sub(
+            r"(?i)(token|secret|password|sendkey)([=:]\s*)[^\s,;&]+",
+            r"\1\2[REDACTED]",
+            sanitized,
+        )
         sanitized = re.sub(
             r"https?://[^\s]+",
             lambda match: cls._mask_notification_target(match.group(0)),
@@ -2304,14 +2564,23 @@ class SystemConfigService:
         return sanitized[:300]
 
     @staticmethod
-    def _mask_notification_target(target: str, *, source_key: Optional[str] = None) -> str:
+    def _mask_notification_target(
+        target: str, *, source_key: Optional[str] = None
+    ) -> str:
         value = (target or "").strip()
         if not value:
             return ""
         source_key_upper = (source_key or "").upper()
         sensitive_source = any(
             marker in source_key_upper
-            for marker in ("TOKEN", "PASSWORD", "SECRET", "SENDKEY", "USER_KEY", "API_KEY")
+            for marker in (
+                "TOKEN",
+                "PASSWORD",
+                "SECRET",
+                "SENDKEY",
+                "USER_KEY",
+                "API_KEY",
+            )
         )
         parsed = urlparse(value)
         if not parsed.scheme or not parsed.netloc:
@@ -2325,7 +2594,11 @@ class SystemConfigService:
         safe_segments: List[str] = []
         path_segments = parsed.path.split("/")
         last_non_empty_index = next(
-            (index for index in range(len(path_segments) - 1, -1, -1) if path_segments[index]),
+            (
+                index
+                for index in range(len(path_segments) - 1, -1, -1)
+                if path_segments[index]
+            ),
             -1,
         )
         for index, segment in enumerate(path_segments):
@@ -2335,13 +2608,13 @@ class SystemConfigService:
             lower = segment.lower()
             looks_secret = (
                 (source_key_upper == "NTFY_URL" and index == last_non_empty_index)
-                or
-                len(segment) >= 16
+                or len(segment) >= 16
                 or lower.startswith("bot")
                 or "token" in lower
                 or "sendkey" in lower
                 or "secret" in lower
-                or re.search(r"[a-zA-Z].*\d|\d.*[a-zA-Z]", segment) is not None and len(segment) >= 10
+                or re.search(r"[a-zA-Z].*\d|\d.*[a-zA-Z]", segment) is not None
+                and len(segment) >= 10
             )
             if looks_secret:
                 safe_segments.append("***")
@@ -2355,7 +2628,14 @@ class SystemConfigService:
                 for part in parsed.query.split("&")
                 if part
             )
-        return urlunparse(parsed._replace(netloc=safe_netloc, path="/".join(safe_segments), query=query, fragment=""))
+        return urlunparse(
+            parsed._replace(
+                netloc=safe_netloc,
+                path="/".join(safe_segments),
+                query=query,
+                fragment="",
+            )
+        )
 
     @staticmethod
     def _classify_notification_exception(exc: Exception) -> Tuple[str, bool]:
@@ -2425,7 +2705,11 @@ class SystemConfigService:
             "WECOM_",
             "ASTRBOT_",
         )
-        return key.startswith(prefixes) or key.endswith("_API_KEY") or key.endswith("_API_KEYS")
+        return (
+            key.startswith(prefixes)
+            or key.endswith("_API_KEY")
+            or key.endswith("_API_KEYS")
+        )
 
     def _build_setup_effective_config_map(self) -> Dict[str, str]:
         """Combine saved `.env` values with injected runtime env values for status checks."""
@@ -2442,12 +2726,16 @@ class SystemConfigService:
         return self._build_display_config_map(effective_map)
 
     @staticmethod
-    def _has_any_config_value(effective_map: Dict[str, str], keys: Sequence[str]) -> bool:
+    def _has_any_config_value(
+        effective_map: Dict[str, str], keys: Sequence[str]
+    ) -> bool:
         return any((effective_map.get(key) or "").strip() for key in keys)
 
     @staticmethod
     def _has_valid_ntfy_endpoint(effective_map: Dict[str, str]) -> bool:
-        ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(effective_map.get("NTFY_URL"))
+        ntfy_server_url, ntfy_topic = resolve_ntfy_endpoint(
+            effective_map.get("NTFY_URL")
+        )
         return bool(ntfy_server_url and ntfy_topic)
 
     @staticmethod
@@ -2471,23 +2759,32 @@ class SystemConfigService:
         return True
 
     @classmethod
-    def _provider_has_setup_credentials(cls, provider: str, effective_map: Dict[str, str]) -> bool:
+    def _provider_has_setup_credentials(
+        cls, provider: str, effective_map: Dict[str, str]
+    ) -> bool:
         normalized = canonicalize_llm_channel_protocol(provider)
         if normalized == "ollama":
             return True
         if normalized == "gemini" or normalized == "vertex_ai":
-            return cls._has_any_config_value(effective_map, ("GEMINI_API_KEYS", "GEMINI_API_KEY"))
+            return cls._has_any_config_value(
+                effective_map, ("GEMINI_API_KEYS", "GEMINI_API_KEY")
+            )
         if normalized == "anthropic":
-            return cls._has_any_config_value(effective_map, ("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY"))
+            return cls._has_any_config_value(
+                effective_map, ("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY")
+            )
         if normalized == "deepseek":
-            return cls._has_any_config_value(effective_map, ("DEEPSEEK_API_KEYS", "DEEPSEEK_API_KEY"))
+            return cls._has_any_config_value(
+                effective_map, ("DEEPSEEK_API_KEYS", "DEEPSEEK_API_KEY")
+            )
         if normalized == "openai":
-            if cls._has_any_config_value(effective_map, ("OPENAI_API_KEYS", "OPENAI_API_KEY", "AIHUBMIX_KEY")):
-                return True
-            if (
-                cls._anspire_legacy_llm_enabled(effective_map)
-                and cls._has_any_config_value(effective_map, ("ANSPIRE_API_KEYS",))
+            if cls._has_any_config_value(
+                effective_map, ("OPENAI_API_KEYS", "OPENAI_API_KEY", "AIHUBMIX_KEY")
             ):
+                return True
+            if cls._anspire_legacy_llm_enabled(
+                effective_map
+            ) and cls._has_any_config_value(effective_map, ("ANSPIRE_API_KEYS",)):
                 return True
             base_url = (effective_map.get("OPENAI_BASE_URL") or "").strip()
             return channel_allows_empty_api_key("openai", base_url)
@@ -2499,7 +2796,9 @@ class SystemConfigService:
         )
 
     @classmethod
-    def _has_setup_runtime_source_for_model(cls, model: str, effective_map: Dict[str, str]) -> bool:
+    def _has_setup_runtime_source_for_model(
+        cls, model: str, effective_map: Dict[str, str]
+    ) -> bool:
         normalized_model = (model or "").strip()
         if not normalized_model:
             return False
@@ -2531,10 +2830,9 @@ class SystemConfigService:
             protocol = (effective_map.get(f"{prefix}_PROTOCOL") or "").strip()
             if name.lower() == "anspire" and not protocol:
                 protocol = "openai"
-            api_key = (
-                (effective_map.get(f"{prefix}_API_KEYS") or "").strip()
-                or (effective_map.get(f"{prefix}_API_KEY") or "").strip()
-            )
+            api_key = (effective_map.get(f"{prefix}_API_KEYS") or "").strip() or (
+                effective_map.get(f"{prefix}_API_KEY") or ""
+            ).strip()
             if name.lower() == "anspire" and not api_key:
                 api_key = (effective_map.get("ANSPIRE_API_KEYS") or "").strip()
             raw_models = cls._split_csv(effective_map.get(f"{prefix}_MODELS") or "")
@@ -2553,11 +2851,15 @@ class SystemConfigService:
             )
             if not raw_models or not resolved_protocol:
                 continue
-            if not api_key and not channel_allows_empty_api_key(resolved_protocol, base_url):
+            if not api_key and not channel_allows_empty_api_key(
+                resolved_protocol, base_url
+            ):
                 continue
 
             for raw_model in raw_models:
-                normalized_model = normalize_llm_channel_model(raw_model, resolved_protocol, base_url)
+                normalized_model = normalize_llm_channel_model(
+                    raw_model, resolved_protocol, base_url
+                )
                 if normalized_model and normalized_model not in seen:
                     seen.add(normalized_model)
                     models.append(normalized_model)
@@ -2565,20 +2867,31 @@ class SystemConfigService:
 
     @classmethod
     def _infer_setup_legacy_primary_model(cls, effective_map: Dict[str, str]) -> str:
-        if cls._has_any_config_value(effective_map, ("GEMINI_API_KEYS", "GEMINI_API_KEY")):
-            model = (effective_map.get("GEMINI_MODEL") or "gemini-3.1-pro-preview").strip()
+        if cls._has_any_config_value(
+            effective_map, ("GEMINI_API_KEYS", "GEMINI_API_KEY")
+        ):
+            model = (
+                effective_map.get("GEMINI_MODEL") or "gemini-3.1-pro-preview"
+            ).strip()
             return model if "/" in model else f"gemini/{model}"
-        if cls._has_any_config_value(effective_map, ("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY")):
-            model = (effective_map.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6").strip()
+        if cls._has_any_config_value(
+            effective_map, ("ANTHROPIC_API_KEYS", "ANTHROPIC_API_KEY")
+        ):
+            model = (
+                effective_map.get("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
+            ).strip()
             return model if "/" in model else f"anthropic/{model}"
-        if cls._has_any_config_value(effective_map, ("DEEPSEEK_API_KEYS", "DEEPSEEK_API_KEY")):
+        if cls._has_any_config_value(
+            effective_map, ("DEEPSEEK_API_KEYS", "DEEPSEEK_API_KEY")
+        ):
             return "deepseek/deepseek-chat"
-        if cls._has_any_config_value(effective_map, ("OPENAI_API_KEYS", "OPENAI_API_KEY", "AIHUBMIX_KEY")):
+        if cls._has_any_config_value(
+            effective_map, ("OPENAI_API_KEYS", "OPENAI_API_KEY", "AIHUBMIX_KEY")
+        ):
             model = (effective_map.get("OPENAI_MODEL") or "gpt-5.5").strip()
             return model if "/" in model else f"openai/{model}"
-        if (
-            cls._anspire_legacy_llm_enabled(effective_map)
-            and cls._has_any_config_value(effective_map, ("ANSPIRE_API_KEYS",))
+        if cls._anspire_legacy_llm_enabled(effective_map) and cls._has_any_config_value(
+            effective_map, ("ANSPIRE_API_KEYS",)
         ):
             model = (
                 effective_map.get("ANSPIRE_LLM_MODEL")
@@ -2588,10 +2901,16 @@ class SystemConfigService:
             return model if "/" in model else f"openai/{model}"
         if (effective_map.get("OLLAMA_API_BASE") or "").strip():
             model = (effective_map.get("OLLAMA_MODEL") or "").strip()
-            return model if model.startswith("ollama/") else (f"ollama/{model}" if model else "ollama/local")
+            return (
+                model
+                if model.startswith("ollama/")
+                else (f"ollama/{model}" if model else "ollama/local")
+            )
         return ""
 
-    def _resolve_setup_primary_model(self, effective_map: Dict[str, str]) -> Tuple[str, str]:
+    def _resolve_setup_primary_model(
+        self, effective_map: Dict[str, str]
+    ) -> Tuple[str, str]:
         explicit_model = (effective_map.get("LITELLM_MODEL") or "").strip()
         yaml_models = self._collect_yaml_models_from_map(effective_map)
         channel_models = self._collect_setup_channel_models(effective_map)
@@ -2599,7 +2918,9 @@ class SystemConfigService:
         if explicit_model:
             if _uses_direct_env_provider(explicit_model):
                 return explicit_model, "explicit"
-            has_direct_source = self._has_setup_runtime_source_for_model(explicit_model, effective_map)
+            has_direct_source = self._has_setup_runtime_source_for_model(
+                explicit_model, effective_map
+            )
             if yaml_models and explicit_model not in set(yaml_models):
                 return "", "主模型未出现在当前 LiteLLM YAML model_list 中"
             if channel_models and explicit_model not in set(channel_models):
@@ -2619,7 +2940,9 @@ class SystemConfigService:
 
         return "", "尚未检测到主模型配置"
 
-    def _build_setup_primary_llm_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
+    def _build_setup_primary_llm_check(
+        self, effective_map: Dict[str, str]
+    ) -> Dict[str, Any]:
         model, source = self._resolve_setup_primary_model(effective_map)
         if model:
             source_label = {
@@ -2676,7 +2999,9 @@ class SystemConfigService:
             self._collect_yaml_models_from_map(effective_map)
             or self._collect_setup_channel_models(effective_map)
         )
-        agent_model = normalize_agent_litellm_model(agent_model_raw, configured_models=configured_models)
+        agent_model = normalize_agent_litellm_model(
+            agent_model_raw, configured_models=configured_models
+        )
         if _uses_direct_env_provider(agent_model):
             return self._setup_check(
                 "llm_agent",
@@ -2709,7 +3034,9 @@ class SystemConfigService:
             "请调整 AGENT_LITELLM_MODEL 或补齐对应渠道配置。",
         )
 
-    def _build_setup_stock_list_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
+    def _build_setup_stock_list_check(
+        self, effective_map: Dict[str, str]
+    ) -> Dict[str, Any]:
         stocks = self._split_csv(effective_map.get("STOCK_LIST") or "")
         if stocks:
             return self._setup_check(
@@ -2730,9 +3057,13 @@ class SystemConfigService:
             "请至少添加 1 只股票用于首次试跑。",
         )
 
-    def _build_setup_notification_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
+    def _build_setup_notification_check(
+        self, effective_map: Dict[str, str]
+    ) -> Dict[str, Any]:
         configured = (
-            self._has_any_config_value(effective_map, ("WECHAT_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"))
+            self._has_any_config_value(
+                effective_map, ("WECHAT_WEBHOOK_URL", "DISCORD_WEBHOOK_URL")
+            )
             or is_feishu_static_env_configured(effective_map)
             or (
                 self._has_any_config_value(effective_map, ("TELEGRAM_BOT_TOKEN",))
@@ -2748,7 +3079,9 @@ class SystemConfigService:
             )
             or (
                 self._has_any_config_value(effective_map, ("DISCORD_BOT_TOKEN",))
-                and self._has_any_config_value(effective_map, ("DISCORD_MAIN_CHANNEL_ID", "DISCORD_CHANNEL_ID"))
+                and self._has_any_config_value(
+                    effective_map, ("DISCORD_MAIN_CHANNEL_ID", "DISCORD_CHANNEL_ID")
+                )
             )
             or (
                 self._has_any_config_value(effective_map, ("PUSHOVER_USER_KEY",))
@@ -2791,8 +3124,12 @@ class SystemConfigService:
             "需要推送时可稍后配置飞书、Telegram、邮件或其他通知渠道。",
         )
 
-    def _build_setup_storage_check(self, effective_map: Dict[str, str]) -> Dict[str, Any]:
-        db_path = Path((effective_map.get("DATABASE_PATH") or "./data/stock_analysis.db").strip()).expanduser()
+    def _build_setup_storage_check(
+        self, effective_map: Dict[str, str]
+    ) -> Dict[str, Any]:
+        db_path = Path(
+            (effective_map.get("DATABASE_PATH") or "./data/stock_analysis.db").strip()
+        ).expanduser()
         parent = db_path.parent if db_path.parent != Path("") else Path(".")
         probe = parent
         while not probe.exists() and probe != probe.parent:
@@ -2853,11 +3190,13 @@ class SystemConfigService:
         if not host:
             return False
         # Known cloud metadata hostnames
-        _BLOCKED_HOSTS = frozenset({
-            "169.254.169.254",
-            "metadata.google.internal",
-            "100.100.100.200",
-        })
+        _BLOCKED_HOSTS = frozenset(
+            {
+                "169.254.169.254",
+                "metadata.google.internal",
+                "100.100.100.200",
+            }
+        )
         if host in _BLOCKED_HOSTS:
             return False
         if SystemConfigService._is_noncanonical_ipv4_numeric_host(host):
@@ -2870,7 +3209,10 @@ class SystemConfigService:
             if mapped_addr is not None:
                 candidate_addrs.append(mapped_addr)
             for candidate_addr in candidate_addrs:
-                if str(candidate_addr) in _BLOCKED_HOSTS or candidate_addr.is_link_local:
+                if (
+                    str(candidate_addr) in _BLOCKED_HOSTS
+                    or candidate_addr.is_link_local
+                ):
                     return False
         except ValueError:
             pass  # hostname, not an IP — already checked against blocklist above
@@ -2894,7 +3236,9 @@ class SystemConfigService:
             models_path = normalized or "/models"
         else:
             models_path = f"{normalized}/models" if normalized else "/models"
-        models_url = urlunparse(parsed._replace(path=models_path, params="", query="", fragment=""))
+        models_url = urlunparse(
+            parsed._replace(path=models_path, params="", query="", fragment="")
+        )
         if not SystemConfigService._is_valid_llm_base_url(models_url):
             raise ValueError("LLM channel models URL must be a valid absolute URL")
         if not SystemConfigService._is_safe_base_url(models_url):
@@ -2943,7 +3287,9 @@ class SystemConfigService:
         if models is not None:
             payload["models"] = models
         if capability_results is not None:
-            payload["capability_results"] = cls._sanitize_llm_details(capability_results)
+            payload["capability_results"] = cls._sanitize_llm_details(
+                capability_results
+            )
         return payload
 
     @staticmethod
@@ -2989,7 +3335,9 @@ class SystemConfigService:
                 sanitized[key] = cls._sanitize_llm_details(value)
             elif isinstance(value, list):
                 sanitized[key] = [
-                    cls._sanitize_llm_error_text(item) if isinstance(item, str) else item
+                    cls._sanitize_llm_error_text(item)
+                    if isinstance(item, str)
+                    else item
                     for item in value
                 ]
             else:
@@ -3006,28 +3354,38 @@ class SystemConfigService:
                 "Configured model is not available for this channel",
                 "model_access_denied",
             )
-        if "model" in lowered and any(token in lowered for token in ("not found", "does not exist", "unknown")):
+        if "model" in lowered and any(
+            token in lowered for token in ("not found", "does not exist", "unknown")
+        ):
             return _LLMDiagnostic(
                 "model_not_found",
                 False,
                 "Configured model could not be found on this channel",
                 "model_not_found",
             )
-        if status_code == 402 or any(token in lowered for token in ("billing", "balance", "insufficient balance")):
+        if status_code == 402 or any(
+            token in lowered for token in ("billing", "balance", "insufficient balance")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
                 "LLM request was rejected by quota or billing limits",
                 "insufficient_balance",
             )
-        if any(token in lowered for token in ("quota", "insufficient_quota", "quota exceeded")):
+        if any(
+            token in lowered
+            for token in ("quota", "insufficient_quota", "quota exceeded")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
                 "LLM request was rejected by quota or rate limiting",
                 "quota_exceeded",
             )
-        if status_code == 429 or any(token in lowered for token in ("rate limit", "too many requests", "rpm", "tpm")):
+        if status_code == 429 or any(
+            token in lowered
+            for token in ("rate limit", "too many requests", "rpm", "tpm")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
@@ -3048,8 +3406,18 @@ class SystemConfigService:
                 "LLM request was blocked by provider or gateway policy",
                 "provider_blocked",
             )
-        if status_code in {401, 403} or any(token in lowered for token in ("unauthorized", "forbidden", "invalid api key", "authentication")):
-            return _LLMDiagnostic("auth", False, "LLM authentication failed", "api_key_rejected")
+        if status_code in {401, 403} or any(
+            token in lowered
+            for token in (
+                "unauthorized",
+                "forbidden",
+                "invalid api key",
+                "authentication",
+            )
+        ):
+            return _LLMDiagnostic(
+                "auth", False, "LLM authentication failed", "api_key_rejected"
+            )
         if status_code == 404:
             return _LLMDiagnostic(
                 "network_error",
@@ -3071,11 +3439,23 @@ class SystemConfigService:
         lowered = text.lower()
 
         model_candidates = [
-            re.search(r"model\s+not\s+found\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
-            re.search(r"model\s*[`\"']?\s*([a-z0-9._/-]{2,})\s*[`\"']?\s+does\s+not\s+exist", lowered),
-            re.search(r"model\s+does\s+not\s+exist\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
-            re.search(r"unknown\s+model\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
-            re.search(r"no\s+such\s+model\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered),
+            re.search(
+                r"model\s+not\s+found\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered
+            ),
+            re.search(
+                r"model\s*[`\"']?\s*([a-z0-9._/-]{2,})\s*[`\"']?\s+does\s+not\s+exist",
+                lowered,
+            ),
+            re.search(
+                r"model\s+does\s+not\s+exist\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})",
+                lowered,
+            ),
+            re.search(
+                r"unknown\s+model\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered
+            ),
+            re.search(
+                r"no\s+such\s+model\s*[:：]?\s*[`\"']?\s*([a-z0-9._/-]{2,})", lowered
+            ),
         ]
 
         for match in model_candidates:
@@ -3158,23 +3538,33 @@ class SystemConfigService:
     def _classify_llm_exception(exc: Exception) -> _LLMDiagnostic:
         exc_name = type(exc).__name__.lower()
         text = str(exc).lower()
-        if isinstance(exc, TimeoutError) or "timeout" in exc_name or "timed out" in text:
+        if (
+            isinstance(exc, TimeoutError)
+            or "timeout" in exc_name
+            or "timed out" in text
+        ):
             return _LLMDiagnostic("timeout", True, "LLM request timed out", "timeout")
-        if any(token in text for token in ("billing", "balance", "insufficient balance")):
+        if any(
+            token in text for token in ("billing", "balance", "insufficient balance")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
                 "LLM request was rejected by quota or billing limits",
                 "insufficient_balance",
             )
-        if any(token in text for token in ("quota", "insufficient_quota", "quota exceeded")):
+        if any(
+            token in text for token in ("quota", "insufficient_quota", "quota exceeded")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
                 "LLM request was rejected by quota or rate limiting",
                 "quota_exceeded",
             )
-        if "ratelimit" in exc_name or any(token in text for token in ("rate limit", "too many requests", "rpm", "tpm")):
+        if "ratelimit" in exc_name or any(
+            token in text for token in ("rate limit", "too many requests", "rpm", "tpm")
+        ):
             return _LLMDiagnostic(
                 "quota",
                 True,
@@ -3202,37 +3592,91 @@ class SystemConfigService:
                 "LLM request was blocked by provider or gateway policy",
                 "provider_blocked",
             )
-        if any(token in exc_name for token in ("auth", "permission")) or any(token in text for token in ("unauthorized", "forbidden", "invalid api key", "authentication")):
-            return _LLMDiagnostic("auth", False, "LLM authentication failed", "api_key_rejected")
-        if ("notfound" in exc_name or "model" in text) and (
-            "not found" in text or "does not exist" in text or "unknown model" in text
-        ) and SystemConfigService._has_model_not_found_signal(text):
+        if any(token in exc_name for token in ("auth", "permission")) or any(
+            token in text
+            for token in (
+                "unauthorized",
+                "forbidden",
+                "invalid api key",
+                "authentication",
+            )
+        ):
+            return _LLMDiagnostic(
+                "auth", False, "LLM authentication failed", "api_key_rejected"
+            )
+        if (
+            ("notfound" in exc_name or "model" in text)
+            and (
+                "not found" in text
+                or "does not exist" in text
+                or "unknown model" in text
+            )
+            and SystemConfigService._has_model_not_found_signal(text)
+        ):
             return _LLMDiagnostic(
                 "model_not_found",
                 False,
                 "Configured model could not be found on this channel",
                 "model_not_found",
             )
-        if "dns" in text or "name resolution" in text or "temporary failure in name resolution" in text:
-            return _LLMDiagnostic("network_error", True, "LLM request failed before a valid response was returned", "dns_error")
+        if (
+            "dns" in text
+            or "name resolution" in text
+            or "temporary failure in name resolution" in text
+        ):
+            return _LLMDiagnostic(
+                "network_error",
+                True,
+                "LLM request failed before a valid response was returned",
+                "dns_error",
+            )
         if "refused" in text or "connection refused" in text:
-            return _LLMDiagnostic("network_error", True, "LLM request failed before a valid response was returned", "connection_refused")
+            return _LLMDiagnostic(
+                "network_error",
+                True,
+                "LLM request failed before a valid response was returned",
+                "connection_refused",
+            )
         if "ssl" in text or "tls" in text or "certificate" in text:
-            return _LLMDiagnostic("network_error", True, "LLM request failed before a valid response was returned", "tls_error")
+            return _LLMDiagnostic(
+                "network_error",
+                True,
+                "LLM request failed before a valid response was returned",
+                "tls_error",
+            )
         if any(token in exc_name for token in ("connection", "network")) or any(
             token in text for token in ("connection", "network", "firewall")
         ):
-            return _LLMDiagnostic("network_error", True, "LLM request failed before a valid response was returned", "network_error")
-        return _LLMDiagnostic("network_error", False, "LLM channel test failed", "unknown_error")
+            return _LLMDiagnostic(
+                "network_error",
+                True,
+                "LLM request failed before a valid response was returned",
+                "network_error",
+            )
+        return _LLMDiagnostic(
+            "network_error", False, "LLM channel test failed", "unknown_error"
+        )
 
     @staticmethod
-    def _extract_llm_completion_content(response: Any) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
+    def _extract_llm_completion_content(
+        response: Any,
+    ) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
         if response is None:
-            return "", "empty_response", "Completion returned no response object", "null_response"
+            return (
+                "",
+                "empty_response",
+                "Completion returned no response object",
+                "null_response",
+            )
 
         choices = getattr(response, "choices", None)
         if not choices:
-            return "", "format_error", "Completion response did not include choices", "malformed_choices"
+            return (
+                "",
+                "format_error",
+                "Completion response did not include choices",
+                "malformed_choices",
+            )
 
         choice = choices[0]
         content_blocks = getattr(choice, "content_blocks", None)
@@ -3255,15 +3699,35 @@ class SystemConfigService:
                 return content, None, None, None
 
         if message is None:
-            return "", "format_error", "Completion response did not include a message object", "malformed_choices"
+            return (
+                "",
+                "format_error",
+                "Completion response did not include a message object",
+                "malformed_choices",
+            )
         if not hasattr(message, "content"):
-            return "", "format_error", "Completion message did not include a content field", "malformed_choices"
+            return (
+                "",
+                "format_error",
+                "Completion message did not include a content field",
+                "malformed_choices",
+            )
         raw_content = message.content
         if raw_content is None:
-            return "", "empty_response", "Completion returned null message content", "null_content"
+            return (
+                "",
+                "empty_response",
+                "Completion returned null message content",
+                "null_content",
+            )
         content = str(raw_content).strip()
         if not content:
-            return "", "empty_response", "Completion returned an empty message content", "empty_content"
+            return (
+                "",
+                "empty_response",
+                "Completion returned an empty message content",
+                "empty_content",
+            )
         return content, None, None, None
 
     @staticmethod
@@ -3278,9 +3742,7 @@ class SystemConfigService:
             error_payload = payload.get("error")
             if isinstance(error_payload, dict):
                 message = str(
-                    error_payload.get("message")
-                    or error_payload.get("code")
-                    or ""
+                    error_payload.get("message") or error_payload.get("code") or ""
                 ).strip()
                 if message:
                     return message
@@ -3327,14 +3789,21 @@ class SystemConfigService:
         return models
 
     @staticmethod
-    def _validate_cross_field(effective_map: Dict[str, str], updated_keys: Set[str]) -> List[Dict[str, Any]]:
+    def _validate_cross_field(
+        effective_map: Dict[str, str], updated_keys: Set[str]
+    ) -> List[Dict[str, Any]]:
         """Validate dependencies across multiple keys."""
         issues: List[Dict[str, Any]] = []
 
         token_value = (effective_map.get("TELEGRAM_BOT_TOKEN") or "").strip()
         chat_id_value = (effective_map.get("TELEGRAM_CHAT_ID") or "").strip()
-        if token_value and not chat_id_value and (
-            "TELEGRAM_BOT_TOKEN" in updated_keys or "TELEGRAM_CHAT_ID" in updated_keys
+        if (
+            token_value
+            and not chat_id_value
+            and (
+                "TELEGRAM_BOT_TOKEN" in updated_keys
+                or "TELEGRAM_CHAT_ID" in updated_keys
+            )
         ):
             issues.append(
                 {
@@ -3358,23 +3827,27 @@ class SystemConfigService:
             "FEISHU_CHAT_ID",
         }
         has_feishu_app_id = bool((effective_map.get("FEISHU_APP_ID") or "").strip())
-        has_feishu_app_secret = bool((effective_map.get("FEISHU_APP_SECRET") or "").strip())
-        has_feishu_app_credentials_complete = has_feishu_app_id and has_feishu_app_secret
+        has_feishu_app_secret = bool(
+            (effective_map.get("FEISHU_APP_SECRET") or "").strip()
+        )
+        has_feishu_app_credentials_complete = (
+            has_feishu_app_id and has_feishu_app_secret
+        )
         has_feishu_app_credentials = has_feishu_app_id or has_feishu_app_secret
-        has_feishu_folder_token = bool((effective_map.get("FEISHU_FOLDER_TOKEN") or "").strip())
+        has_feishu_folder_token = bool(
+            (effective_map.get("FEISHU_FOLDER_TOKEN") or "").strip()
+        )
         has_feishu_full_cloud_doc_credentials = (
-            has_feishu_app_credentials_complete
-            and has_feishu_folder_token
+            has_feishu_app_credentials_complete and has_feishu_folder_token
         )
         # Match runtime semantics: Config.from_env only enables stream mode
         # when the value is exactly "true" (case-insensitive).
         feishu_stream_enabled = (
-            (effective_map.get("FEISHU_STREAM_ENABLED") or "false")
-            .strip()
-            .lower()
-            == "true"
+            effective_map.get("FEISHU_STREAM_ENABLED") or "false"
+        ).strip().lower() == "true"
+        has_feishu_stream_route = (
+            feishu_stream_enabled and has_feishu_app_credentials_complete
         )
-        has_feishu_stream_route = feishu_stream_enabled and has_feishu_app_credentials_complete
         has_feishu_app_bot_route = is_feishu_app_bot_env_configured(effective_map)
         if (
             has_feishu_app_credentials
@@ -3410,9 +3883,15 @@ class SystemConfigService:
                 updated_keys=updated_keys,
             )
         )
-        issues.extend(SystemConfigService._validate_llm_runtime_selection(effective_map=effective_map))
+        issues.extend(
+            SystemConfigService._validate_llm_runtime_selection(
+                effective_map=effective_map
+            )
+        )
 
-        if parse_env_bool(effective_map.get("NOTIFICATION_DAILY_DIGEST_ENABLED"), default=False):
+        if parse_env_bool(
+            effective_map.get("NOTIFICATION_DAILY_DIGEST_ENABLED"), default=False
+        ):
             issues.append(
                 {
                     "key": "NOTIFICATION_DAILY_DIGEST_ENABLED",
@@ -3423,14 +3902,18 @@ class SystemConfigService:
                     ),
                     "severity": "warning",
                     "expected": "reserved flag only",
-                    "actual": effective_map.get("NOTIFICATION_DAILY_DIGEST_ENABLED", ""),
+                    "actual": effective_map.get(
+                        "NOTIFICATION_DAILY_DIGEST_ENABLED", ""
+                    ),
                 }
             )
 
         return issues
 
     @staticmethod
-    def _validate_llm_channel_map(effective_map: Dict[str, str], updated_keys: Set[str]) -> List[Dict[str, Any]]:
+    def _validate_llm_channel_map(
+        effective_map: Dict[str, str], updated_keys: Set[str]
+    ) -> List[Dict[str, Any]]:
         """Validate channel-style LLM configuration stored in `.env`."""
         issues: List[Dict[str, Any]] = []
         if SystemConfigService._uses_litellm_yaml(effective_map):
@@ -3487,10 +3970,9 @@ class SystemConfigService:
                     effective_map.get("ANSPIRE_LLM_BASE_URL")
                     or ANSPIRE_LLM_BASE_URL_DEFAULT
                 ).strip()
-            api_key_value = (
-                (effective_map.get(f"{prefix}_API_KEYS") or "").strip()
-                or (effective_map.get(f"{prefix}_API_KEY") or "").strip()
-            )
+            api_key_value = (effective_map.get(f"{prefix}_API_KEYS") or "").strip() or (
+                effective_map.get(f"{prefix}_API_KEY") or ""
+            ).strip()
             if name.lower() == "anspire" and not api_key_value:
                 api_key_value = (effective_map.get("ANSPIRE_API_KEYS") or "").strip()
             models_value = [
@@ -3525,7 +4007,9 @@ class SystemConfigService:
         return issues
 
     @staticmethod
-    def _collect_llm_channel_models_from_map(effective_map: Dict[str, str]) -> List[str]:
+    def _collect_llm_channel_models_from_map(
+        effective_map: Dict[str, str],
+    ) -> List[str]:
         """Collect normalized model names from channel-style env values."""
         raw_channels = (effective_map.get("LLM_CHANNELS") or "").strip()
         if not raw_channels:
@@ -3567,9 +4051,16 @@ class SystemConfigService:
                         or ANSPIRE_LLM_MODEL_DEFAULT
                     ).strip()
                 ]
-            resolved_protocol = resolve_llm_channel_protocol(protocol_value, base_url=base_url_value, models=raw_models, channel_name=name)
+            resolved_protocol = resolve_llm_channel_protocol(
+                protocol_value,
+                base_url=base_url_value,
+                models=raw_models,
+                channel_name=name,
+            )
             for model in raw_models:
-                normalized_model = normalize_llm_channel_model(model, resolved_protocol, base_url_value)
+                normalized_model = normalize_llm_channel_model(
+                    model, resolved_protocol, base_url_value
+                )
                 if not normalized_model or normalized_model in seen:
                     continue
                 seen.add(normalized_model)
@@ -3594,7 +4085,9 @@ class SystemConfigService:
         return get_configured_llm_models(Config._parse_litellm_yaml(config_path))
 
     @staticmethod
-    def _has_legacy_key_for_provider(provider: str, effective_map: Dict[str, str]) -> bool:
+    def _has_legacy_key_for_provider(
+        provider: str, effective_map: Dict[str, str]
+    ) -> bool:
         """Return True when legacy env config can still back the provider."""
         normalized_provider = canonicalize_llm_channel_protocol(provider)
         if normalized_provider in {"gemini", "vertex_ai"}:
@@ -3625,7 +4118,9 @@ class SystemConfigService:
         return False
 
     @staticmethod
-    def _has_runtime_source_for_model(model: str, effective_map: Dict[str, str]) -> bool:
+    def _has_runtime_source_for_model(
+        model: str, effective_map: Dict[str, str]
+    ) -> bool:
         """Whether the selected model still has a backing runtime source."""
         if not model or _uses_direct_env_provider(model):
             return True
@@ -3633,27 +4128,32 @@ class SystemConfigService:
         return SystemConfigService._has_legacy_key_for_provider(provider, effective_map)
 
     @staticmethod
-    def _validate_llm_runtime_selection(effective_map: Dict[str, str]) -> List[Dict[str, Any]]:
+    def _validate_llm_runtime_selection(
+        effective_map: Dict[str, str],
+    ) -> List[Dict[str, Any]]:
         """Validate selected primary/fallback/vision models against configured channels."""
         issues: List[Dict[str, Any]] = []
 
-        available_models = (
-            SystemConfigService._collect_yaml_models_from_map(effective_map)
-            or SystemConfigService._collect_llm_channel_models_from_map(effective_map)
-        )
+        available_models = SystemConfigService._collect_yaml_models_from_map(
+            effective_map
+        ) or SystemConfigService._collect_llm_channel_models_from_map(effective_map)
         available_model_set = set(available_models)
         if not available_model_set:
             raw_channels = (effective_map.get("LLM_CHANNELS") or "").strip()
             if not raw_channels:
                 return issues
 
-            configured_agent_model_raw = (effective_map.get("AGENT_LITELLM_MODEL") or "").strip()
+            configured_agent_model_raw = (
+                effective_map.get("AGENT_LITELLM_MODEL") or ""
+            ).strip()
             configured_agent_model = normalize_agent_litellm_model(
                 configured_agent_model_raw,
                 configured_models=available_model_set,
             )
             primary_model = (effective_map.get("LITELLM_MODEL") or "").strip()
-            if primary_model and not SystemConfigService._has_runtime_source_for_model(primary_model, effective_map):
+            if primary_model and not SystemConfigService._has_runtime_source_for_model(
+                primary_model, effective_map
+            ):
                 issues.append(
                     {
                         "key": "LITELLM_MODEL",
@@ -3694,12 +4194,17 @@ class SystemConfigService:
 
             fallback_models = [
                 model.strip()
-                for model in (effective_map.get("LITELLM_FALLBACK_MODELS") or "").split(",")
+                for model in (effective_map.get("LITELLM_FALLBACK_MODELS") or "").split(
+                    ","
+                )
                 if model.strip()
             ]
             invalid_fallbacks = [
-                model for model in fallback_models
-                if not SystemConfigService._has_runtime_source_for_model(model, effective_map)
+                model
+                for model in fallback_models
+                if not SystemConfigService._has_runtime_source_for_model(
+                    model, effective_map
+                )
             ]
             if invalid_fallbacks:
                 issues.append(
@@ -3717,7 +4222,9 @@ class SystemConfigService:
                 )
 
             vision_model = (effective_map.get("VISION_MODEL") or "").strip()
-            if vision_model and not SystemConfigService._has_runtime_source_for_model(vision_model, effective_map):
+            if vision_model and not SystemConfigService._has_runtime_source_for_model(
+                vision_model, effective_map
+            ):
                 issues.append(
                     {
                         "key": "VISION_MODEL",
@@ -3735,7 +4242,11 @@ class SystemConfigService:
             return issues
 
         primary_model = (effective_map.get("LITELLM_MODEL") or "").strip()
-        if primary_model and primary_model not in available_model_set and not _uses_direct_env_provider(primary_model):
+        if (
+            primary_model
+            and primary_model not in available_model_set
+            and not _uses_direct_env_provider(primary_model)
+        ):
             issues.append(
                 {
                     "key": "LITELLM_MODEL",
@@ -3751,7 +4262,9 @@ class SystemConfigService:
                 }
             )
 
-        configured_agent_model_raw = (effective_map.get("AGENT_LITELLM_MODEL") or "").strip()
+        configured_agent_model_raw = (
+            effective_map.get("AGENT_LITELLM_MODEL") or ""
+        ).strip()
         configured_agent_model = normalize_agent_litellm_model(
             configured_agent_model_raw,
             configured_models=available_model_set,
@@ -3783,7 +4296,8 @@ class SystemConfigService:
             if model.strip()
         ]
         invalid_fallbacks = [
-            model for model in fallback_models
+            model
+            for model in fallback_models
             if model not in available_model_set and not _uses_direct_env_provider(model)
         ]
         if invalid_fallbacks:
@@ -3802,7 +4316,11 @@ class SystemConfigService:
             )
 
         vision_model = (effective_map.get("VISION_MODEL") or "").strip()
-        if vision_model and vision_model not in available_model_set and not _uses_direct_env_provider(vision_model):
+        if (
+            vision_model
+            and vision_model not in available_model_set
+            and not _uses_direct_env_provider(vision_model)
+        ):
             issues.append(
                 {
                     "key": "VISION_MODEL",
@@ -3835,16 +4353,20 @@ class SystemConfigService:
         if not require_complete:
             return []
 
-        issues, resolved_protocol = SystemConfigService._validate_llm_channel_connection(
-            channel_name=channel_name,
-            protocol_value=protocol_value,
-            base_url_value=base_url_value,
-            api_key_value=api_key_value,
-            model_values=model_values,
-            field_prefix=field_prefix,
-            require_base_url=False,
+        issues, resolved_protocol = (
+            SystemConfigService._validate_llm_channel_connection(
+                channel_name=channel_name,
+                protocol_value=protocol_value,
+                base_url_value=base_url_value,
+                api_key_value=api_key_value,
+                model_values=model_values,
+                field_prefix=field_prefix,
+                require_base_url=False,
+            )
         )
-        models_key = f"{field_prefix}_MODELS" if field_prefix != "test_channel" else "models"
+        models_key = (
+            f"{field_prefix}_MODELS" if field_prefix != "test_channel" else "models"
+        )
 
         if not model_values:
             issues.append(
@@ -3889,12 +4411,21 @@ class SystemConfigService:
     ) -> Tuple[List[Dict[str, Any]], str]:
         """Validate connection-level fields shared by test and discovery flows."""
         issues: List[Dict[str, Any]] = []
-        protocol_key = f"{field_prefix}_PROTOCOL" if field_prefix != "test_channel" else "protocol"
-        base_url_key = f"{field_prefix}_BASE_URL" if field_prefix != "test_channel" else "base_url"
-        api_key_key = f"{field_prefix}_API_KEY" if field_prefix != "test_channel" else "api_key"
+        protocol_key = (
+            f"{field_prefix}_PROTOCOL" if field_prefix != "test_channel" else "protocol"
+        )
+        base_url_key = (
+            f"{field_prefix}_BASE_URL" if field_prefix != "test_channel" else "base_url"
+        )
+        api_key_key = (
+            f"{field_prefix}_API_KEY" if field_prefix != "test_channel" else "api_key"
+        )
 
         normalized_protocol = canonicalize_llm_channel_protocol(protocol_value)
-        if normalized_protocol and normalized_protocol not in SUPPORTED_LLM_CHANNEL_PROTOCOLS:
+        if (
+            normalized_protocol
+            and normalized_protocol not in SUPPORTED_LLM_CHANNEL_PROTOCOLS
+        ):
             issues.append(
                 {
                     "key": protocol_key,
@@ -3920,7 +4451,9 @@ class SystemConfigService:
                     "actual": "",
                 }
             )
-        elif base_url_value and not SystemConfigService._is_valid_llm_base_url(base_url_value):
+        elif base_url_value and not SystemConfigService._is_valid_llm_base_url(
+            base_url_value
+        ):
             issues.append(
                 {
                     "key": base_url_key,
@@ -3931,7 +4464,9 @@ class SystemConfigService:
                     "actual": base_url_value,
                 }
             )
-        elif base_url_value and not SystemConfigService._is_safe_base_url(base_url_value):
+        elif base_url_value and not SystemConfigService._is_safe_base_url(
+            base_url_value
+        ):
             issues.append(
                 {
                     "key": base_url_key,
@@ -3951,8 +4486,12 @@ class SystemConfigService:
         )
         # Validate parsed key segments so that inputs like "," or " , " are
         # treated as empty (they produce zero usable keys after split+strip).
-        _parsed_api_keys = [seg.strip() for seg in api_key_value.split(",") if seg.strip()]
-        if not _parsed_api_keys and not channel_allows_empty_api_key(resolved_protocol, base_url_value):
+        _parsed_api_keys = [
+            seg.strip() for seg in api_key_value.split(",") if seg.strip()
+        ]
+        if not _parsed_api_keys and not channel_allows_empty_api_key(
+            resolved_protocol, base_url_value
+        ):
             issues.append(
                 {
                     "key": api_key_key,

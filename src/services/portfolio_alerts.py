@@ -17,12 +17,14 @@ logger = logging.getLogger(__name__)
 
 SYMBOL_BATCH_TARGET_SCOPES = frozenset({"watchlist", "portfolio_holdings"})
 PORTFOLIO_TARGET_SCOPES = frozenset({"portfolio_holdings", "portfolio_account"})
-PORTFOLIO_ALERT_TYPES = frozenset({
-    "portfolio_stop_loss",
-    "portfolio_concentration",
-    "portfolio_drawdown",
-    "portfolio_price_stale",
-})
+PORTFOLIO_ALERT_TYPES = frozenset(
+    {
+        "portfolio_stop_loss",
+        "portfolio_concentration",
+        "portfolio_drawdown",
+        "portfolio_price_stale",
+    }
+)
 
 EXPANDED_TARGET_SOFT_CAP = 100
 TARGET_RESULTS_LIMIT = 20
@@ -61,7 +63,9 @@ class PortfolioRiskAlert:
     stock_code: str = ""
 
     def __post_init__(self) -> None:
-        effective_target = self.metadata.get("effective_target") or portfolio_effective_target(self.target)
+        effective_target = self.metadata.get(
+            "effective_target"
+        ) or portfolio_effective_target(self.target)
         self.stock_code = str(effective_target)
 
 
@@ -77,7 +81,9 @@ class StaticAlertEvaluation:
     description: str = ""
 
 
-def normalize_portfolio_alert_parameters(alert_type: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_portfolio_alert_parameters(
+    alert_type: str, parameters: Dict[str, Any]
+) -> Dict[str, Any]:
     """Normalize P6 portfolio alert parameters."""
 
     if alert_type not in PORTFOLIO_ALERT_TYPES:
@@ -112,7 +118,9 @@ def normalize_batch_target_scope_target(target_scope: str, target: str) -> str:
     return target_text
 
 
-def ensure_active_portfolio_account(target: str, *, portfolio_service: Optional[PortfolioService] = None) -> None:
+def ensure_active_portfolio_account(
+    target: str, *, portfolio_service: Optional[PortfolioService] = None
+) -> None:
     """Validate that an explicit portfolio account target exists and is active."""
 
     if str(target or "").strip() == "all":
@@ -120,9 +128,15 @@ def ensure_active_portfolio_account(target: str, *, portfolio_service: Optional[
     account_id = _positive_int_target(target)
     service = portfolio_service or PortfolioService()
     accounts = service.list_accounts(include_inactive=False)
-    active_ids = {int(item.get("id")) for item in accounts if item.get("id") is not None}
+    active_ids = {
+        int(item.get("id") or 0)  # type: ignore[arg-type]
+        for item in accounts
+        if item.get("id") is not None
+    }
     if account_id not in active_ids:
-        raise ValueError(f"portfolio account is not active or does not exist: {account_id}")
+        raise ValueError(
+            f"portfolio account is not active or does not exist: {account_id}"
+        )
 
 
 def expand_symbol_targets(
@@ -142,7 +156,9 @@ def expand_symbol_targets(
         symbols = _watchlist_symbols(config)
         display_prefix = "自选股"
     elif target_scope == "portfolio_holdings":
-        symbols = _portfolio_holding_symbols(target=target, portfolio_service=portfolio_service)
+        symbols = _portfolio_holding_symbols(
+            target=target, portfolio_service=portfolio_service
+        )
         display_prefix = "持仓"
     else:
         return [], 0
@@ -151,7 +167,9 @@ def expand_symbol_targets(
     overflow_count = max(0, len(unique) - EXPANDED_TARGET_SOFT_CAP)
     capped = unique[:EXPANDED_TARGET_SOFT_CAP]
     return [
-        ExpandedSymbolTarget(symbol=symbol, display_target=f"{display_prefix} - {symbol}")
+        ExpandedSymbolTarget(
+            symbol=symbol, display_target=f"{display_prefix} - {symbol}"
+        )
         for symbol in capped
     ], overflow_count
 
@@ -241,7 +259,9 @@ def evaluate_portfolio_risk_alert(
     risk = risk_service or PortfolioRiskService(portfolio_service=service)
 
     if rule.alert_type == "portfolio_price_stale":
-        snapshot = service.get_portfolio_snapshot(account_id=account_id, cost_method="fifo")
+        snapshot = service.get_portfolio_snapshot(
+            account_id=account_id, cost_method="fifo"
+        )
         return _evaluate_price_stale(rule, snapshot)
 
     report = risk.get_risk_report(account_id=account_id, cost_method="fifo")
@@ -263,7 +283,9 @@ def evaluate_portfolio_risk_alert(
     )
 
 
-def result_to_target_result(payload: RuntimeAlertPayload, result: Dict[str, Any]) -> Dict[str, Any]:
+def result_to_target_result(
+    payload: RuntimeAlertPayload, result: Dict[str, Any]
+) -> Dict[str, Any]:
     record_status = result.get("record_status")
     return {
         "target": payload.effective_target,
@@ -277,7 +299,9 @@ def result_to_target_result(payload: RuntimeAlertPayload, result: Dict[str, Any]
     }
 
 
-def aggregate_dry_run_results(rule_id: int, target_scope: str, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def aggregate_dry_run_results(
+    rule_id: int, target_scope: str, results: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     target_results = sorted(
         results,
         key=lambda item: (
@@ -288,13 +312,20 @@ def aggregate_dry_run_results(rule_id: int, target_scope: str, results: List[Dic
     )
     visible_results = target_results[:TARGET_RESULTS_LIMIT]
     triggered_count = sum(1 for item in target_results if item.get("triggered"))
-    degraded_count = sum(1 for item in target_results if item.get("record_status") == "degraded")
-    skipped_count = sum(1 for item in target_results if item.get("record_status") == "skipped")
-    failed_count = sum(1 for item in target_results if item.get("record_status") == "failed")
+    degraded_count = sum(
+        1 for item in target_results if item.get("record_status") == "degraded"
+    )
+    skipped_count = sum(
+        1 for item in target_results if item.get("record_status") == "skipped"
+    )
+    failed_count = sum(
+        1 for item in target_results if item.get("record_status") == "failed"
+    )
     successful_count = sum(
         1
         for item in target_results
-        if item.get("record_status") not in {"failed"} and item.get("status") != "evaluation_error"
+        if item.get("record_status") not in {"failed"}
+        and item.get("status") != "evaluation_error"
     )
 
     if triggered_count:
@@ -318,7 +349,14 @@ def aggregate_dry_run_results(rule_id: int, target_scope: str, results: List[Dic
             f"{skipped_count} skipped, {failed_count} failed"
         )
 
-    first_observed = next((item.get("observed_value") for item in target_results if item.get("observed_value") is not None), None)
+    first_observed = next(
+        (
+            item.get("observed_value")
+            for item in target_results
+            if item.get("observed_value") is not None
+        ),
+        None,
+    )
     return {
         "rule_id": rule_id,
         "target_scope": target_scope,
@@ -340,7 +378,9 @@ def _watchlist_symbols(config: Any) -> List[str]:
         try:
             refresh()
         except Exception as exc:
-            logger.warning("[portfolio_alerts] Failed to refresh watchlist symbols: %s", exc)
+            logger.warning(
+                "[portfolio_alerts] Failed to refresh watchlist symbols: %s", exc
+            )
     return list(getattr(config, "stock_list", []) or [])
 
 
@@ -387,13 +427,17 @@ def _positive_int_target(value: Any) -> int:
     try:
         account_id = int(str(value).strip())
     except (TypeError, ValueError) as exc:
-        raise ValueError("portfolio target must be all or a positive account id") from exc
+        raise ValueError(
+            "portfolio target must be all or a positive account id"
+        ) from exc
     if account_id <= 0:
         raise ValueError("portfolio target must be all or a positive account id")
     return account_id
 
 
-def _evaluate_stop_loss(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dict[str, Any]:
+def _evaluate_stop_loss(
+    rule: PortfolioRiskAlert, report: Dict[str, Any]
+) -> Dict[str, Any]:
     mode = str(rule.parameters.get("mode") or "near")
     stop_loss = report.get("stop_loss") or {}
     items = list(stop_loss.get("items") or [])
@@ -404,20 +448,26 @@ def _evaluate_stop_loss(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dic
         affected = items
         triggered = bool(stop_loss.get("near_alert")) and bool(affected)
 
-    threshold_key = "stop_loss_alert_pct" if mode == "breach" else "stop_loss_near_ratio"
+    threshold_key = (
+        "stop_loss_alert_pct" if mode == "breach" else "stop_loss_near_ratio"
+    )
     threshold = _threshold(report, threshold_key)
     if mode == "near":
         stop_loss_pct = _threshold(report, "stop_loss_alert_pct") or 0.0
         near_ratio = _threshold(report, "stop_loss_near_ratio") or 0.0
         threshold = stop_loss_pct * near_ratio
 
-    observed = max((float(item.get("loss_pct") or 0.0) for item in affected), default=0.0)
+    observed = max(
+        (float(item.get("loss_pct") or 0.0) for item in affected), default=0.0
+    )
     diagnostics = _base_diagnostics(report, top_items=affected[:5])
-    diagnostics.update({
-        "mode": mode,
-        "near_count": stop_loss.get("near_count", 0),
-        "triggered_count": stop_loss.get("triggered_count", 0),
-    })
+    diagnostics.update(
+        {
+            "mode": mode,
+            "near_count": stop_loss.get("near_count", 0),
+            "triggered_count": stop_loss.get("triggered_count", 0),
+        }
+    )
     message = (
         f"{_display_account(report)} stop-loss {mode}: {len(affected)} affected symbols"
         if triggered
@@ -433,16 +483,22 @@ def _evaluate_stop_loss(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dic
     )
 
 
-def _evaluate_concentration(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dict[str, Any]:
+def _evaluate_concentration(
+    rule: PortfolioRiskAlert, report: Dict[str, Any]
+) -> Dict[str, Any]:
     concentration = report.get("concentration") or {}
     observed = float(concentration.get("top_weight_pct") or 0.0)
     threshold = _threshold(report, "concentration_alert_pct")
     triggered = bool(concentration.get("alert"))
-    diagnostics = _base_diagnostics(report, top_items=concentration.get("top_positions") or [])
-    diagnostics.update({
-        "total_market_value": concentration.get("total_market_value"),
-        "top_weight_pct": observed,
-    })
+    diagnostics = _base_diagnostics(
+        report, top_items=concentration.get("top_positions") or []
+    )
+    diagnostics.update(
+        {
+            "total_market_value": concentration.get("total_market_value"),
+            "top_weight_pct": observed,
+        }
+    )
     message = f"{_display_account(report)} concentration top weight {observed:.2f}%"
     return _portfolio_result(
         rule,
@@ -454,18 +510,22 @@ def _evaluate_concentration(rule: PortfolioRiskAlert, report: Dict[str, Any]) ->
     )
 
 
-def _evaluate_drawdown(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dict[str, Any]:
+def _evaluate_drawdown(
+    rule: PortfolioRiskAlert, report: Dict[str, Any]
+) -> Dict[str, Any]:
     drawdown = report.get("drawdown") or {}
     observed = float(drawdown.get("max_drawdown_pct") or 0.0)
     threshold = _threshold(report, "drawdown_alert_pct")
     triggered = bool(drawdown.get("alert"))
     diagnostics = _base_diagnostics(report)
-    diagnostics.update({
-        "series_points": drawdown.get("series_points"),
-        "current_drawdown_pct": drawdown.get("current_drawdown_pct"),
-        "max_drawdown_pct": observed,
-        "fx_stale": bool(drawdown.get("fx_stale")),
-    })
+    diagnostics.update(
+        {
+            "series_points": drawdown.get("series_points"),
+            "current_drawdown_pct": drawdown.get("current_drawdown_pct"),
+            "max_drawdown_pct": observed,
+            "fx_stale": bool(drawdown.get("fx_stale")),
+        }
+    )
     message = f"{_display_account(report)} max drawdown {observed:.2f}%"
     return _portfolio_result(
         rule,
@@ -477,19 +537,25 @@ def _evaluate_drawdown(rule: PortfolioRiskAlert, report: Dict[str, Any]) -> Dict
     )
 
 
-def _evaluate_price_stale(rule: PortfolioRiskAlert, snapshot: Dict[str, Any]) -> Dict[str, Any]:
+def _evaluate_price_stale(
+    rule: PortfolioRiskAlert, snapshot: Dict[str, Any]
+) -> Dict[str, Any]:
     affected: List[Dict[str, Any]] = []
     for account in snapshot.get("accounts", []) or []:
         for position in account.get("positions", []) or []:
-            if bool(position.get("price_stale")) or not bool(position.get("price_available", True)):
-                affected.append({
-                    "account_id": account.get("account_id"),
-                    "symbol": position.get("symbol"),
-                    "price_stale": bool(position.get("price_stale")),
-                    "price_available": bool(position.get("price_available")),
-                    "price_source": position.get("price_source"),
-                    "price_date": position.get("price_date"),
-                })
+            if bool(position.get("price_stale")) or not bool(
+                position.get("price_available", True)
+            ):
+                affected.append(
+                    {
+                        "account_id": account.get("account_id"),
+                        "symbol": position.get("symbol"),
+                        "price_stale": bool(position.get("price_stale")),
+                        "price_available": bool(position.get("price_available")),
+                        "price_source": position.get("price_source"),
+                        "price_date": position.get("price_date"),
+                    }
+                )
 
     diagnostics = _base_diagnostics_from_snapshot(snapshot, top_items=affected[:5])
     observed = float(len(affected))
@@ -540,9 +606,13 @@ def _portfolio_result(
     }
 
 
-def _base_diagnostics(report: Dict[str, Any], *, top_items: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _base_diagnostics(
+    report: Dict[str, Any], *, top_items: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     return {
-        "account_id": report.get("account_id") if report.get("account_id") is not None else "all",
+        "account_id": report.get("account_id")
+        if report.get("account_id") is not None
+        else "all",
         "currency": report.get("currency"),
         "as_of": report.get("as_of"),
         "price_stale": False,
@@ -566,7 +636,9 @@ def _base_diagnostics_from_snapshot(
         "as_of": snapshot.get("as_of"),
         "price_stale": any(bool(item.get("price_stale")) for item in affected),
         "fx_stale": bool(snapshot.get("fx_stale")),
-        "data_available": all(bool(item.get("price_available")) for item in affected) if affected else True,
+        "data_available": all(bool(item.get("price_available")) for item in affected)
+        if affected
+        else True,
         "top_affected_symbols": _top_symbols(affected),
     }
 

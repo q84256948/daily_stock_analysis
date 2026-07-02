@@ -27,7 +27,7 @@ Usage::
 import copy
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from src.config import AGENT_MAX_STEPS_DEFAULT
 
@@ -72,7 +72,9 @@ def _coerce_config_int(
     """
 
     try:
-        return int(raw_value)
+        if isinstance(raw_value, bool):
+            return int(default)
+        return int(raw_value)  # type: ignore[arg-type]
     except (TypeError, ValueError, OverflowError):
         if field_name:
             logger.warning(
@@ -158,7 +160,7 @@ def _should_use_legacy_default_prompt(
     *,
     skills_to_activate: List[str],
     explicit_skill_selection: bool,
-    skill_catalog: List[object],
+    skill_catalog: Sequence[object],
 ) -> bool:
     """Keep the legacy prompt only for the implicit built-in bull_trend fallback."""
     if explicit_skill_selection or skills_to_activate != ["bull_trend"]:
@@ -625,11 +627,11 @@ def build_chanlun_executor(config=None):
 # 降低 LLM 在「政策/公告/基本面」语境下的决策噪音。Ω 的 score_policy_minesweeper
 # 单独通过 ALL_POLICY_MINESWEEPER_TOOLS 注册（见 build_policy_minesweeper_executor）。
 _POLICY_MINESWEEPER_TOOL_NAMES = {
-    "search_stock_news",          # α：公司公告/新闻
-    "search_comprehensive_intel", # α/β：综合情报（含政策）
-    "get_stock_info",             # α/β：基本面（盈利/估值影响）
-    "get_realtime_quote",         # α：行情（价格敏感度）
-    "get_sector_rankings",        # β：板块/产业（政策暴露度）
+    "search_stock_news",  # α：公司公告/新闻
+    "search_comprehensive_intel",  # α/β：综合情报（含政策）
+    "get_stock_info",  # α/β：基本面（盈利/估值影响）
+    "get_realtime_quote",  # α：行情（价格敏感度）
+    "get_sector_rankings",  # β：板块/产业（政策暴露度）
 }
 
 

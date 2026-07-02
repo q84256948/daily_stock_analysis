@@ -20,7 +20,9 @@ from typing import Any, Dict, List, Optional, Union
 logger = logging.getLogger(__name__)
 
 # Built-in skill YAML directory (project_root/strategies/ kept for compatibility)
-_BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "strategies"
+_BUILTIN_SKILLS_DIR = (
+    Path(__file__).resolve().parent.parent.parent.parent / "strategies"
+)
 
 
 @dataclass
@@ -55,6 +57,7 @@ class Skill:
         subagent_type: Optional subagent type hint from frontmatter.
         preferred_model: Optional model hint from frontmatter.
     """
+
     name: str
     display_name: str
     description: str
@@ -110,9 +113,25 @@ def _coerce_int(value: object, default: int = 100) -> int:
     if value is None:
         return default
     try:
-        return int(value)
+        if isinstance(value, bool):
+            return default
+        return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
+
+
+def _coerce_int_list(value: object) -> List[int]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        result: List[int] = []
+        for item in value:
+            coerced = _coerce_int(item, default=0)
+            if coerced:
+                result.append(coerced)
+        return result
+    coerced = _coerce_int(value, default=0)
+    return [coerced] if coerced else []
 
 
 def _parse_skill_frontmatter(raw_text: str) -> tuple[Dict[str, object], str]:
@@ -130,7 +149,11 @@ def _parse_skill_frontmatter(raw_text: str) -> tuple[Dict[str, object], str]:
 
 
 def _infer_skill_description(instructions: str) -> str:
-    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", instructions or "") if part.strip()]
+    paragraphs = [
+        part.strip()
+        for part in re.split(r"\n\s*\n", instructions or "")
+        if part.strip()
+    ]
     if not paragraphs:
         return ""
     first = re.sub(r"\s+", " ", paragraphs[0]).strip()
@@ -215,16 +238,15 @@ def load_skill_from_markdown(filepath: Union[str, Path]) -> Skill:
 
     skill_name = str(metadata.get("name") or filepath.parent.name).strip()
     display_name = str(
-        metadata.get("display_name")
-        or metadata.get("title")
-        or skill_name
+        metadata.get("display_name") or metadata.get("title") or skill_name
     ).strip()
     description = str(
-        metadata.get("description")
-        or _infer_skill_description(instructions)
+        metadata.get("description") or _infer_skill_description(instructions)
     ).strip()
     if not skill_name or not description:
-        raise ValueError(f"Skill file {filepath.name} missing required name/description")
+        raise ValueError(
+            f"Skill file {filepath.name} missing required name/description"
+        )
 
     allowed_tools = _coerce_string_list(metadata.get("allowed-tools"))
     if not allowed_tools:
@@ -239,7 +261,7 @@ def load_skill_from_markdown(filepath: Union[str, Path]) -> Skill:
         description=description,
         instructions=instructions,
         category=str(metadata.get("category", "general")).strip() or "general",
-        core_rules=metadata.get("core_rules", []) or [],
+        core_rules=_coerce_int_list(metadata.get("core_rules")),
         required_tools=required_tools,
         allowed_tools=allowed_tools,
         aliases=_coerce_string_list(metadata.get("aliases")),
@@ -247,7 +269,9 @@ def load_skill_from_markdown(filepath: Union[str, Path]) -> Skill:
         source=str(filepath),
         entrypoint=str(filepath),
         bundle_dir=str(filepath.parent),
-        disable_model_invocation=_coerce_bool(metadata.get("disable-model-invocation"), False),
+        disable_model_invocation=_coerce_bool(
+            metadata.get("disable-model-invocation"), False
+        ),
         user_invocable=_coerce_bool(metadata.get("user-invocable"), True),
         default_active=_coerce_bool(
             metadata.get("default-active", metadata.get("default_active")),
@@ -383,9 +407,7 @@ class SkillManager:
         skills = load_skills_from_directory(directory)
         for skill in skills:
             if skill.name in self._skills:
-                logger.info(
-                    f"Custom skill '{skill.name}' overrides built-in"
-                )
+                logger.info(f"Custom skill '{skill.name}' overrides built-in")
             self.register(skill)
 
         logger.info(f"Loaded {len(skills)} custom skills from {directory}")
@@ -441,7 +463,12 @@ class SkillManager:
             return ""
 
         # Group by category
-        categories = {"trend": "趋势", "pattern": "形态", "reversal": "反转", "framework": "框架"}
+        categories = {
+            "trend": "趋势",
+            "pattern": "形态",
+            "reversal": "反转",
+            "framework": "框架",
+        }
         grouped: Dict[str, List[Skill]] = {}
         for skill in active:
             cat = skill.category or "trend"

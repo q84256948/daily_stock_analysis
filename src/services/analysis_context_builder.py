@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Literal, Optional, Sequence
 
 from src.schemas.analysis_context_pack import (
     AnalysisContextBlock,
@@ -112,7 +112,9 @@ class AnalysisContextBuilder:
         )
 
     @staticmethod
-    def build_batch(items: Sequence[PipelineAnalysisArtifacts]) -> List[AnalysisContextPack]:
+    def build_batch(
+        items: Sequence[PipelineAnalysisArtifacts],
+    ) -> List[AnalysisContextPack]:
         return [AnalysisContextBuilder.build(item) for item in items]
 
 
@@ -177,7 +179,9 @@ def _build_quote_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisContextB
     )
 
 
-def _build_daily_bars_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisContextBlock:
+def _build_daily_bars_block(
+    artifacts: PipelineAnalysisArtifacts,
+) -> AnalysisContextBlock:
     context = artifacts.base_context or {}
     date_value = context.get("date")
     metadata = {
@@ -212,7 +216,9 @@ def _build_daily_bars_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisCon
     for key in ("today", "yesterday"):
         value = context.get(key)
         items[key] = AnalysisContextItem(
-            status=ContextFieldStatus.AVAILABLE if value else ContextFieldStatus.MISSING,
+            status=ContextFieldStatus.AVAILABLE
+            if value
+            else ContextFieldStatus.MISSING,
             value=value or None,
             source="storage.get_analysis_context",
             missing_reason=None if value else f"{key}_missing",
@@ -354,8 +360,14 @@ def _build_chip_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisContextBl
     )
 
 
-def _build_fundamentals_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisContextBlock:
-    context = artifacts.fundamental_context if isinstance(artifacts.fundamental_context, dict) else None
+def _build_fundamentals_block(
+    artifacts: PipelineAnalysisArtifacts,
+) -> AnalysisContextBlock:
+    context = (
+        artifacts.fundamental_context
+        if isinstance(artifacts.fundamental_context, dict)
+        else None
+    )
     if not context:
         return AnalysisContextBlock(
             status=ContextFieldStatus.MISSING,
@@ -374,15 +386,23 @@ def _build_fundamentals_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisC
         if raw_status == "failed"
         else ("fundamentals_not_supported" if raw_status == "not_supported" else None)
     )
-    coverage = context.get("coverage") if isinstance(context.get("coverage"), dict) else {}
-    source_chain = context.get("source_chain") if isinstance(context.get("source_chain"), list) else []
+    coverage = (
+        context.get("coverage") if isinstance(context.get("coverage"), dict) else {}
+    )
+    source_chain = (
+        context.get("source_chain")
+        if isinstance(context.get("source_chain"), list)
+        else []
+    )
     source = _source_from_chain(source_chain)
     metadata = {
         "status": raw_status or None,
         "coverage": coverage,
         "source_chain": source_chain,
     }
-    metadata = {key: value for key, value in metadata.items() if value not in (None, {}, [])}
+    metadata = {
+        key: value for key, value in metadata.items() if value not in (None, {}, [])
+    }
 
     return AnalysisContextBlock(
         status=status,
@@ -449,7 +469,9 @@ def _build_news_block(artifacts: PipelineAnalysisArtifacts) -> AnalysisContextBl
     )
 
 
-def _build_portfolio_block(artifacts: PipelineAnalysisArtifacts) -> Optional[AnalysisContextBlock]:
+def _build_portfolio_block(
+    artifacts: PipelineAnalysisArtifacts,
+) -> Optional[AnalysisContextBlock]:
     context = _to_dict(artifacts.portfolio_context)
     if not context:
         return None
@@ -465,7 +487,11 @@ def _build_portfolio_block(artifacts: PipelineAnalysisArtifacts) -> Optional[Ana
         status = ContextFieldStatus.STALE
         warnings.append("portfolio_price_stale")
 
-    item_status = status if status != ContextFieldStatus.AVAILABLE else ContextFieldStatus.AVAILABLE
+    item_status = (
+        status
+        if status != ContextFieldStatus.AVAILABLE
+        else ContextFieldStatus.AVAILABLE
+    )
     exposed_keys = (
         "account_id",
         "account_name",
@@ -540,7 +566,7 @@ def _quality_block_status(
         return ContextFieldStatus.MISSING
 
 
-def _quality_level(score: int) -> str:
+def _quality_level(score: int) -> Literal["good", "usable", "limited", "poor"]:
     if score >= 85:
         return "good"
     if score >= 70:
@@ -574,9 +600,7 @@ def _to_dict(value: Optional[Any]) -> Dict[str, Any]:
     if callable(to_dict):
         result = to_dict()
         if not isinstance(result, Mapping):
-            raise TypeError(
-                f"{type(value).__name__}.to_dict() must return a mapping"
-            )
+            raise TypeError(f"{type(value).__name__}.to_dict() must return a mapping")
         return dict(result)
     value_dict = getattr(value, "__dict__", None)
     if isinstance(value_dict, dict):
@@ -627,23 +651,28 @@ def _quote_timestamp(
     artifacts: PipelineAnalysisArtifacts,
     quote: Dict[str, Any],
 ) -> Optional[str]:
-    return _metadata_iso_datetime_value(
-        quote,
-        "provider_timestamp",
-        "quote_timestamp",
-    ) or _metadata_iso_datetime_value(
-        artifacts.metadata,
-        "provider_timestamp",
-        "quote_timestamp",
-        "realtime_provider_timestamp",
-    ) or _metadata_iso_datetime_value(
-        quote,
-        "fetched_at",
-        "realtime_fetched_at",
-    ) or _metadata_iso_datetime_value(
-        artifacts.metadata,
-        "fetched_at",
-        "realtime_fetched_at",
+    return (
+        _metadata_iso_datetime_value(
+            quote,
+            "provider_timestamp",
+            "quote_timestamp",
+        )
+        or _metadata_iso_datetime_value(
+            artifacts.metadata,
+            "provider_timestamp",
+            "quote_timestamp",
+            "realtime_provider_timestamp",
+        )
+        or _metadata_iso_datetime_value(
+            quote,
+            "fetched_at",
+            "realtime_fetched_at",
+        )
+        or _metadata_iso_datetime_value(
+            artifacts.metadata,
+            "fetched_at",
+            "realtime_fetched_at",
+        )
     )
 
 

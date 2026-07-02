@@ -20,7 +20,7 @@ from typing import Optional, Dict, Any, List, Tuple, Callable
 
 import litellm
 from json_repair import repair_json
-from litellm import Router
+from litellm.router import Router
 
 from src.agent.llm_adapter import (
     get_thinking_extra_body,
@@ -3127,7 +3127,10 @@ class GeminiAnalyzer:
                     break
 
             persist_llm_usage(
-                llm_usage, model_used, call_type="analysis", stock_code=code
+                llm_usage,
+                model_used or "unknown",
+                call_type="analysis",
+                stock_code=code,
             )
 
             logger.info(

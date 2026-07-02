@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 
-_BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "strategies"
+_BUILTIN_SKILLS_DIR = (
+    Path(__file__).resolve().parent.parent.parent.parent / "strategies"
+)
 
 SKILL_AGENT_PREFIX = "skill_"
 LEGACY_STRATEGY_AGENT_PREFIX = "strategy_"
@@ -101,7 +103,9 @@ def _load_builtin_skill_catalog() -> tuple[object, ...]:
 
 def _coerce_priority(value: object, default: int = 100) -> int:
     try:
-        return int(value)
+        if isinstance(value, bool):
+            return default
+        return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
 
@@ -156,7 +160,9 @@ def _iter_candidate_skills(
     available_skill_ids: Optional[Iterable[str]] = None,
     user_invocable_only: bool = True,
 ) -> tuple[List[object], List[str]]:
-    skill_pool, normalized_available = _normalize_skill_inputs(skills, available_skill_ids)
+    skill_pool, normalized_available = _normalize_skill_inputs(
+        skills, available_skill_ids
+    )
     available_lookup = set(normalized_available)
 
     candidates: List[object] = []
@@ -271,7 +277,9 @@ def get_primary_default_skill_id(
     skills: Optional[Iterable[object]] = None,
     available_skill_ids: Optional[Iterable[str]] = None,
 ) -> str:
-    defaults = get_default_active_skill_ids(skills, max_count=1, available_skill_ids=available_skill_ids)
+    defaults = get_default_active_skill_ids(
+        skills, max_count=1, available_skill_ids=available_skill_ids
+    )
     return defaults[0] if defaults else ""
 
 
@@ -292,7 +300,9 @@ def _build_regime_skill_ids(skills: Iterable[object]) -> Dict[str, List[str]]:
 DEFAULT_ACTIVE_SKILL_IDS: tuple[str, ...] = tuple(get_default_active_skill_ids())
 DEFAULT_ROUTER_SKILL_IDS: tuple[str, ...] = tuple(get_default_router_skill_ids())
 PRIMARY_DEFAULT_SKILL_ID = get_primary_default_skill_id()
-REGIME_SKILL_IDS: Dict[str, List[str]] = _build_regime_skill_ids(_load_builtin_skill_catalog())
+REGIME_SKILL_IDS: Dict[str, List[str]] = _build_regime_skill_ids(
+    _load_builtin_skill_catalog()
+)
 
 
 def build_skill_agent_name(skill_id: str) -> str:
@@ -304,7 +314,7 @@ def extract_skill_id(agent_name: Optional[str]) -> Optional[str]:
         return None
     for prefix in (SKILL_AGENT_PREFIX, LEGACY_STRATEGY_AGENT_PREFIX):
         if agent_name.startswith(prefix):
-            return agent_name[len(prefix):]
+            return agent_name[len(prefix) :]
     return None
 
 
@@ -313,4 +323,7 @@ def is_skill_agent_name(agent_name: Optional[str]) -> bool:
 
 
 def is_skill_consensus_name(agent_name: Optional[str]) -> bool:
-    return agent_name in {SKILL_CONSENSUS_AGENT_NAME, LEGACY_STRATEGY_CONSENSUS_AGENT_NAME}
+    return agent_name in {
+        SKILL_CONSENSUS_AGENT_NAME,
+        LEGACY_STRATEGY_CONSENSUS_AGENT_NAME,
+    }

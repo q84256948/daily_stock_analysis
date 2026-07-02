@@ -104,7 +104,9 @@ def normalize_analysis_context_pack_language(report_language: str = "zh") -> str
     return "en" if str(report_language or "").lower() == "en" else "zh"
 
 
-def get_analysis_context_pack_block_labels(report_language: str = "zh") -> Dict[str, str]:
+def get_analysis_context_pack_block_labels(
+    report_language: str = "zh",
+) -> Dict[str, str]:
     return (
         BLOCK_LABELS_EN
         if normalize_analysis_context_pack_language(report_language) == "en"
@@ -197,7 +199,8 @@ def _format_en(payload: Dict[str, Any]) -> str:
 
 
 def _subject_lines(payload: Dict[str, Any], *, lang: str) -> List[str]:
-    subject = payload.get("subject") if isinstance(payload.get("subject"), Mapping) else {}
+    raw_subject = payload.get("subject")
+    subject = raw_subject if isinstance(raw_subject, Mapping) else {}
     code = _safe_text(subject.get("code"))
     name = _safe_text(subject.get("stock_name"))
     market = _safe_text(subject.get("market"))
@@ -360,7 +363,9 @@ def _localized_limitations(limitations: List[str], *, lang: str) -> List[str]:
         normalized_key = key.strip()
         normalized_status = status.strip()
         label = labels.get(normalized_key, _safe_text(normalized_key))
-        status_label = status_labels.get(normalized_status, _safe_text(normalized_status))
+        status_label = status_labels.get(
+            normalized_status, _safe_text(normalized_status)
+        )
         if not label or not status_label:
             continue
         result.append(
@@ -383,7 +388,9 @@ def _has_core_degraded_block(payload: Dict[str, Any]) -> bool:
     return False
 
 
-def _phase_data_quality_constraint_lines(payload: Dict[str, Any], *, lang: str) -> List[str]:
+def _phase_data_quality_constraint_lines(
+    payload: Dict[str, Any], *, lang: str
+) -> List[str]:
     if not _has_core_degraded_block(payload):
         return []
 
@@ -422,9 +429,7 @@ def _phase_data_quality_constraint_lines(payload: Dict[str, Any], *, lang: str) 
             "不得把降级行情描述成今日走势已经发生。"
         ]
     if phase in CONSERVATIVE_MARKET_PHASES:
-        return [
-            "- 阶段数据规则：只能保守使用当前可用数据，不得补全不存在的盘中事实。"
-        ]
+        return ["- 阶段数据规则：只能保守使用当前可用数据，不得补全不存在的盘中事实。"]
     return []
 
 

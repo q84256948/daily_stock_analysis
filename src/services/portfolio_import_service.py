@@ -8,7 +8,7 @@ import io
 import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 
@@ -22,6 +22,7 @@ from src.services.portfolio_service import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class CsvParserSpec:
@@ -78,6 +79,7 @@ DEFAULT_PARSER_SPECS: Tuple[CsvParserSpec, ...] = (
 
 class PortfolioImportService:
     """Parse broker CSV and commit normalized trade records with dedup."""
+
     _shared_parser_registry: Dict[str, CsvParserSpec] = {}
     _shared_broker_alias_map: Dict[str, str] = {}
     _shared_registry_initialized: bool = False
@@ -105,7 +107,9 @@ class PortfolioImportService:
         broker = (spec.broker or "").strip().lower()
         if not broker:
             raise ValueError("broker is required")
-        new_aliases = tuple(sorted({alias.strip().lower() for alias in spec.aliases if alias}))
+        new_aliases = tuple(
+            sorted({alias.strip().lower() for alias in spec.aliases if alias})
+        )
         for alias in new_aliases:
             if alias == broker:
                 raise ValueError(f"alias '{alias}' cannot be the same as broker id")
@@ -130,7 +134,11 @@ class PortfolioImportService:
         """List canonical broker ids and aliases for frontend selector."""
         items: List[Dict[str, Any]] = []
         for broker in sorted(self._parser_registry.keys()):
-            aliases = sorted(alias for alias, target in self._broker_alias_map.items() if target == broker)
+            aliases = sorted(
+                alias
+                for alias, target in self._broker_alias_map.items()
+                if target == broker
+            )
             items.append(
                 {
                     "broker": broker,
@@ -163,12 +171,12 @@ class PortfolioImportService:
                 # Keep a stable line-level marker so repeated imports of the same
                 # file remain idempotent, while identical split fills on separate
                 # CSV lines do not collapse into one dedup key.
-                normalized["_source_line_number"] = int(idx) + 2
+                normalized["_source_line_number"] = int(cast(int, idx)) + 2
                 normalized["dedup_hash"] = self._build_dedup_hash(normalized)
                 records.append(normalized)
             except Exception as exc:  # pragma: no cover - defensive path
                 skipped += 1
-                errors.append(f"row={idx + 1}: {exc}")
+                errors.append(f"row={int(cast(int, idx)) + 1}: {exc}")
 
         return {
             "broker": broker_norm,
@@ -207,7 +215,9 @@ class PortfolioImportService:
                     duplicate_count += 1
                     continue
                 dedup_hash_to_use: Optional[str] = dedup_hash or None
-                if dedup_hash_to_use and self.repo.has_trade_dedup_hash(account_id, dedup_hash_to_use):
+                if dedup_hash_to_use and self.repo.has_trade_dedup_hash(
+                    account_id, dedup_hash_to_use
+                ):
                     duplicate_count += 1
                     continue
 
@@ -244,7 +254,8 @@ class PortfolioImportService:
                     currency=record.get("currency"),
                     trade_uid=trade_uid,
                     dedup_hash=dedup_hash_to_use,
-                    note=(record.get("note") or "").strip() or f"csv_import:{broker_norm}",
+                    note=(record.get("note") or "").strip()
+                    or f"csv_import:{broker_norm}",
                 )
                 inserted_count += 1
             except PortfolioConflictError:
@@ -336,10 +347,24 @@ class PortfolioImportService:
             return None
 
         quantity = self._parse_float(
-            self._pick(row, *(broker_hints.get("quantity") or ()), "成交数量", "数量", "成交股数")
+            self._pick(
+                row,
+                *(broker_hints.get("quantity") or ()),
+                "成交数量",
+                "数量",
+                "成交股数",
+            )
         )
         price = self._parse_float(
-            self._pick(row, *(broker_hints.get("price") or ()), "成交均价", "成交价格", "价格", "成交价", "均价")
+            self._pick(
+                row,
+                *(broker_hints.get("price") or ()),
+                "成交均价",
+                "成交价格",
+                "价格",
+                "成交价",
+                "均价",
+            )
         )
         if quantity is None or quantity <= 0 or price is None or price <= 0:
             return None
@@ -375,8 +400,12 @@ class PortfolioImportService:
             "price": float(price),
             "fee": float(fee),
             "tax": float(tax),
-            "trade_uid": (str(trade_uid).strip() if trade_uid is not None else None) or None,
-            "currency": (str(currency).strip().upper() if currency is not None else None) or None,
+            "trade_uid": (str(trade_uid).strip() if trade_uid is not None else None)
+            or None,
+            "currency": (
+                str(currency).strip().upper() if currency is not None else None
+            )
+            or None,
         }
 
     @staticmethod
@@ -384,7 +413,11 @@ class PortfolioImportService:
         for name in candidates:
             if name in row.index:
                 value = row.get(name)
-                if value is not None and str(value).strip() != "" and str(value).strip().lower() != "nan":
+                if (
+                    value is not None
+                    and str(value).strip() != ""
+                    and str(value).strip().lower() != "nan"
+                ):
                     return value
         return None
 
@@ -442,7 +475,11 @@ class PortfolioImportService:
                 f"{float(record.get('fee', 0.0)):.8f}",
                 f"{float(record.get('tax', 0.0)):.8f}",
                 str(record.get("currency") or ""),
-                str(record.get("_source_line_number") or record.get("source_line_number") or ""),
+                str(
+                    record.get("_source_line_number")
+                    or record.get("source_line_number")
+                    or ""
+                ),
             ]
         )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()

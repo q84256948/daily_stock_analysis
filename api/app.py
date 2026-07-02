@@ -132,6 +132,7 @@ def _warn_if_open_cors_without_auth() -> None:
         "on trusted local networks or enable admin authentication."
     )
 
+
 from api.v1 import api_v1_router
 from api.middlewares.auth import add_auth_middleware
 from api.middlewares.error_handler import add_error_handlers
@@ -153,7 +154,13 @@ _STOCK_INDEX_HEADERS = {
 
 
 def _bundled_stock_index_path() -> Path:
-    return Path(__file__).parent.parent / "apps" / "dsa-web" / "public" / _STOCK_INDEX_FILENAME
+    return (
+        Path(__file__).parent.parent
+        / "apps"
+        / "dsa-web"
+        / "public"
+        / _STOCK_INDEX_FILENAME
+    )
 
 
 async def _refresh_stock_index_cache_in_background(reason: str) -> None:
@@ -163,7 +170,11 @@ async def _refresh_stock_index_cache_in_background(reason: str) -> None:
         settings = settings_from_config(get_config())
         result = await run_in_threadpool(refresh_remote_stock_index_cache, settings)
         if result.refreshed:
-            logger.info("[stock-index] background refresh completed (%s): %s", reason, result.cache_path)
+            logger.info(
+                "[stock-index] background refresh completed (%s): %s",
+                reason,
+                result.cache_path,
+            )
     except asyncio.CancelledError:
         raise
     except Exception as exc:  # noqa: BLE001 - index refresh must stay best-effort.
@@ -200,17 +211,17 @@ async def app_lifespan(app: FastAPI):
 def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     """
     创建并配置 FastAPI 应用实例
-    
+
     Args:
         static_dir: 静态文件目录路径（可选，默认为项目根目录下的 static）
-        
+
     Returns:
         配置完成的 FastAPI 应用实例
     """
     # 默认静态文件目录
     if static_dir is None:
         static_dir = Path(__file__).parent.parent / "static"
-    
+
     # 创建 FastAPI 实例
     app = FastAPI(
         title="Daily Stock Analysis API",
@@ -227,30 +238,32 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         version="1.0.0",
         lifespan=app_lifespan,
     )
-    
+
     # ============================================================
     # CORS 配置
     # ============================================================
-    
+
     allowed_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
-    
+
     # 从环境变量添加额外的允许来源
     extra_origins = os.environ.get("CORS_ORIGINS", "")
     if extra_origins:
-        allowed_origins.extend([o.strip() for o in extra_origins.split(",") if o.strip()])
-    
+        allowed_origins.extend(
+            [o.strip() for o in extra_origins.split(",") if o.strip()]
+        )
+
     # 允许所有来源（开发/演示用）
     allow_all_origins = os.environ.get("CORS_ALLOW_ALL", "").lower() == "true"
     allow_credentials = not allow_all_origins
     if allow_all_origins:
         _warn_if_open_cors_without_auth()
         allowed_origins = ["*"]
-    
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
@@ -260,20 +273,20 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
     )
 
     add_auth_middleware(app)
-    
+
     # ============================================================
     # 注册路由
     # ============================================================
-    
+
     app.include_router(api_v1_router, prefix="/api/v1")
     add_error_handlers(app)
-    
+
     # ============================================================
     # 根路由和健康检查
     # ============================================================
-    
+
     has_frontend = static_dir.exists() and (static_dir / "index.html").exists()
-    
+
     if has_frontend:
         # Surface bundle inconsistencies as soon as the app starts so that
         # blank-page reports (#1064 / #1065 / #1050) can be diagnosed from
@@ -284,7 +297,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
         async def root():
             """根路由 - 返回前端页面"""
             return _frontend_index_response(static_dir)
-    else:
+    else:  # noqa: F811  - shadowed by else-branch redefinition of root handler
         _FRONTEND_NOT_BUILT_HTML = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DSA - Frontend Not Built</title>
@@ -313,30 +326,27 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
 </div></body></html>"""
 
         @app.get("/", include_in_schema=False)
-        async def root():
+        async def root_placeholder():
             """根路由 - 前端未构建时返回引导页面"""
             return HTMLResponse(content=_FRONTEND_NOT_BUILT_HTML)
-    
+
     @app.get(
         "/health",
         response_model=HealthResponse,
         tags=["Health"],
         summary="健康检查",
-        description="用于负载均衡器或监控系统检查服务状态"
+        description="用于负载均衡器或监控系统检查服务状态",
     )
     @app.get(
         "/api/health",
         response_model=HealthResponse,
         tags=["Health"],
         summary="健康检查",
-        description="用于负载均衡器或监控系统检查服务状态"
+        description="用于负载均衡器或监控系统检查服务状态",
     )
     async def health_check() -> HealthResponse:
         """健康检查接口"""
-        return HealthResponse(
-            status="ok",
-            timestamp=datetime.now().isoformat()
-        )
+        return HealthResponse(status="ok", timestamp=datetime.now().isoformat())
 
     def _stock_index_candidate_paths() -> tuple[Path, ...]:
         local_candidates = (
@@ -379,11 +389,11 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             media_type="application/json",
             headers=_STOCK_INDEX_HEADERS,
         )
-    
+
     # ============================================================
     # 静态文件托管（前端 SPA）
     # ============================================================
-    
+
     if has_frontend:
         # Serve `/assets/*` explicitly so that misses return a plain-text
         # 404 with the correct Content-Type instead of the default JSON
@@ -410,7 +420,9 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 )
             if file_path.is_file():
                 relative_path = file_path.relative_to(assets_root).as_posix()
-                return await assets_static_files.get_response(relative_path, request.scope)
+                return await assets_static_files.get_response(
+                    relative_path, request.scope
+                )
             return Response(
                 content="asset not found",
                 status_code=404,
@@ -424,7 +436,10 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             if full_path == "api" or full_path.startswith("api/"):
                 return JSONResponse(
                     status_code=404,
-                    content={"error": "not_found", "message": f"API endpoint /{full_path} not found"}
+                    content={
+                        "error": "not_found",
+                        "message": f"API endpoint /{full_path} not found",
+                    },
                 )
 
             # Reuse the same containment check as /assets/* so that requests
@@ -432,7 +447,9 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
             # the SPA fallback. Starlette's :path converter does not collapse
             # `..` segments, so static_dir / full_path can resolve outside
             # the bundle root if served unchecked.
-            file_path = _resolve_asset_path(static_dir, full_path) if full_path else None
+            file_path = (
+                _resolve_asset_path(static_dir, full_path) if full_path else None
+            )
             if file_path is not None and file_path.is_file():
                 if file_path == (static_dir / "index.html").resolve():
                     return _frontend_index_response(static_dir)
@@ -442,7 +459,7 @@ def create_app(static_dir: Optional[Path] = None) -> FastAPI:
                 return FileResponse(file_path, media_type=content_type)
 
             return _frontend_index_response(static_dir)
-    
+
     return app
 
 

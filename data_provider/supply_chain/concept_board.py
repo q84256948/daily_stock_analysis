@@ -234,5 +234,5 @@ class ConceptBoardProvider:
 def get_concept_board_provider() -> ConceptBoardProvider:
     """Get singleton concept board provider"""
     if not hasattr(get_concept_board_provider, "_instance"):
-        get_concept_board_provider._instance = ConceptBoardProvider()
-    return get_concept_board_provider._instance
+        get_concept_board_provider._instance = ConceptBoardProvider()  # type: ignore[attr-defined]
+    return get_concept_board_provider._instance  # type: ignore[attr-defined]

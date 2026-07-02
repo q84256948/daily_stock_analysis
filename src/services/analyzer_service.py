@@ -15,7 +15,7 @@ import uuid
 from typing import List, Optional
 
 from src.analyzer import AnalysisResult
-from src.core.market_review import run_market_review
+from src.core.market_review import MarketReviewRunResult, run_market_review
 from src.core.pipeline import StockAnalysisPipeline
 from src.config import Config, get_config
 from src.enums import ReportType
@@ -24,7 +24,7 @@ from src.notification import NotificationService
 
 def analyze_stock(
     stock_code: str,
-    config: Config = None,
+    config: Optional[Config] = None,
     full_report: bool = False,
     notifier: Optional[NotificationService] = None,
 ) -> Optional[AnalysisResult]:
@@ -45,9 +45,7 @@ def analyze_stock(
 
     # 创建分析流水线
     pipeline = StockAnalysisPipeline(
-        config=config,
-        query_id=uuid.uuid4().hex,
-        query_source="cli"
+        config=config, query_id=uuid.uuid4().hex, query_source="cli"
     )
 
     # 使用通知服务（如果提供）
@@ -70,7 +68,7 @@ def analyze_stock(
 
 def analyze_stocks(
     stock_codes: List[str],
-    config: Config = None,
+    config: Optional[Config] = None,
     full_report: bool = False,
     notifier: Optional[NotificationService] = None,
 ) -> List[AnalysisResult]:
@@ -99,9 +97,9 @@ def analyze_stocks(
 
 
 def perform_market_review(
-    config: Config = None,
+    config: Optional[Config] = None,
     notifier: Optional[NotificationService] = None,
-) -> Optional[str]:
+) -> Optional[str | MarketReviewRunResult]:
     """
     执行大盘复盘
 

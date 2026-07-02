@@ -74,7 +74,9 @@ class ScoreLedger(Base):
             "position_suggestion": self.position_suggestion,
             "scoring_version": self.scoring_version,
             "raw_scores_json": self.raw_scores_json,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": self.created_at.isoformat()
+            if self.created_at is not None
+            else None,
         }
 
 

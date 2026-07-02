@@ -3126,7 +3126,7 @@ class DsaEastMoneyHotspotProvider:
                 record = row.to_dict()
                 record.setdefault("code", code)
                 record.setdefault("name", name)
-                merged.append(record)
+                merged.append(cast(Dict[str, Any], record))
         return pd.DataFrame(merged)
 
     def _enrich_constituent_quotes(

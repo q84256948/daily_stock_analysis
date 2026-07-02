@@ -41,7 +41,9 @@ class StrategiesCommand(BotCommand):
 
     def execute(self, message: BotMessage, args: List[str]) -> BotResponse:
         """Execute the strategies list command."""
-        show_active_only = bool(args and args[0].lower() in ("active", "激活", "已激活"))
+        show_active_only = bool(
+            args and args[0].lower() in ("active", "激活", "已激活")
+        )
 
         try:
             from src.agent.factory import get_skill_manager
@@ -49,15 +51,19 @@ class StrategiesCommand(BotCommand):
 
             config = get_config()
             sm = get_skill_manager(config)
-            from src.agent.factory import DEFAULT_AGENT_SKILLS
+            from src.agent.skills.router import _DEFAULT_SKILLS
 
             # Derive activation status from config without mutating the skill
             # manager — this is a read-only listing command.
-            configured_active: set[Any] = set(config.agent_skills or DEFAULT_AGENT_SKILLS)
+            configured_active: set[Any] = set(
+                config.agent_skills or list(_DEFAULT_SKILLS)
+            )
 
             all_skills = sm.list_skills()
             if not all_skills:
-                return BotResponse.text_response("📋 暂无可用策略。请检查 strategies/ 目录。")
+                return BotResponse.text_response(
+                    "📋 暂无可用策略。请检查 strategies/ 目录。"
+                )
 
             skills = all_skills
             if show_active_only:
@@ -66,7 +72,12 @@ class StrategiesCommand(BotCommand):
                     return BotResponse.text_response("📋 当前没有激活的策略。")
 
             # Group by category
-            categories = {"trend": "📈 趋势类", "pattern": "📊 形态类", "reversal": "🔄 反转类", "framework": "🧩 框架类"}
+            categories = {
+                "trend": "📈 趋势类",
+                "pattern": "📊 形态类",
+                "reversal": "🔄 反转类",
+                "framework": "🧩 框架类",
+            }
             grouped = {}
             for skill in skills:
                 cat = skill.category or "trend"
@@ -86,7 +97,9 @@ class StrategiesCommand(BotCommand):
                     source_tag = ""
                     if s.source and s.source != "builtin":
                         source_tag = " (自定义)"
-                    lines.append(f"  {status} `{s.name}` — {s.display_name}{source_tag}")
+                    lines.append(
+                        f"  {status} `{s.name}` — {s.display_name}{source_tag}"
+                    )
                     lines.append(f"      {s.description}")
                 lines.append("")
 

@@ -252,7 +252,7 @@ class AnalysisContextPackOverview(BaseModel):
     )
     warnings: List[str] = Field(default_factory=list, description="顶层数据质量提醒")
     metadata: AnalysisContextPackOverviewMetadata = Field(
-        default_factory=AnalysisContextPackOverviewMetadata
+        default_factory=lambda: AnalysisContextPackOverviewMetadata()  # type: ignore[call-arg]
     )
 
 

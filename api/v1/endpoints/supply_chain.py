@@ -15,13 +15,14 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.config import get_config
+
 # 复用问股的工具中文显示名（供应链共享问股工具集），再叠加供应链专属工具
 from api.v1.endpoints.agent import TOOL_DISPLAY_NAMES as _AGENT_TOOL_DISPLAY_NAMES
 
@@ -46,6 +47,7 @@ STREAM_QUEUE_TIMEOUT_S = 1200.0
 # ============================================================
 # Schemas
 # ============================================================
+
 
 class SupplyChainChatRequest(BaseModel):
     message: str
@@ -81,6 +83,7 @@ class SupplyChainSessionMessagesResponse(BaseModel):
 # Helpers
 # ============================================================
 
+
 def _ensure_supply_chain_session_id(session_id: Optional[str]) -> str:
     """保证 session_id 带 ``supply_chain:`` 前缀，缺失则生成。"""
     prefix = f"{SESSION_PREFIX}:"
@@ -98,11 +101,12 @@ def _strip_supply_chain_prefix(session_id: str) -> str:
     的无前缀格式一致——避免刷新后 ``loadInitialSession`` 因前缀不匹配而无法恢复会话。
     """
     prefix = f"{SESSION_PREFIX}:"
-    return session_id[len(prefix):] if session_id.startswith(prefix) else session_id
+    return session_id[len(prefix) :] if session_id.startswith(prefix) else session_id
 
 
 def _build_executor(config):
     from src.agent.factory import build_supply_chain_executor
+
     return build_supply_chain_executor(config)
 
 
@@ -114,6 +118,7 @@ def _require_agent(config) -> None:
 # ============================================================
 # Chat (non-streaming)
 # ============================================================
+
 
 @router.post("/chat", response_model=SupplyChainChatResponse)
 async def supply_chain_chat(request: SupplyChainChatRequest):
@@ -147,6 +152,7 @@ async def supply_chain_chat(request: SupplyChainChatRequest):
 # Chat (SSE streaming)
 # ============================================================
 
+
 @router.post("/chat/stream")
 async def supply_chain_chat_stream(request: SupplyChainChatRequest):
     """供应链深度调研 SSE 流式端点（9 步 pipeline，预计 5–15 分钟）。
@@ -177,14 +183,16 @@ async def supply_chain_chat_stream(request: SupplyChainChatRequest):
                 context=request.context,
             )
             asyncio.run_coroutine_threadsafe(
-                queue.put({
-                    "type": "done",
-                    "success": result.success,
-                    "content": result.content,
-                    "error": result.error,
-                    "total_steps": result.total_steps,
-                    "session_id": session_id,
-                }),
+                queue.put(
+                    {
+                        "type": "done",
+                        "success": result.success,
+                        "content": result.content,
+                        "error": result.error,
+                        "total_steps": result.total_steps,
+                        "session_id": session_id,
+                    }
+                ),
                 loop,
             )
         except Exception as exc:
@@ -199,11 +207,18 @@ async def supply_chain_chat_stream(request: SupplyChainChatRequest):
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=STREAM_QUEUE_TIMEOUT_S)
+                    event = await asyncio.wait_for(
+                        queue.get(), timeout=STREAM_QUEUE_TIMEOUT_S
+                    )
                 except asyncio.TimeoutError:
-                    yield "data: " + json.dumps(
-                        {"type": "error", "message": "深度调研超时"}, ensure_ascii=False
-                    ) + "\n\n"
+                    yield (
+                        "data: "
+                        + json.dumps(
+                            {"type": "error", "message": "深度调研超时"},
+                            ensure_ascii=False,
+                        )
+                        + "\n\n"
+                    )
                     break
                 yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
                 if event.get("type") in ("done", "error"):
@@ -231,6 +246,7 @@ async def supply_chain_chat_stream(request: SupplyChainChatRequest):
 # Session CRUD（会话隔离：固定 supply_chain 前缀）
 # ============================================================
 
+
 @router.get("/chat/sessions", response_model=SupplyChainSessionsResponse)
 async def list_supply_chain_sessions(limit: int = 50):
     """供应链会话列表（固定按 ``supply_chain`` 前缀过滤，与问股/郑希隔离）。
@@ -239,22 +255,26 @@ async def list_supply_chain_sessions(limit: int = 50):
     格式保持一致，确保刷新后 ``loadInitialSession`` 能正确恢复当前会话。
     """
     from src.storage import get_db
+
     sessions = get_db().get_chat_sessions(
         limit=limit,
         session_prefix=SESSION_PREFIX,
     )
     for s in sessions:
         s["session_id"] = _strip_supply_chain_prefix(s["session_id"])
-    return SupplyChainSessionsResponse(sessions=sessions)
+    return SupplyChainSessionsResponse(sessions=cast(Any, sessions))
 
 
-@router.get("/chat/sessions/{session_id}", response_model=SupplyChainSessionMessagesResponse)
+@router.get(
+    "/chat/sessions/{session_id}", response_model=SupplyChainSessionMessagesResponse
+)
 async def get_supply_chain_session_messages(session_id: str, limit: int = 100):
     """获取单个供应链会话的完整消息。
 
     容忍前端传入无前缀 session_id（与 list 返回格式一致），内部统一补前缀后查 DB。
     """
     from src.storage import get_db
+
     full_id = _ensure_supply_chain_session_id(session_id)
     messages = get_db().get_conversation_messages(full_id, limit=limit)
     return SupplyChainSessionMessagesResponse(
@@ -269,6 +289,7 @@ async def delete_supply_chain_session(session_id: str):
     容忍前端传入无前缀 session_id，内部统一补前缀后删除。
     """
     from src.storage import get_db
+
     full_id = _ensure_supply_chain_session_id(session_id)
     count = get_db().delete_conversation_session(full_id)
     return {"deleted": count}

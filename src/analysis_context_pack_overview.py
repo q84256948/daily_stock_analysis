@@ -20,7 +20,14 @@ from src.schemas.analysis_context_pack import ContextFieldStatus
 
 ANALYSIS_CONTEXT_PACK_OVERVIEW_KEY = "analysis_context_pack_overview"
 _ALL_STATUSES = tuple(status.value for status in ContextFieldStatus)
-_DATA_QUALITY_BLOCK_KEYS = {"quote", "daily_bars", "technical", "news", "fundamentals", "chip"}
+_DATA_QUALITY_BLOCK_KEYS = {
+    "quote",
+    "daily_bars",
+    "technical",
+    "news",
+    "fundamentals",
+    "chip",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -67,7 +74,8 @@ def render_analysis_context_pack_overview(
         if not overview_blocks:
             return None
 
-        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+        raw_metadata = payload.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
         return {
             "pack_version": _safe_text(payload.get("pack_version")) or "1.0",
             "created_at": _safe_text(payload.get("created_at")) or None,
@@ -86,11 +94,15 @@ def render_analysis_context_pack_overview(
             },
         }
     except Exception as exc:
-        logger.debug("render analysis context pack overview failed: %s", exc, exc_info=True)
+        logger.debug(
+            "render analysis context pack overview failed: %s", exc, exc_info=True
+        )
         return None
 
 
-def extract_analysis_context_pack_overview(context_snapshot: Any) -> Optional[Dict[str, Any]]:
+def extract_analysis_context_pack_overview(
+    context_snapshot: Any,
+) -> Optional[Dict[str, Any]]:
     """Extract the persisted public overview from a context snapshot."""
     snapshot = _as_mapping(context_snapshot)
     if not snapshot:
@@ -132,7 +144,9 @@ def _as_mapping(value: Any) -> Optional[Mapping[str, Any]]:
     return None
 
 
-def _sanitize_persisted_overview(overview: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+def _sanitize_persisted_overview(
+    overview: Mapping[str, Any],
+) -> Optional[Dict[str, Any]]:
     subject = overview.get("subject")
     blocks = overview.get("blocks")
     if not isinstance(subject, Mapping) or not isinstance(blocks, list):
@@ -168,7 +182,8 @@ def _sanitize_persisted_overview(overview: Mapping[str, Any]) -> Optional[Dict[s
     if not overview_blocks:
         return None
 
-    metadata = overview.get("metadata") if isinstance(overview.get("metadata"), Mapping) else {}
+    raw_metadata = overview.get("metadata") if overview is not None else None
+    metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     sanitized = {
         "pack_version": _safe_text(overview.get("pack_version")) or "1.0",
         "created_at": _safe_text(overview.get("created_at")) or None,

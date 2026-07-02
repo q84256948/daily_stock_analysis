@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ _ROLLING_WINDOW = 50
 @dataclass
 class CalibrationResult:
     """Confidence calibration data for an agent or skill."""
+
     agent_name: str = ""
     total_samples: int = 0
     historical_accuracy: float = 0.5  # 0.0–1.0
@@ -49,6 +50,7 @@ class CalibrationResult:
 @dataclass
 class AnalysisMemoryEntry:
     """A remembered past analysis for context injection."""
+
     stock_code: str = ""
     date: str = ""
     signal: str = ""
@@ -71,7 +73,9 @@ class AgentMemory:
         cal = memory.get_calibration("technical", stock_code="600519")
     """
 
-    def __init__(self, enabled: bool = False, min_samples: int = _MIN_CALIBRATION_SAMPLES):
+    def __init__(
+        self, enabled: bool = False, min_samples: int = _MIN_CALIBRATION_SAMPLES
+    ):
         self.enabled = enabled
         self.min_samples = min_samples
 
@@ -80,6 +84,7 @@ class AgentMemory:
         """Create an AgentMemory from the current config."""
         try:
             from src.config import get_config
+
             config = get_config()
             enabled = getattr(config, "agent_memory_enabled", False)
             return cls(enabled=enabled)
@@ -105,6 +110,7 @@ class AgentMemory:
 
         try:
             from src.storage import get_db
+
             db = get_db()
             records = db.get_analysis_history(code=stock_code, limit=limit)
             entries = []
@@ -118,21 +124,33 @@ class AgentMemory:
                     except (TypeError, ValueError):
                         raw_result = {}
                 elif isinstance(getattr(r, "raw_result", None), dict):
-                    raw_result = dict(r.raw_result)
+                    raw_result = cast(
+                        Dict[str, Any], dict(cast(Dict[Any, Any], r.raw_result))
+                    )
 
-                signal = raw_result.get("decision_type") or getattr(r, "operation_advice", "") or "hold"
+                signal = (
+                    raw_result.get("decision_type")
+                    or getattr(r, "operation_advice", "")
+                    or "hold"
+                )
                 price_at_analysis = raw_result.get("current_price")
                 if price_at_analysis is None:
                     price_at_analysis = 0.0
 
-                entries.append(AnalysisMemoryEntry(
-                    stock_code=stock_code,
-                    date=(r.created_at.date().isoformat() if getattr(r, "created_at", None) else ""),
-                    signal=signal,
-                    sentiment_score=getattr(r, "sentiment_score", 50) or 50,
-                    price_at_analysis=float(price_at_analysis or 0.0),
-                    was_correct=None,
-                ))
+                entries.append(
+                    AnalysisMemoryEntry(
+                        stock_code=stock_code,
+                        date=(
+                            r.created_at.date().isoformat()
+                            if getattr(r, "created_at", None)
+                            else ""
+                        ),
+                        signal=signal,
+                        sentiment_score=getattr(r, "sentiment_score", 50) or 50,
+                        price_at_analysis=float(price_at_analysis or 0.0),
+                        was_correct=None,
+                    )
+                )
             return entries
         except Exception as exc:
             logger.debug("[AgentMemory] get_stock_history failed: %s", exc)
@@ -188,7 +206,9 @@ class AgentMemory:
 
         return result
 
-    def calibrate_confidence(self, agent_name: str, raw_confidence: float, stock_code: Optional[str] = None) -> float:
+    def calibrate_confidence(
+        self, agent_name: str, raw_confidence: float, stock_code: Optional[str] = None
+    ) -> float:
         """Apply calibration to a raw confidence value.
 
         Returns the adjusted confidence, clamped to [0.0, 1.0].
@@ -213,6 +233,7 @@ class AgentMemory:
 
         try:
             from src.services.backtest_service import BacktestService
+
             service = BacktestService()
             summary = service.get_skill_summary(skill_id)
             if summary:
@@ -222,7 +243,8 @@ class AgentMemory:
                     "total_evaluations": summary.get("total_evaluations", 0),
                     "avg_return": summary.get("avg_return", 0.0),
                     "direction_accuracy": summary.get("direction_accuracy", 0.5),
-                    "sufficient_samples": summary.get("total_evaluations", 0) >= self.min_samples,
+                    "sufficient_samples": summary.get("total_evaluations", 0)
+                    >= self.min_samples,
                 }
             return {"available": False}
         except Exception:
@@ -290,6 +312,7 @@ class AgentMemory:
         """Aggregate accuracy statistics from backtest history."""
         try:
             from src.services.backtest_service import BacktestService
+
             service = BacktestService()
 
             if skill_id:
@@ -298,7 +321,11 @@ class AgentMemory:
                 summary = service.get_stock_summary(stock_code)
             else:
                 # Global summary across all analyses
-                summary = service.get_global_summary() if hasattr(service, "get_global_summary") else None
+                summary = (
+                    service.get_global_summary()
+                    if hasattr(service, "get_global_summary")
+                    else None
+                )
 
             if summary:
                 return {
@@ -309,4 +336,9 @@ class AgentMemory:
                 }
         except Exception:
             pass
-        return {"total": 0, "accuracy": 0.5, "direction_accuracy": 0.5, "avg_confidence": 0.5}
+        return {
+            "total": 0,
+            "accuracy": 0.5,
+            "direction_accuracy": 0.5,
+            "avg_confidence": 0.5,
+        }

@@ -11,8 +11,10 @@ P0 阶段：基础闭环
 - 五段式报告组装
 """
 
+import asyncio
+import inspect
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 
 from src.scoring import (
     calculate_bayesian,
@@ -110,8 +112,13 @@ class ResearchIntegrationService:
         """
         if enable_agent:
             try:
-                result = self._scoring_service.analyze_supply_chain_agent(
+                agent_coro = self._scoring_service.analyze_supply_chain_agent(
                     stock_code, stock_name, raw_data
+                )
+                result = (
+                    asyncio.run(agent_coro)
+                    if inspect.iscoroutine(agent_coro)
+                    else agent_coro
                 )
                 if result.get("success"):
                     return self._transform_supply_chain_from_agent(
@@ -320,8 +327,13 @@ class ResearchIntegrationService:
         """
         if enable_agent:
             try:
-                result = self._scoring_service.analyze_value_agent(
+                agent_coro = self._scoring_service.analyze_value_agent(
                     stock_code, stock_name, raw_data
+                )
+                result = (
+                    asyncio.run(agent_coro)
+                    if inspect.iscoroutine(agent_coro)
+                    else agent_coro
                 )
                 if result.get("success"):
                     return self._transform_value_from_agent(result.get("analysis", {}))
