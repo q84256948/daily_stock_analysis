@@ -325,7 +325,7 @@ def get_stock_bar(
                         record.created_at.isoformat() if record.created_at else None
                     ),
                     model_used=normalize_model_used(model_used),
-                    market_phase_summary=extract_market_phase_summary(
+                    market_phase_summary=extract_market_phase_summary(  # type: ignore[reportArgumentType]
                         getattr(record, "context_snapshot", None)
                     ),
                 )
@@ -433,7 +433,7 @@ def get_history_detail(
             current_price=current_price,
             change_pct=change_pct,
             model_used=normalize_model_used(result.get("model_used")),
-            market_phase_summary=market_phase_summary,
+            market_phase_summary=market_phase_summary,  # type: ignore[reportArgumentType]
         )
 
         summary = ReportSummary(
@@ -450,7 +450,7 @@ def get_history_detail(
             ),
             sentiment_score=result.get("sentiment_score"),
             sentiment_label=(
-                get_sentiment_label(result.get("sentiment_score"), report_language)
+                get_sentiment_label(int(result.get("sentiment_score")) if result.get("sentiment_score") is not None else 50, report_language)  # type: ignore[reportArgumentType]
                 if result.get("sentiment_score") is not None
                 else result.get("sentiment_label")
             ),
@@ -480,7 +480,7 @@ def get_history_detail(
             news_content=result.get("news_content"),
             raw_result=result.get("raw_result"),
             context_snapshot=api_context_snapshot,
-            analysis_context_pack_overview=analysis_context_pack_overview,
+            analysis_context_pack_overview=analysis_context_pack_overview,  # type: ignore[reportArgumentType]
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
             belong_boards=extracted_boards.get("belong_boards"),
@@ -640,7 +640,7 @@ def get_history_news(
         response_items = [
             NewsIntelItem(
                 title=item.get("title", ""),
-                snippet=item.get("snippet"),
+                snippet=(item.get("snippet") or ""),
                 url=item.get("url", ""),
             )
             for item in items
