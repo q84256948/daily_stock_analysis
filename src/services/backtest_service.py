@@ -6,13 +6,20 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import and_, select
 
 from src.config import get_config
-from src.core.backtest_engine import OVERALL_SENTINEL_CODE, BacktestEngine, EvaluationConfig
-from src.market_phase_summary import extract_market_phase_summary, normalize_analysis_phase_bucket
+from src.core.backtest_engine import (
+    OVERALL_SENTINEL_CODE,
+    BacktestEngine,
+    EvaluationConfig,
+)
+from src.market_phase_summary import (
+    extract_market_phase_summary,
+    normalize_analysis_phase_bucket,
+)
 from src.repositories.backtest_repo import BacktestRepository
 from src.repositories.stock_repo import StockRepository
 from src.schemas.decision_action import build_action_fields
@@ -51,18 +58,22 @@ class BacktestService:
         engine_version = getattr(config, "backtest_engine_version", "v1")
         neutral_band_pct = float(getattr(config, "backtest_neutral_band_pct", 2.0))
 
+        eval_window_days_int = cast(int, eval_window_days)
+        min_age_days_int = cast(int, min_age_days)
+        engine_version_str = cast(str, engine_version)
+
         eval_config = EvaluationConfig(
-            eval_window_days=int(eval_window_days),
+            eval_window_days=eval_window_days_int,
             neutral_band_pct=neutral_band_pct,
-            engine_version=str(engine_version),
+            engine_version=engine_version_str,
         )
 
         candidates = self.repo.get_candidates(
             code=code,
-            min_age_days=int(min_age_days),
+            min_age_days=min_age_days_int,
             limit=int(limit),
-            eval_window_days=int(eval_window_days),
-            engine_version=str(engine_version),
+            eval_window_days=eval_window_days_int,
+            engine_version=engine_version_str,
             force=force,
         )
 
@@ -86,19 +97,27 @@ class BacktestService:
                         BacktestResult(
                             analysis_history_id=analysis.id,
                             code=analysis.code,
-                            eval_window_days=int(eval_window_days),
-                            engine_version=str(engine_version),
+                            eval_window_days=eval_window_days_int,
+                            engine_version=engine_version_str,
                             eval_status="error",
                             evaluated_at=datetime.now(),
                             operation_advice=analysis.operation_advice,
                         )
                     )
                     continue
-                start_daily = self.stock_repo.get_start_daily(code=analysis.code, analysis_date=analysis_date)
+                start_daily = self.stock_repo.get_start_daily(
+                    code=analysis.code, analysis_date=analysis_date
+                )
 
                 if start_daily is None or start_daily.close is None:
-                    self._try_fill_daily_data(code=analysis.code, analysis_date=analysis_date, eval_window_days=eval_window_days)
-                    start_daily = self.stock_repo.get_start_daily(code=analysis.code, analysis_date=analysis_date)
+                    self._try_fill_daily_data(
+                        code=analysis.code,
+                        analysis_date=analysis_date,
+                        eval_window_days=eval_window_days_int,
+                    )
+                    start_daily = self.stock_repo.get_start_daily(
+                        code=analysis.code, analysis_date=analysis_date
+                    )
 
                 if start_daily is None or start_daily.close is None:
                     insufficient += 1
@@ -107,8 +126,8 @@ class BacktestService:
                             analysis_history_id=analysis.id,
                             code=analysis.code,
                             analysis_date=analysis_date,
-                            eval_window_days=int(eval_window_days),
-                            engine_version=str(engine_version),
+                            eval_window_days=eval_window_days_int,
+                            engine_version=engine_version_str,
                             eval_status="insufficient_data",
                             evaluated_at=datetime.now(),
                             operation_advice=analysis.operation_advice,
@@ -119,22 +138,26 @@ class BacktestService:
                 forward_bars = self.stock_repo.get_forward_bars(
                     code=analysis.code,
                     analysis_date=start_daily.date,
-                    eval_window_days=int(eval_window_days),
+                    eval_window_days=eval_window_days_int,
                 )
 
-                if len(forward_bars) < int(eval_window_days):
-                    self._try_fill_daily_data(code=analysis.code, analysis_date=start_daily.date, eval_window_days=eval_window_days)
+                if len(forward_bars) < eval_window_days_int:
+                    self._try_fill_daily_data(
+                        code=analysis.code,
+                        analysis_date=start_daily.date,
+                        eval_window_days=eval_window_days_int,
+                    )
                     forward_bars = self.stock_repo.get_forward_bars(
                         code=analysis.code,
                         analysis_date=start_daily.date,
-                        eval_window_days=int(eval_window_days),
+                        eval_window_days=eval_window_days_int,
                     )
 
                 evaluation = BacktestEngine.evaluate_single(
                     operation_advice=analysis.operation_advice,
                     analysis_date=start_daily.date,
                     start_price=float(start_daily.close),
-                    forward_bars=forward_bars,
+                    forward_bars=cast(Any, forward_bars),
                     stop_loss=analysis.stop_loss,
                     take_profit=analysis.take_profit,
                     config=eval_config,
@@ -153,12 +176,20 @@ class BacktestService:
                         analysis_history_id=analysis.id,
                         code=analysis.code,
                         analysis_date=evaluation.get("analysis_date"),
-                        eval_window_days=int(evaluation.get("eval_window_days") or eval_window_days),
-                        engine_version=str(evaluation.get("engine_version") or engine_version),
+                        eval_window_days=cast(
+                            int,
+                            evaluation.get("eval_window_days") or eval_window_days,
+                        ),
+                        engine_version=cast(
+                            str,
+                            evaluation.get("engine_version") or engine_version,
+                        ),
                         eval_status=str(evaluation.get("eval_status") or "error"),
                         evaluated_at=datetime.now(),
                         operation_advice=evaluation.get("operation_advice"),
-                        position_recommendation=evaluation.get("position_recommendation"),
+                        position_recommendation=evaluation.get(
+                            "position_recommendation"
+                        ),
                         start_price=evaluation.get("start_price"),
                         end_close=evaluation.get("end_close"),
                         max_high=evaluation.get("max_high"),
@@ -189,8 +220,8 @@ class BacktestService:
                         analysis_history_id=analysis.id,
                         code=analysis.code,
                         analysis_date=self._resolve_analysis_date(analysis),
-                        eval_window_days=int(eval_window_days),
-                        engine_version=str(engine_version),
+                        eval_window_days=eval_window_days_int,
+                        engine_version=engine_version_str,
                         eval_status="error",
                         evaluated_at=datetime.now(),
                         operation_advice=analysis.operation_advice,
@@ -199,13 +230,15 @@ class BacktestService:
 
         saved = 0
         if results_to_save:
-            saved = self.repo.save_results_batch(results_to_save, replace_existing=force)
+            saved = self.repo.save_results_batch(
+                results_to_save, replace_existing=force
+            )
 
         if saved:
             self._recompute_summaries(
                 touched_codes=sorted(touched_codes),
-                eval_window_days=int(eval_window_days),
-                engine_version=str(engine_version),
+                eval_window_days=eval_window_days_int,
+                engine_version=engine_version_str,
             )
 
         return {
@@ -231,7 +264,11 @@ class BacktestService:
         engine_version = str(getattr(config, "backtest_engine_version", "v1"))
 
         phase_bucket = self._normalize_phase_filter(analysis_phase)
-        if eval_window_days is None and (analysis_date_from is not None or analysis_date_to is not None or phase_bucket is not None):
+        if eval_window_days is None and (
+            analysis_date_from is not None
+            or analysis_date_to is not None
+            or phase_bucket is not None
+        ):
             eval_window_days = self._infer_eval_window_for_query(
                 code=code,
                 engine_version=engine_version,
@@ -262,7 +299,15 @@ class BacktestService:
             limit=limit,
         )
         items = []
-        for result, stock_name, trend_prediction, _created_at, context_snapshot, raw_result, report_type in rows:
+        for (
+            result,
+            stock_name,
+            trend_prediction,
+            _created_at,
+            context_snapshot,
+            raw_result,
+            report_type,
+        ) in rows:
             summary = extract_market_phase_summary(context_snapshot)
             items.append(
                 self._result_to_dict(
@@ -292,7 +337,11 @@ class BacktestService:
         lookup_code = OVERALL_SENTINEL_CODE if scope == "overall" else code
 
         phase_bucket = self._normalize_phase_filter(analysis_phase)
-        if analysis_date_from is not None or analysis_date_to is not None or phase_bucket is not None:
+        if (
+            analysis_date_from is not None
+            or analysis_date_to is not None
+            or phase_bucket is not None
+        ):
             if eval_window_days is None:
                 eval_window_days = self._infer_eval_window_for_query(
                     code=code,
@@ -314,7 +363,9 @@ class BacktestService:
                         "Phase-filtered summary candidate set matches too many rows; "
                         "narrow the analysis date range, stock code, or evaluation window."
                     )
-                raise ValueError("Date-filtered summary matches too many rows; narrow the analysis date range or stock code.")
+                raise ValueError(
+                    "Date-filtered summary matches too many rows; narrow the analysis date range or stock code."
+                )
             if phase_bucket is not None:
                 rows_with_context = self.repo.list_results_with_context(
                     code=code,
@@ -333,13 +384,17 @@ class BacktestService:
                     for row, snapshot in rows_with_context
                     if self._phase_bucket_from_snapshot(snapshot) == phase_bucket
                 ]
-                phase_counts = self._phase_counts_from_contexts([snapshot for _, snapshot in filtered_pairs])
+                phase_counts = self._phase_counts_from_contexts(
+                    [snapshot for _, snapshot in filtered_pairs]
+                )
                 filtered_rows = [row for row, _ in filtered_pairs]
                 return self._build_dynamic_summary(
                     rows=filtered_rows,
                     scope=scope,
                     code=lookup_code,
-                    eval_window_days=int(eval_window_days) if eval_window_days is not None else None,
+                    eval_window_days=int(eval_window_days)
+                    if eval_window_days is not None
+                    else None,
                     engine_version=engine_version,
                     max_rows=self.MAX_DYNAMIC_SUMMARY_ROWS,
                     phase_breakdown=phase_counts["phase_breakdown"],
@@ -356,7 +411,9 @@ class BacktestService:
                 rows=rows,
                 scope=scope,
                 code=lookup_code,
-                eval_window_days=int(eval_window_days) if eval_window_days is not None else None,
+                eval_window_days=int(eval_window_days)
+                if eval_window_days is not None
+                else None,
                 engine_version=engine_version,
                 max_rows=self.MAX_DYNAMIC_SUMMARY_ROWS,
             )
@@ -371,19 +428,29 @@ class BacktestService:
             return None
         return self._summary_to_dict(summary)
 
-    def get_global_summary(self, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    def get_global_summary(
+        self, *, eval_window_days: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
         """Return overall backtest metrics normalized for Agent memory consumers."""
         return self._normalize_learning_summary(
-            self.get_summary(scope="overall", code=None, eval_window_days=eval_window_days)
+            self.get_summary(
+                scope="overall", code=None, eval_window_days=eval_window_days
+            )
         )
 
-    def get_stock_summary(self, code: str, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    def get_stock_summary(
+        self, code: str, *, eval_window_days: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
         """Return per-stock backtest metrics normalized for Agent memory consumers."""
         return self._normalize_learning_summary(
-            self.get_summary(scope="stock", code=code, eval_window_days=eval_window_days)
+            self.get_summary(
+                scope="stock", code=code, eval_window_days=eval_window_days
+            )
         )
 
-    def get_skill_summary(self, skill_id: str, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    def get_skill_summary(
+        self, skill_id: str, *, eval_window_days: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
         """Return skill-like summary metrics for Agent memory consumers.
 
         The current backtest storage layer only persists overall / per-stock rollups.
@@ -393,7 +460,9 @@ class BacktestService:
         """
         return None
 
-    def get_strategy_summary(self, strategy_id: str, *, eval_window_days: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    def get_strategy_summary(
+        self, strategy_id: str, *, eval_window_days: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
         """Compatibility wrapper for legacy strategy-based callers."""
         summary = self.get_skill_summary(strategy_id, eval_window_days=eval_window_days)
         if summary is None:
@@ -450,7 +519,9 @@ class BacktestService:
         while True:
             remaining_probe_rows = self.MAX_DYNAMIC_SUMMARY_ROWS + 1 - scanned
             if remaining_probe_rows <= 0:
-                raise ValueError("Phase-filtered results match too many rows; narrow the analysis date range or stock code.")
+                raise ValueError(
+                    "Phase-filtered results match too many rows; narrow the analysis date range or stock code."
+                )
             batch_limit = min(batch_size, remaining_probe_rows)
             batch = self.repo.get_results_with_context_batch(
                 code=code,
@@ -466,7 +537,9 @@ class BacktestService:
                 break
             scanned += len(batch)
             if scanned > self.MAX_DYNAMIC_SUMMARY_ROWS:
-                raise ValueError("Phase-filtered results match too many rows; narrow the analysis date range or stock code.")
+                raise ValueError(
+                    "Phase-filtered results match too many rows; narrow the analysis date range or stock code."
+                )
             sql_offset += len(batch)
             for (
                 result,
@@ -482,7 +555,17 @@ class BacktestService:
                 if bucket != phase_bucket:
                     continue
                 if matched_total >= page_offset and len(page_rows) < limit:
-                    page_rows.append((result, stock_name, trend_prediction, summary, bucket, raw_result, report_type))
+                    page_rows.append(
+                        (
+                            result,
+                            stock_name,
+                            trend_prediction,
+                            summary,
+                            bucket,
+                            raw_result,
+                            report_type,
+                        )
+                    )
                 matched_total += 1
             if len(batch) < batch_limit:
                 break
@@ -510,7 +593,9 @@ class BacktestService:
             return None
         allowed = {"premarket", "intraday", "postmarket", "unknown"}
         if text not in allowed:
-            raise ValueError("analysis_phase must be one of premarket, intraday, postmarket, unknown")
+            raise ValueError(
+                "analysis_phase must be one of premarket, intraday, postmarket, unknown"
+            )
         return text
 
     @staticmethod
@@ -521,19 +606,30 @@ class BacktestService:
 
     @classmethod
     def _phase_bucket_from_snapshot(cls, context_snapshot: Optional[str]) -> str:
-        return cls._phase_bucket_from_summary(extract_market_phase_summary(context_snapshot))
+        return cls._phase_bucket_from_summary(
+            extract_market_phase_summary(context_snapshot)
+        )
 
     @classmethod
-    def _phase_counts_from_contexts(cls, snapshots: List[Optional[str]]) -> Dict[str, Dict[str, int]]:
+    def _phase_counts_from_contexts(
+        cls, snapshots: List[Optional[str]]
+    ) -> Dict[str, Dict[str, int]]:
         phase_breakdown = {"premarket": 0, "intraday": 0, "postmarket": 0, "unknown": 0}
         raw_phase_counts: Dict[str, int] = {}
         for snapshot in snapshots:
             summary = extract_market_phase_summary(snapshot)
-            raw_phase = str(summary.get("phase")) if isinstance(summary, dict) and summary.get("phase") else "unknown"
+            raw_phase = (
+                str(summary.get("phase"))
+                if isinstance(summary, dict) and summary.get("phase")
+                else "unknown"
+            )
             raw_phase_counts[raw_phase] = raw_phase_counts.get(raw_phase, 0) + 1
             bucket = cls._phase_bucket_from_summary(summary)
             phase_breakdown[bucket] = phase_breakdown.get(bucket, 0) + 1
-        return {"phase_breakdown": phase_breakdown, "raw_phase_counts": raw_phase_counts}
+        return {
+            "phase_breakdown": phase_breakdown,
+            "raw_phase_counts": raw_phase_counts,
+        }
 
     def _resolve_analysis_date(self, analysis) -> Optional[date]:
         parsed = self.repo.parse_analysis_date_from_snapshot(analysis.context_snapshot)
@@ -541,10 +637,14 @@ class BacktestService:
             return parsed
         if getattr(analysis, "created_at", None):
             return analysis.created_at.date()
-        logger.warning(f"无法确定分析日期，跳过记录: {analysis.code}#{getattr(analysis, 'id', '?')}")
+        logger.warning(
+            f"无法确定分析日期，跳过记录: {analysis.code}#{getattr(analysis, 'id', '?')}"
+        )
         return None
 
-    def _try_fill_daily_data(self, *, code: str, analysis_date: date, eval_window_days: int) -> None:
+    def _try_fill_daily_data(
+        self, *, code: str, analysis_date: date, eval_window_days: int
+    ) -> None:
         try:
             from data_provider.base import DataFetcherManager
 
@@ -563,19 +663,25 @@ class BacktestService:
         except Exception as exc:
             logger.warning(f"补全日线数据失败({code}): {exc}")
 
-    def _recompute_summaries(self, *, touched_codes: List[str], eval_window_days: int, engine_version: str) -> None:
+    def _recompute_summaries(
+        self, *, touched_codes: List[str], eval_window_days: int, engine_version: str
+    ) -> None:
         with self.db.get_session() as session:
             # overall
-            overall_rows = session.execute(
-                select(BacktestResult).where(
-                    and_(
-                        BacktestResult.eval_window_days == eval_window_days,
-                        BacktestResult.engine_version == engine_version,
+            overall_rows = (
+                session.execute(
+                    select(BacktestResult).where(
+                        and_(
+                            BacktestResult.eval_window_days == eval_window_days,
+                            BacktestResult.engine_version == engine_version,
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             overall_data = BacktestEngine.compute_summary(
-                results=overall_rows,
+                results=cast(Any, overall_rows),
                 scope="overall",
                 code=OVERALL_SENTINEL_CODE,
                 eval_window_days=eval_window_days,
@@ -585,17 +691,21 @@ class BacktestService:
             self.repo.upsert_summary(overall_summary)
 
             for code in touched_codes:
-                rows = session.execute(
-                    select(BacktestResult).where(
-                        and_(
-                            BacktestResult.code == code,
-                            BacktestResult.eval_window_days == eval_window_days,
-                            BacktestResult.engine_version == engine_version,
+                rows = (
+                    session.execute(
+                        select(BacktestResult).where(
+                            and_(
+                                BacktestResult.code == code,
+                                BacktestResult.eval_window_days == eval_window_days,
+                                BacktestResult.engine_version == engine_version,
+                            )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
                 data = BacktestEngine.compute_summary(
-                    results=rows,
+                    results=cast(Any, rows),
                     scope="stock",
                     code=code,
                     eval_window_days=eval_window_days,
@@ -629,8 +739,12 @@ class BacktestService:
             take_profit_trigger_rate=summary_data.get("take_profit_trigger_rate"),
             ambiguous_rate=summary_data.get("ambiguous_rate"),
             avg_days_to_first_hit=summary_data.get("avg_days_to_first_hit"),
-            advice_breakdown_json=json.dumps(summary_data.get("advice_breakdown") or {}, ensure_ascii=False),
-            diagnostics_json=json.dumps(summary_data.get("diagnostics") or {}, ensure_ascii=False),
+            advice_breakdown_json=json.dumps(
+                summary_data.get("advice_breakdown") or {}, ensure_ascii=False
+            ),
+            diagnostics_json=json.dumps(
+                summary_data.get("diagnostics") or {}, ensure_ascii=False
+            ),
         )
 
     @staticmethod
@@ -645,88 +759,109 @@ class BacktestService:
     ) -> Dict[str, Any]:
         parsed_raw_result = parse_json_field(raw_result)
         raw = parsed_raw_result if isinstance(parsed_raw_result, dict) else {}
+        row_any = cast(Any, row)
         action_fields = build_action_fields(
-            operation_advice=raw.get("operation_advice") or row.operation_advice,
+            operation_advice=raw.get("operation_advice") or row_any.operation_advice,
             explicit_action=raw.get("action"),
-            report_type=report_type or ("market_review" if row.code == "market_review" else None),
+            report_type=report_type
+            or ("market_review" if row_any.code == "market_review" else None),
             report_language=raw.get("report_language"),
         )
         return {
-            "analysis_history_id": row.analysis_history_id,
-            "code": row.code,
+            "analysis_history_id": row_any.analysis_history_id,
+            "code": row_any.code,
             "stock_name": stock_name,
-            "analysis_date": row.analysis_date.isoformat() if row.analysis_date else None,
-            "eval_window_days": row.eval_window_days,
-            "engine_version": row.engine_version,
-            "eval_status": row.eval_status,
-            "evaluated_at": row.evaluated_at.isoformat() if row.evaluated_at else None,
-            "operation_advice": row.operation_advice,
+            "analysis_date": row_any.analysis_date.isoformat()
+            if row_any.analysis_date
+            else None,
+            "eval_window_days": row_any.eval_window_days,
+            "engine_version": row_any.engine_version,
+            "eval_status": row_any.eval_status,
+            "evaluated_at": row_any.evaluated_at.isoformat()
+            if row_any.evaluated_at
+            else None,
+            "operation_advice": row_any.operation_advice,
             "action": action_fields["action"],
             "action_label": action_fields["action_label"],
             "trend_prediction": trend_prediction,
             "market_phase": market_phase,
             "market_phase_summary": market_phase_summary,
-            "position_recommendation": row.position_recommendation,
-            "start_price": row.start_price,
-            "end_close": row.end_close,
-            "max_high": row.max_high,
-            "min_low": row.min_low,
-            "stock_return_pct": row.stock_return_pct,
-            "actual_return_pct": row.stock_return_pct,
-            "actual_movement": BacktestService._actual_movement_from_return(row.stock_return_pct),
-            "direction_expected": row.direction_expected,
-            "direction_correct": row.direction_correct,
-            "outcome": row.outcome,
-            "stop_loss": row.stop_loss,
-            "take_profit": row.take_profit,
-            "hit_stop_loss": row.hit_stop_loss,
-            "hit_take_profit": row.hit_take_profit,
-            "first_hit": row.first_hit,
-            "first_hit_date": row.first_hit_date.isoformat() if row.first_hit_date else None,
-            "first_hit_trading_days": row.first_hit_trading_days,
-            "simulated_entry_price": row.simulated_entry_price,
-            "simulated_exit_price": row.simulated_exit_price,
-            "simulated_exit_reason": row.simulated_exit_reason,
-            "simulated_return_pct": row.simulated_return_pct,
+            "position_recommendation": row_any.position_recommendation,
+            "start_price": row_any.start_price,
+            "end_close": row_any.end_close,
+            "max_high": row_any.max_high,
+            "min_low": row_any.min_low,
+            "stock_return_pct": row_any.stock_return_pct,
+            "actual_return_pct": row_any.stock_return_pct,
+            "actual_movement": BacktestService._actual_movement_from_return(
+                row_any.stock_return_pct
+            ),
+            "direction_expected": row_any.direction_expected,
+            "direction_correct": row_any.direction_correct,
+            "outcome": row_any.outcome,
+            "stop_loss": row_any.stop_loss,
+            "take_profit": row_any.take_profit,
+            "hit_stop_loss": row_any.hit_stop_loss,
+            "hit_take_profit": row_any.hit_take_profit,
+            "first_hit": row_any.first_hit,
+            "first_hit_date": row_any.first_hit_date.isoformat()
+            if row_any.first_hit_date
+            else None,
+            "first_hit_trading_days": row_any.first_hit_trading_days,
+            "simulated_entry_price": row_any.simulated_entry_price,
+            "simulated_exit_price": row_any.simulated_exit_price,
+            "simulated_exit_reason": row_any.simulated_exit_reason,
+            "simulated_return_pct": row_any.simulated_return_pct,
         }
 
     @staticmethod
     def _summary_to_dict(row: BacktestSummary) -> Dict[str, Any]:
+        row_any = cast(Any, row)
         return {
-            "scope": row.scope,
-            "code": None if row.code == OVERALL_SENTINEL_CODE else row.code,
-            "eval_window_days": row.eval_window_days,
-            "engine_version": row.engine_version,
-            "computed_at": row.computed_at.isoformat() if row.computed_at else None,
-            "total_evaluations": row.total_evaluations,
-            "completed_count": row.completed_count,
-            "insufficient_count": row.insufficient_count,
-            "long_count": row.long_count,
-            "cash_count": row.cash_count,
-            "win_count": row.win_count,
-            "loss_count": row.loss_count,
-            "neutral_count": row.neutral_count,
-            "direction_accuracy_pct": row.direction_accuracy_pct,
-            "win_rate_pct": row.win_rate_pct,
-            "neutral_rate_pct": row.neutral_rate_pct,
-            "avg_stock_return_pct": row.avg_stock_return_pct,
-            "avg_simulated_return_pct": row.avg_simulated_return_pct,
-            "stop_loss_trigger_rate": row.stop_loss_trigger_rate,
-            "take_profit_trigger_rate": row.take_profit_trigger_rate,
-            "ambiguous_rate": row.ambiguous_rate,
-            "avg_days_to_first_hit": row.avg_days_to_first_hit,
-            "advice_breakdown": json.loads(row.advice_breakdown_json) if row.advice_breakdown_json else {},
-            "diagnostics": json.loads(row.diagnostics_json) if row.diagnostics_json else {},
+            "scope": row_any.scope,
+            "code": None if row_any.code == OVERALL_SENTINEL_CODE else row_any.code,
+            "eval_window_days": row_any.eval_window_days,
+            "engine_version": row_any.engine_version,
+            "computed_at": row_any.computed_at.isoformat()
+            if row_any.computed_at
+            else None,
+            "total_evaluations": row_any.total_evaluations,
+            "completed_count": row_any.completed_count,
+            "insufficient_count": row_any.insufficient_count,
+            "long_count": row_any.long_count,
+            "cash_count": row_any.cash_count,
+            "win_count": row_any.win_count,
+            "loss_count": row_any.loss_count,
+            "neutral_count": row_any.neutral_count,
+            "direction_accuracy_pct": row_any.direction_accuracy_pct,
+            "win_rate_pct": row_any.win_rate_pct,
+            "neutral_rate_pct": row_any.neutral_rate_pct,
+            "avg_stock_return_pct": row_any.avg_stock_return_pct,
+            "avg_simulated_return_pct": row_any.avg_simulated_return_pct,
+            "stop_loss_trigger_rate": row_any.stop_loss_trigger_rate,
+            "take_profit_trigger_rate": row_any.take_profit_trigger_rate,
+            "ambiguous_rate": row_any.ambiguous_rate,
+            "avg_days_to_first_hit": row_any.avg_days_to_first_hit,
+            "advice_breakdown": json.loads(row_any.advice_breakdown_json)
+            if row_any.advice_breakdown_json
+            else {},
+            "diagnostics": json.loads(row_any.diagnostics_json)
+            if row_any.diagnostics_json
+            else {},
         }
 
     @staticmethod
-    def _normalize_learning_summary(summary: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _normalize_learning_summary(
+        summary: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
         """Normalize summary metrics to the ratio-based shape expected by Agent memory."""
         if summary is None:
             return None
 
         normalized = dict(summary)
-        normalized["win_rate"] = BacktestService._pct_to_ratio(summary.get("win_rate_pct"), default=0.5)
+        normalized["win_rate"] = BacktestService._pct_to_ratio(
+            summary.get("win_rate_pct"), default=0.5
+        )
         normalized["direction_accuracy"] = BacktestService._pct_to_ratio(
             summary.get("direction_accuracy_pct"),
             default=0.5,
@@ -735,13 +870,15 @@ class BacktestService:
         avg_return_pct = summary.get("avg_simulated_return_pct")
         if avg_return_pct is None:
             avg_return_pct = summary.get("avg_stock_return_pct")
-        normalized["avg_return"] = BacktestService._pct_to_ratio(avg_return_pct, default=0.0)
+        normalized["avg_return"] = BacktestService._pct_to_ratio(
+            avg_return_pct, default=0.0
+        )
         return normalized
 
     @staticmethod
     def _pct_to_ratio(value: Optional[float], default: float = 0.0) -> float:
         try:
-            return float(value) / 100.0
+            return float(cast(float, value)) / 100.0
         except (TypeError, ValueError):
             return default
 
@@ -771,15 +908,21 @@ class BacktestService:
         phase_breakdown: Optional[Dict[str, int]] = None,
         raw_phase_counts: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
-        filtered_rows = [row for row in rows if getattr(row, "engine_version", None) == engine_version]
+        filtered_rows = [
+            row
+            for row in rows
+            if getattr(row, "engine_version", None) == engine_version
+        ]
         if eval_window_days is not None:
             summary_window_days = int(eval_window_days)
         else:
-            window_values = sorted({
-                int(row.eval_window_days)
-                for row in filtered_rows
-                if getattr(row, "eval_window_days", None) is not None
-            })
+            window_values = sorted(
+                {
+                    int(cast(Any, row).eval_window_days)
+                    for row in filtered_rows
+                    if getattr(row, "eval_window_days", None) is not None
+                }
+            )
             if len(window_values) > 1:
                 logger.warning(
                     "Multiple eval_window_days values found for dynamic summary; using %s for engine_version=%s, scope=%s, code=%s",
@@ -791,10 +934,14 @@ class BacktestService:
             if window_values:
                 summary_window_days = window_values[0]
             else:
-                summary_window_days = int(getattr(get_config(), "backtest_eval_window_days", 10))
+                summary_window_days = int(
+                    getattr(get_config(), "backtest_eval_window_days", 10)
+                )
 
         filtered_rows = [
-            row for row in filtered_rows if getattr(row, "eval_window_days", None) == summary_window_days
+            row
+            for row in filtered_rows
+            if getattr(row, "eval_window_days", None) == summary_window_days
         ]
 
         if max_rows is not None and len(filtered_rows) > max_rows:
@@ -803,7 +950,7 @@ class BacktestService:
             )
 
         summary = BacktestEngine.compute_summary(
-            results=filtered_rows,
+            results=cast(Any, filtered_rows),
             scope=scope,
             code=code,
             eval_window_days=summary_window_days,
@@ -817,6 +964,10 @@ class BacktestService:
         if raw_phase_counts is not None:
             diagnostics["raw_phase_counts"] = raw_phase_counts
         summary["diagnostics"] = diagnostics
-        summary["code"] = None if summary.get("code") == OVERALL_SENTINEL_CODE else summary.get("code")
+        summary["code"] = (
+            None
+            if summary.get("code") == OVERALL_SENTINEL_CODE
+            else summary.get("code")
+        )
         summary["computed_at"] = datetime.now().isoformat()
         return summary
