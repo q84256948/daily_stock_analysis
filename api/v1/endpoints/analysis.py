@@ -24,7 +24,7 @@ import re
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union, Dict, Any
+from typing import Optional, Union, Dict, Any, cast
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -171,11 +171,16 @@ def _run_market_review_background(
         if not report:
             raise RuntimeError("大盘复盘未返回可持久化报告")
         if hasattr(report, "report"):
-            return {
-                "result": report.report,
-                "market_review_payload": getattr(report, "market_review_payload", None),
-            }
-        return {"result": report}
+            return cast(
+                None,
+                {
+                    "result": cast(Any, report).report,
+                    "market_review_payload": getattr(
+                        report, "market_review_payload", None
+                    ),
+                },
+            )
+        return cast(None, {"result": report})
     finally:
         _release_market_review_lock(lock_token)
 
@@ -374,9 +379,9 @@ def _handle_async_analysis_batch(
             task_id=task.task_id,
             trace_id=_get_task_trace_id(task),
             stock_code=task.stock_code,
-            status="pending",
+            status=cast(Any, "pending"),
             message=f"分析任务已加入队列: {task.stock_code}",
-            analysis_phase=task.analysis_phase,
+            analysis_phase=cast(Any, task.analysis_phase),
         )
         for task in accepted_tasks
     ]
@@ -405,7 +410,7 @@ def _handle_async_analysis_batch(
         task_accepted = TaskAccepted(
             task_id=accepted[0].task_id,
             trace_id=accepted[0].trace_id,
-            status="pending",
+            status=cast(Any, "pending"),
             message=accepted[0].message,
             analysis_phase=accepted[0].analysis_phase,
         )
@@ -504,7 +509,9 @@ def trigger_market_review(
     config: Config = Depends(get_config_dep),
 ) -> MarketReviewAccepted:
     """Trigger market review from Web/API without blocking the request."""
-    request = request or MarketReviewRequest()
+    request = request or MarketReviewRequest(
+        send_notification=True, report_language="zh"
+    )
 
     runtime_config = _with_request_report_language(
         config,
@@ -603,7 +610,7 @@ def get_task_list(
             trace_id=_get_task_trace_id(t),
             stock_code=t.stock_code,
             stock_name=t.stock_name,
-            status=t.status.value,
+            status=cast(Any, t.status.value),
             progress=t.progress,
             message=t.message,
             report_type=t.report_type,
@@ -613,7 +620,7 @@ def get_task_list(
             error=t.error,
             original_query=t.original_query,
             selection_source=t.selection_source,
-            analysis_phase=t.analysis_phase,
+            analysis_phase=cast(Any, t.analysis_phase),
             skills=getattr(t, "skills", None),
         )
         for t in all_tasks
@@ -853,24 +860,27 @@ def _prepare_report_for_task_enrichment(
 
 def _ensure_report_action_fields(report_data: Dict[str, Any]) -> Dict[str, Any]:
     enriched_report = dict(report_data)
-    meta = dict(enriched_report.get("meta") or {})
-    summary = dict(enriched_report.get("summary") or {})
-    details = (
+    meta: Dict[str, Any] = dict(enriched_report.get("meta") or {})
+    summary: Dict[str, Any] = dict(enriched_report.get("summary") or {})
+    details: Dict[str, Any] = cast(
+        Dict[str, Any],
         enriched_report.get("details")
         if isinstance(enriched_report.get("details"), dict)
-        else {}
+        else {},
     )
     raw_result = (
         details.get("raw_result") if isinstance(details.get("raw_result"), dict) else {}
     )
     report_language = normalize_report_language(
-        meta.get("report_language") or raw_result.get("report_language")
+        cast(Any, meta).get("report_language")
+        or cast(Any, raw_result).get("report_language")
     )
     action_fields = build_action_fields(
-        operation_advice=raw_result.get("operation_advice")
-        or summary.get("operation_advice"),
-        explicit_action=raw_result.get("action") or summary.get("action"),
-        report_type=meta.get("report_type"),
+        operation_advice=cast(Any, raw_result).get("operation_advice")
+        or cast(Any, summary).get("operation_advice"),
+        explicit_action=cast(Any, raw_result).get("action")
+        or cast(Any, summary).get("action"),
+        report_type=cast(Any, meta).get("report_type"),
         report_language=report_language,
     )
     summary["action"] = action_fields["action"]
@@ -1003,7 +1013,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
         return TaskStatus(
             task_id=task.task_id,
             trace_id=_get_task_trace_id(task),
-            status=task.status.value,
+            status=cast(Any, task.status.value),
             progress=task.progress,
             result=result,
             market_review_report=market_review_report,
@@ -1012,7 +1022,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             stock_name=task.stock_name,
             original_query=task.original_query,
             selection_source=task.selection_source,
-            analysis_phase=task.analysis_phase,
+            analysis_phase=cast(Any, task.analysis_phase),
             skills=getattr(task, "skills", None),
         )
 
@@ -1048,13 +1058,17 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                 return TaskStatus(
                     task_id=task_id,
                     trace_id=task_id,
-                    status="completed",
+                    status=cast(Any, "completed"),
                     progress=100,
                     result=None,
                     market_review_report=market_review_report,
                     market_review_payload=market_review_payload,
                     error=None,
                     stock_name=record.name,
+                    original_query=None,
+                    selection_source=None,
+                    analysis_phase=None,
+                    skills=None,
                 )
 
             model_used = normalize_model_used(
@@ -1113,9 +1127,11 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             ):
                 details = ReportDetails(
                     news_content=getattr(record, "news_content", None),
-                    raw_result=raw_result,
+                    raw_result=cast(Any, raw_result),
                     context_snapshot=api_context_snapshot,
-                    analysis_context_pack_overview=analysis_context_pack_overview,
+                    analysis_context_pack_overview=cast(
+                        Any, analysis_context_pack_overview
+                    ),
                     financial_report=extracted_fundamental.get("financial_report"),
                     dividend_metrics=extracted_fundamental.get("dividend_metrics"),
                     belong_boards=extracted_boards.get("belong_boards"),
@@ -1146,10 +1162,11 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     model_used=model_used,
                     current_price=current_price,
                     change_pct=change_pct,
-                    market_phase_summary=market_phase_summary,
+                    market_phase_summary=cast(Any, market_phase_summary),
                 ),
                 summary=ReportSummary(
                     sentiment_score=record.sentiment_score,
+                    sentiment_label=None,
                     operation_advice=record.operation_advice,
                     action=action_fields["action"],
                     action_label=action_fields["action_label"],
@@ -1180,7 +1197,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
             return TaskStatus(
                 task_id=task_id,
                 trace_id=task_id,
-                status="completed",
+                status=cast(Any, "completed"),
                 progress=100,
                 result=AnalysisResultResponse(
                     query_id=task_id,
@@ -1190,7 +1207,7 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                     report=report_dict,
                     diagnostic_summary=build_run_diagnostic_summary(
                         context_snapshot=context_snapshot,
-                        raw_result=raw_result,
+                        raw_result=cast(Any, raw_result),
                         report_saved=True,
                         query_id=task_id,
                         stock_code=record.code,
@@ -1201,6 +1218,12 @@ def get_analysis_status(task_id: str) -> TaskStatus:
                 ),
                 error=None,
                 skills=skills,
+                market_review_report=None,
+                market_review_payload=None,
+                stock_name=stock_name,
+                original_query=None,
+                selection_source=None,
+                analysis_phase=None,
             )
 
     except Exception as e:
@@ -1307,6 +1330,7 @@ def _build_analysis_report(
             market_phase_summary = render_market_phase_summary(meta_phase_summary)
 
     meta = ReportMeta(
+        id=0,
         query_id=meta_data.get("query_id", query_id),
         stock_code=meta_data.get("stock_code", stock_code),
         stock_name=localized_stock_name,
@@ -1316,7 +1340,7 @@ def _build_analysis_report(
         current_price=current_price,
         change_pct=change_pct,
         model_used=normalize_model_used(meta_data.get("model_used")),
-        market_phase_summary=market_phase_summary,
+        market_phase_summary=cast(Any, market_phase_summary),
     )
 
     raw_result_data = (
@@ -1389,7 +1413,7 @@ def _build_analysis_report(
             or details_data.get("news_content"),
             raw_result=details_data,
             context_snapshot=api_context_snapshot,
-            analysis_context_pack_overview=analysis_context_pack_overview,
+            analysis_context_pack_overview=cast(Any, analysis_context_pack_overview),
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
             belong_boards=extracted_boards.get("belong_boards"),

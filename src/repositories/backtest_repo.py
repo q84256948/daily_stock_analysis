@@ -9,11 +9,16 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from sqlalchemy import and_, delete, desc, func, or_, select
 
-from src.storage import BacktestResult, BacktestSummary, DatabaseManager, AnalysisHistory
+from src.storage import (
+    BacktestResult,
+    BacktestSummary,
+    DatabaseManager,
+    AnalysisHistory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,29 +77,41 @@ class BacktestRepository:
 
             query = query.order_by(desc(AnalysisHistory.created_at)).limit(limit)
             rows = session.execute(query).scalars().all()
-            return list(rows)
+            return cast(Any, list(rows))
 
     def save_result(self, result: BacktestResult) -> None:
         with self.db.get_session() as session:
             session.add(result)
             session.commit()
 
-    def save_results_batch(self, results: List[BacktestResult], *, replace_existing: bool = False) -> int:
+    def save_results_batch(
+        self, results: List[BacktestResult], *, replace_existing: bool = False
+    ) -> int:
         if not results:
             return 0
 
         with self.db.get_session() as session:
             try:
                 if replace_existing:
-                    analysis_ids = sorted({r.analysis_history_id for r in results if r.analysis_history_id is not None})
-                    key_pairs = sorted({(r.eval_window_days, r.engine_version) for r in results})
+                    analysis_ids = sorted(
+                        {
+                            r.analysis_history_id
+                            for r in results
+                            if r.analysis_history_id is not None
+                        }
+                    )
+                    key_pairs = sorted(
+                        {(r.eval_window_days, r.engine_version) for r in results}
+                    )
 
                     if analysis_ids and key_pairs:
                         for window_days, engine_version in key_pairs:
                             session.execute(
                                 delete(BacktestResult).where(
                                     and_(
-                                        BacktestResult.analysis_history_id.in_(analysis_ids),
+                                        BacktestResult.analysis_history_id.in_(
+                                            analysis_ids
+                                        ),
                                         BacktestResult.eval_window_days == window_days,
                                         BacktestResult.engine_version == engine_version,
                                     )
@@ -131,14 +148,20 @@ class BacktestRepository:
                 days=days,
             )
 
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
 
-            total = session.execute(
-                select(func.count(BacktestResult.id))
-                .select_from(BacktestResult)
-                .join(AnalysisHistory, AnalysisHistory.id == BacktestResult.analysis_history_id)
-                .where(where_clause)
-            ).scalar() or 0
+            total = (
+                session.execute(
+                    select(func.count(BacktestResult.id))
+                    .select_from(BacktestResult)
+                    .join(
+                        AnalysisHistory,
+                        AnalysisHistory.id == BacktestResult.analysis_history_id,
+                    )
+                    .where(cast(Any, where_clause))
+                ).scalar()
+                or 0
+            )
             rows = session.execute(
                 select(
                     BacktestResult,
@@ -149,13 +172,19 @@ class BacktestRepository:
                     AnalysisHistory.raw_result,
                     AnalysisHistory.report_type,
                 )
-                .join(AnalysisHistory, AnalysisHistory.id == BacktestResult.analysis_history_id)
-                .where(where_clause)
-                .order_by(desc(BacktestResult.analysis_date), desc(BacktestResult.evaluated_at))
+                .join(
+                    AnalysisHistory,
+                    AnalysisHistory.id == BacktestResult.analysis_history_id,
+                )
+                .where(cast(Any, where_clause))
+                .order_by(
+                    desc(BacktestResult.analysis_date),
+                    desc(BacktestResult.evaluated_at),
+                )
                 .offset(offset)
                 .limit(limit)
             ).all()
-            return list(rows), int(total)
+            return cast(Any, list(rows)), int(total)
 
     def get_results_with_context_batch(
         self,
@@ -179,7 +208,7 @@ class BacktestRepository:
                 analysis_date_to=analysis_date_to,
                 days=days,
             )
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
             rows = session.execute(
                 select(
                     BacktestResult,
@@ -190,13 +219,19 @@ class BacktestRepository:
                     AnalysisHistory.raw_result,
                     AnalysisHistory.report_type,
                 )
-                .join(AnalysisHistory, AnalysisHistory.id == BacktestResult.analysis_history_id)
-                .where(where_clause)
-                .order_by(desc(BacktestResult.analysis_date), desc(BacktestResult.evaluated_at))
+                .join(
+                    AnalysisHistory,
+                    AnalysisHistory.id == BacktestResult.analysis_history_id,
+                )
+                .where(cast(Any, where_clause))
+                .order_by(
+                    desc(BacktestResult.analysis_date),
+                    desc(BacktestResult.evaluated_at),
+                )
                 .offset(offset)
                 .limit(limit)
             ).all()
-            return list(rows)
+            return cast(Any, list(rows))
 
     def list_results_with_context(
         self,
@@ -218,16 +253,22 @@ class BacktestRepository:
                 analysis_date_to=analysis_date_to,
                 days=days,
             )
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
             query = (
                 select(BacktestResult, AnalysisHistory.context_snapshot)
-                .join(AnalysisHistory, AnalysisHistory.id == BacktestResult.analysis_history_id)
-                .where(where_clause)
-                .order_by(desc(BacktestResult.analysis_date), desc(BacktestResult.evaluated_at))
+                .join(
+                    AnalysisHistory,
+                    AnalysisHistory.id == BacktestResult.analysis_history_id,
+                )
+                .where(cast(Any, where_clause))
+                .order_by(
+                    desc(BacktestResult.analysis_date),
+                    desc(BacktestResult.evaluated_at),
+                )
             )
             if limit is not None:
                 query = query.limit(limit)
-            return list(session.execute(query).all())
+            return cast(Any, list(session.execute(query).all()))
 
     def count_results(
         self,
@@ -249,12 +290,15 @@ class BacktestRepository:
                 analysis_date_to=analysis_date_to,
                 days=days,
             )
-            where_clause = and_(*conditions) if conditions else True
-            count = session.execute(
-                select(func.count(BacktestResult.id))
-                .select_from(BacktestResult)
-                .where(where_clause)
-            ).scalar() or 0
+            where_clause: Any = and_(*conditions) if conditions else True
+            count = (
+                session.execute(
+                    select(func.count(BacktestResult.id))
+                    .select_from(BacktestResult)
+                    .where(cast(Any, where_clause))
+                ).scalar()
+                or 0
+            )
             return int(count)
 
     def list_results(
@@ -277,16 +321,19 @@ class BacktestRepository:
                 analysis_date_to=analysis_date_to,
                 days=days,
             )
-            where_clause = and_(*conditions) if conditions else True
+            where_clause: Any = and_(*conditions) if conditions else True
             query = (
                 select(BacktestResult)
-                .where(where_clause)
-                .order_by(desc(BacktestResult.analysis_date), desc(BacktestResult.evaluated_at))
+                .where(cast(Any, where_clause))
+                .order_by(
+                    desc(BacktestResult.analysis_date),
+                    desc(BacktestResult.evaluated_at),
+                )
             )
             if limit is not None:
                 query = query.limit(limit)
             rows = session.execute(query).scalars().all()
-            return list(rows)
+            return cast(Any, list(rows))
 
     def upsert_summary(self, summary: BacktestSummary) -> None:
         """Insert or replace summary row by unique key."""
@@ -360,7 +407,9 @@ class BacktestRepository:
             return row
 
     @staticmethod
-    def parse_analysis_date_from_snapshot(context_snapshot: Optional[str]) -> Optional[date]:
+    def parse_analysis_date_from_snapshot(
+        context_snapshot: Optional[str],
+    ) -> Optional[date]:
         if not context_snapshot:
             return None
 
@@ -403,17 +452,21 @@ class BacktestRepository:
                 analysis_date_to=analysis_date_to,
                 days=None,
             )
-            where_clause = and_(*conditions) if conditions else True
-            rows = session.execute(
-                select(BacktestResult.eval_window_days)
-                .where(where_clause)
-                .distinct()
-                .order_by(BacktestResult.eval_window_days)
-            ).scalars().all()
+            where_clause: Any = and_(*conditions) if conditions else True
+            rows = (
+                session.execute(
+                    select(BacktestResult.eval_window_days)
+                    .where(cast(Any, where_clause))
+                    .distinct()
+                    .order_by(BacktestResult.eval_window_days)
+                )
+                .scalars()
+                .all()
+            )
             return [int(w) for w in rows if w is not None]
 
-    @staticmethod
     def _build_result_conditions(
+        self,
         *,
         code: Optional[str],
         eval_window_days: Optional[int],
@@ -421,7 +474,7 @@ class BacktestRepository:
         analysis_date_from: Optional[date],
         analysis_date_to: Optional[date],
         days: Optional[int],
-    ) -> List[object]:
+    ) -> List[Any]:
         conditions = []
         if code:
             conditions.append(BacktestResult.code == code)
