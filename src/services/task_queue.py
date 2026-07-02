@@ -713,7 +713,7 @@ class AnalysisTaskQueue:
                     query_id=task_id,
                     stock_code=stock_code,
                     trigger_source=query_source,
-                    event_sink=lambda event: self.append_task_flow_event(task_id, event),
+                    event_sink=lambda event: self.append_task_flow_event(task_id, event),  # type: ignore[reportArgumentType]  # type: ignore[reportArgumentType]
                 )
             result = service.analyze_stock(
                 stock_code=stock_code,
@@ -749,7 +749,7 @@ class AnalysisTaskQueue:
                         if dedupe_key in self._analyzing_stocks:
                             del self._analyzing_stocks[dedupe_key]
                 
-                self._broadcast_event("task_completed", task.to_dict())
+                self._broadcast_event("task_completed", task.to_dict())  # type: ignore[reportOptionalMemberAccess]  # type: ignore[reportOptionalMemberAccess]
                 logger.info(f"[TaskQueue] 任务完成: {task_id} ({stock_code})")
                 
                 # 清理过期任务
@@ -762,7 +762,9 @@ class AnalysisTaskQueue:
                 
         except Exception as e:
             if "diag_token" in locals():
-                reset_run_diagnostic_context(diag_token)
+                diag_token_local: Any = diag_token  # type: ignore[reportPossiblyUnboundVariable]
+                if diag_token_local is not None:
+                    reset_run_diagnostic_context(diag_token_local)
             error_msg = str(e)
             logger.error(f"[TaskQueue] 任务失败: {task_id} ({stock_code}), 错误: {error_msg}")
             
@@ -779,7 +781,7 @@ class AnalysisTaskQueue:
                     if dedupe_key in self._analyzing_stocks:
                         del self._analyzing_stocks[dedupe_key]
             
-            self._broadcast_event("task_failed", task.to_dict())
+            self._broadcast_event("task_failed", task.to_dict())  # type: ignore[reportOptionalMemberAccess]
             
             # 清理过期任务
             self._cleanup_old_tasks()
@@ -822,7 +824,7 @@ class AnalysisTaskQueue:
                     query_id=task_id,
                     stock_code=task.stock_code,
                     trigger_source="api",
-                    event_sink=lambda event: self.append_task_flow_event(task_id, event),
+                    event_sink=lambda event: self.append_task_flow_event(task_id, event),  # type: ignore[reportArgumentType]  # type: ignore[reportArgumentType]
                 )
             try:
                 result = run_task()
@@ -840,7 +842,7 @@ class AnalysisTaskQueue:
                     task.result = result
                     task.message = "任务执行完成"
 
-            self._broadcast_event("task_completed", task.to_dict())
+            self._broadcast_event("task_completed", task.to_dict())  # type: ignore[reportOptionalMemberAccess]
             logger.info(f"[TaskQueue] 自定义任务完成: {task_id}")
 
             self._cleanup_old_tasks()
@@ -861,7 +863,7 @@ class AnalysisTaskQueue:
                     task.message = f"任务失败: {error_msg[:80]}"
 
             if task:
-                self._broadcast_event("task_failed", task.to_dict())
+                self._broadcast_event("task_failed", task.to_dict())  # type: ignore[reportOptionalMemberAccess]
 
             self._cleanup_old_tasks()
             return None
