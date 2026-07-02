@@ -90,10 +90,10 @@ def _check_layer(
     called_tools: Set[str],
 ) -> Dict[str, object]:
     """检查单层覆盖情况。返回 {content_ok, tools_ok, missing_groups}。"""
-    keywords = requirement.get("keywords", []) or []
+    keywords: List[str] = list(requirement.get("keywords") or [])  # type: ignore[arg-type]
     content_ok = any(kw in markdown for kw in keywords)
 
-    tool_groups = requirement.get("tool_groups", []) or []
+    tool_groups: List[Any] = list(requirement.get("tool_groups") or [])  # type: ignore[arg-type]
     missing_groups: List[str] = []
     tools_ok = True
     if tool_groups:
@@ -236,7 +236,7 @@ class DeepResearchValidator:
     def validate(
         self,
         markdown: str,
-        tool_calls_log: List[Dict[str, object]] = None,
+        tool_calls_log: Optional[List[Dict[str, object]]] = None,
     ) -> ValidationResult:
         """校验报告。纯函数，不抛异常。"""
         if not markdown or not markdown.strip():
@@ -256,7 +256,7 @@ class DeepResearchValidator:
         for layer, requirement in _LAYER_REQUIREMENTS.items():
             check = _check_layer(layer, requirement, markdown, called_tools)
             # 估值层无工具组，满分靠内容；其余层内容+工具各占一半
-            tool_groups = requirement.get("tool_groups", []) or []
+            tool_groups: List[Any] = list(requirement.get("tool_groups") or [])  # type: ignore[arg-type]
             if tool_groups:
                 layer_point = 0.0
                 layer_incomplete = False
@@ -268,7 +268,7 @@ class DeepResearchValidator:
                     layer_point += 10.0
                 else:
                     layer_incomplete = True
-                    missing_tool_groups.extend(check["missing_groups"])
+                    missing_tool_groups.extend(check["missing_groups"])  # type: ignore[reportArgumentType]
                 if layer_incomplete:
                     missing_layers.append(layer)
             else:
