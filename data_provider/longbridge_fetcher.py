@@ -146,12 +146,12 @@ def _longbridge_config_kwargs() -> Dict[str, Any]:
     """Optional kwargs for ``Config.from_apikey`` (Longbridge OpenAPI SDK)."""
     try:
         import inspect
-        from longbridge.openapi import Config, Language, PushCandlestickMode
+        from longbridge.openapi import Config, Language, PushCandlestickMode  # type: ignore[reportAttributeAccessIssue]
     except Exception:
         return {}
 
     try:
-        params = inspect.signature(Config.from_apikey).parameters
+        params = inspect.signature(Config.from_apikey).parameters  # type: ignore[reportAttributeAccessIssue]
     except Exception:
         return {}
 
@@ -536,9 +536,9 @@ class LongbridgeFetcher(BaseFetcher):
 
                     if _is_valid_oauth_cache_file(token_cache):
                         try:
-                            from longbridge.openapi import OAuthBuilder
+                            from longbridge.openapi import OAuthBuilder  # type: ignore[reportAttributeAccessIssue]
 
-                            oauth = OAuthBuilder(oauth_client_id).build(
+                            oauth = OAuthBuilder(oauth_client_id).build(  # type: ignore[reportAttributeAccessIssue]
                                 _oauth_reauth_not_supported,
                             )
                             from_oauth = getattr(Config, "from_oauth", None)
@@ -584,13 +584,13 @@ class LongbridgeFetcher(BaseFetcher):
                             )
 
                 if lb_config is None and has_legacy:
-                    lb_config = Config.from_apikey(
+                    lb_config = Config.from_apikey(  # type: ignore[reportAttributeAccessIssue]
                         app_key,
                         app_secret,
                         access_token,
                         **extra_kw,
                     )
-                    logger.info("[Longbridge] Config.from_apikey() 创建成功")
+                    logger.info("[Longbridge] Config.from_apikey(  # type: ignore[reportAttributeAccessIssue]) 创建成功")
                 elif lb_config is None:
                     reason = (
                         f"OAuth 初始化失败: {oauth_error}"
@@ -698,8 +698,8 @@ class LongbridgeFetcher(BaseFetcher):
                 Period.Day,
                 AdjustType.NoAdjust,
                 False,
-                6,
                 datetime.now(),
+                6,
             )
             if not candles or len(candles) < 2:
                 return None
@@ -925,4 +925,5 @@ class LongbridgeFetcher(BaseFetcher):
             if col not in df.columns:
                 df[col] = None
 
-        return df[STANDARD_COLUMNS]
+        sliced: Any = df[STANDARD_COLUMNS]
+        return pd.DataFrame(sliced) if not isinstance(sliced, pd.DataFrame) else sliced
