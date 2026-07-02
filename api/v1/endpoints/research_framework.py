@@ -30,7 +30,10 @@ router = APIRouter()
 def _get_db():
     """Get database session"""
     db_manager = DatabaseManager.get_instance()
-    return db_manager._SessionLocal()
+    session_local = db_manager._SessionLocal
+    if session_local is None:
+        raise api_error(503, "db_unavailable", "Database not initialized")
+    return session_local()
 
 
 def _get_repo():
@@ -56,7 +59,7 @@ def list_positions(
         else:
             records = repo.get_open_positions()
             if status:
-                records = [r for r in records if r.status == status]
+                records = [r for r in records if str(r.status) == status]
 
         return PositionListResponse(
             positions=[PositionItem(**r.to_dict()) for r in records],
@@ -83,8 +86,8 @@ def create_position(request: PositionCreateRequest) -> PositionCreatedResponse:
 
         record = repo.create(data)
         return PositionCreatedResponse(
-            id=record.id,
-            stock_code=record.stock_code,
+            id=int(record.id),  # type: ignore[reportArgumentType]
+            stock_code=str(record.stock_code),  # type: ignore[reportArgumentType]
             message="Position created successfully",
         )
     except ValueError as exc:
@@ -117,7 +120,7 @@ def update_position(
 
         ok = repo.update_status(
             position_id,
-            status=request.status,
+            status=str(request.status) if request.status is not None else "",
             realized_pnl=request.realized_pnl,
         )
 
@@ -153,8 +156,9 @@ def get_concentration() -> ConcentrationResponse:
 
         sector_map: dict[str, Any] = defaultdict(list)
         for pos in positions:
-            market = pos.market or "unknown"
-            sector_map[market].append(pos.stock_code)
+            market_raw: Any = pos.market
+            market = str(market_raw) if market_raw is not None else "unknown"
+            sector_map[market].append(str(pos.stock_code))
 
         sectors = []
         total_positions = len(positions)
@@ -205,7 +209,7 @@ def validate_position(request: ValidatePositionRequest) -> ValidatePositionRespo
     """
     try:
         valid, warning = validate_position_with_concentration(
-            position_suggestion=request.position_size,
+            position_suggestion=request.position_size,  # type: ignore[reportCallIssue]
             current_concentration=request.current_concentration or 0.0,
         )
 

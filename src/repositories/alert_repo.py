@@ -49,7 +49,7 @@ class AlertRepository:
                 return None
             for key, value in fields.items():
                 setattr(row, key, value)
-            row.updated_at = datetime.now()
+            row.updated_at = datetime.now()  # type: ignore[reportAttributeAccessIssue]
             session.commit()
             session.refresh(row)
             return row
@@ -58,7 +58,8 @@ class AlertRepository:
         with self.db.get_session() as session:
             result = session.execute(delete(AlertRuleRecord).where(AlertRuleRecord.id == rule_id))
             session.commit()
-            return bool(result.rowcount)
+            rc_raw: Any = getattr(result, 'rowcount', 0)
+            return bool(rc_raw)
 
     def list_rules(
         self,
@@ -83,15 +84,15 @@ class AlertRepository:
         if source:
             conditions.append(AlertRuleRecord.source == source)
 
-        where_clause = and_(*conditions) if conditions else True
+        where_clause: Any = and_(*conditions) if conditions else True
         offset = (page - 1) * page_size
         with self.db.get_session() as session:
             total = session.execute(
-                select(func.count(AlertRuleRecord.id)).select_from(AlertRuleRecord).where(where_clause)
+                select(func.count(AlertRuleRecord.id)).select_from(AlertRuleRecord).where(where_clause)  # type: ignore[reportArgumentType]
             ).scalar() or 0
             rows = session.execute(
                 select(AlertRuleRecord)
-                .where(where_clause)
+                .where(where_clause)  # type: ignore[reportArgumentType]
                 .order_by(desc(AlertRuleRecord.updated_at), desc(AlertRuleRecord.id))
                 .offset(offset)
                 .limit(page_size)
@@ -231,12 +232,12 @@ class AlertRepository:
                     severity=severity,
                 )
                 session.add(row)
-            row.rule_key = rule_key
-            row.last_triggered_at = last_triggered_at
-            row.cooldown_until = cooldown_until
-            row.reason = reason
-            row.state = state
-            row.updated_at = datetime.now()
+            setattr(row, 'rule_key', rule_key)
+            setattr(row, 'last_triggered_at', last_triggered_at)
+            setattr(row, 'cooldown_until', cooldown_until)
+            setattr(row, 'reason', reason)
+            setattr(row, 'state', state)
+            setattr(row, 'updated_at', datetime.now())
             session.commit()
             session.refresh(row)
             return row
@@ -277,15 +278,15 @@ class AlertRepository:
         if status:
             conditions.append(AlertTriggerRecord.status == status)
 
-        where_clause = and_(*conditions) if conditions else True
+        where_clause: Any = and_(*conditions) if conditions else True
         offset = (page - 1) * page_size
         with self.db.get_session() as session:
             total = session.execute(
-                select(func.count(AlertTriggerRecord.id)).select_from(AlertTriggerRecord).where(where_clause)
+                select(func.count(AlertTriggerRecord.id)).select_from(AlertTriggerRecord).where(where_clause)  # type: ignore[reportArgumentType]
             ).scalar() or 0
             rows = session.execute(
                 select(AlertTriggerRecord)
-                .where(where_clause)
+                .where(where_clause)  # type: ignore[reportArgumentType]
                 .order_by(desc(AlertTriggerRecord.triggered_at), desc(AlertTriggerRecord.id))
                 .offset(offset)
                 .limit(page_size)
@@ -309,17 +310,17 @@ class AlertRepository:
         if success is not None:
             conditions.append(AlertNotificationRecord.success.is_(success))
 
-        where_clause = and_(*conditions) if conditions else True
+        where_clause: Any = and_(*conditions) if conditions else True
         offset = (page - 1) * page_size
         with self.db.get_session() as session:
             total = session.execute(
                 select(func.count(AlertNotificationRecord.id))
                 .select_from(AlertNotificationRecord)
-                .where(where_clause)
+                .where(where_clause)  # type: ignore[reportArgumentType]
             ).scalar() or 0
             rows = session.execute(
                 select(AlertNotificationRecord)
-                .where(where_clause)
+                .where(where_clause)  # type: ignore[reportArgumentType]
                 .order_by(desc(AlertNotificationRecord.created_at), desc(AlertNotificationRecord.id))
                 .offset(offset)
                 .limit(page_size)

@@ -26,7 +26,7 @@ class LLMSubjectiveScoringService:
     - Sentiment inference
     """
 
-    def __init__(self, model: str = None):
+    def __init__(self, model: Optional[str] = None):
         self.model = model
         self._client = None
 
@@ -91,10 +91,10 @@ class LLMSubjectiveScoringService:
         self,
         stock_code: str,
         stock_name: str,
-        pe: float = None,
-        pb: float = None,
-        roe: float = None,
-        revenue_growth: float = None,
+        pe: Optional[float] = None,
+        pb: Optional[float] = None,
+        roe: Optional[float] = None,
+        revenue_growth: Optional[float] = None,
         sector: str = "",
     ) -> Dict[str, Any]:
         """
@@ -113,7 +113,13 @@ class LLMSubjectiveScoringService:
             Dict with value scenario analysis
         """
         prompt = self._build_value_prompt(
-            stock_code, stock_name, pe, pb, roe, revenue_growth, sector
+            stock_code,
+            stock_name,
+            pe if pe is not None else 0.0,
+            pb if pb is not None else 0.0,
+            roe if roe is not None else 0.0,
+            revenue_growth if revenue_growth is not None else 0.0,
+            sector,
         )
 
         try:
@@ -163,7 +169,9 @@ class LLMSubjectiveScoringService:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,
             )
-            return response.choices[0].message.content
+            response_obj: Any = response
+            content_raw: Any = response_obj.choices[0].message.content
+            return content_raw if content_raw is not None else ""
         except Exception as e:
             logger.error(f"[LLMSubjectiveScoring] LLM call failed: {e}")
             raise

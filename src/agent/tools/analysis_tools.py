@@ -8,7 +8,10 @@ Tools:
 
 import logging
 from datetime import date
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    import numpy as np
 
 import pandas as pd
 
@@ -415,30 +418,30 @@ def _handle_analyze_pattern(stock_code: str, days: int = 60) -> dict[str, Any]:
     if len(df) < 10:
         return {"error": f"Insufficient data for pattern analysis (got {len(df)} days, need >= 10)"}
 
-    o = df["open"].values
-    h = df["high"].values
-    l = df["low"].values   # noqa: E741
-    c = df["close"].values
-    v = df["volume"].values if "volume" in df.columns else None
+    o: Any = df["open"].values
+    h: Any = df["high"].values
+    l: Any = df["low"].values   # noqa: E741
+    c: Any = df["close"].values
+    v: Optional[Any] = df["volume"].values if "volume" in df.columns else None
 
     patterns_detected = []
     n = len(c)
 
     # ---- Helpers ----
-    def body(i):
-        return abs(c[i] - o[i])
+    def body(i: int) -> float:
+        return float(abs(c[i] - o[i]))
 
-    def upper_shadow(i):
-        return h[i] - max(c[i], o[i])
+    def upper_shadow(i: int) -> float:
+        return float(h[i] - max(c[i], o[i]))
 
-    def lower_shadow(i):
-        return min(c[i], o[i]) - l[i]
+    def lower_shadow(i: int) -> float:
+        return float(min(c[i], o[i]) - l[i])
 
-    def is_bullish(i):
-        return c[i] > o[i]
+    def is_bullish(i: int) -> bool:
+        return bool(c[i] > o[i])
 
-    def is_bearish(i):
-        return c[i] < o[i]
+    def is_bearish(i: int) -> bool:
+        return bool(c[i] < o[i])
 
     avg_body = sum(body(i) for i in range(n)) / n if n > 0 else 1
 

@@ -22,6 +22,8 @@ class FeishuDocManager:
         # 初始化 SDK 客户端
         # SDK 会自动处理 tenant_access_token 的获取和刷新，无需人工干预
         if self.is_configured():
+            assert self.app_id is not None
+            assert self.app_secret is not None
             self.client = lark.Client.builder() \
                 .app_id(self.app_id) \
                 .app_secret(self.app_secret) \
@@ -42,6 +44,9 @@ class FeishuDocManager:
             logger.warning("飞书 SDK 未初始化或配置缺失，跳过创建")
             return None
 
+        assert self.client is not None
+        assert self.folder_token is not None
+
         try:
             # 1. 创建文档
             # 使用官方 SDK 的 Builder 模式构造请求
@@ -52,13 +57,18 @@ class FeishuDocManager:
                               .build()) \
                 .build()
 
-            response = self.client.docx.v1.document.create(create_request)
+            client_obj: Any = self.client
+            response = client_obj.docx.v1.document.create(create_request)
 
             if not response.success():
                 logger.error(f"创建文档失败: {response.code} - {response.msg} - {response.error}")
                 return None
 
-            doc_id = response.data.document.document_id
+            data_obj: Any = response.data
+            if data_obj is None or getattr(data_obj, 'document', None) is None:
+                logger.error("创建文档失败: 响应数据为空")
+                return None
+            doc_id = data_obj.document.document_id
             # 这里的 domain 只是为了生成链接，实际访问会重定向
             doc_url = f"https://feishu.cn/docx/{doc_id}"
             logger.info(f"飞书文档创建成功: {title} (ID: {doc_id})")
@@ -75,6 +85,8 @@ class FeishuDocManager:
                 batch_blocks = blocks[i:i + batch_size]
 
                 # 构造批量添加块的请求
+                assert doc_id is not None
+                assert doc_block_id is not None
                 batch_add_request = CreateDocumentBlockChildrenRequest.builder() \
                     .document_id(doc_id) \
                     .block_id(doc_block_id) \
@@ -84,7 +96,8 @@ class FeishuDocManager:
                                   .build()) \
                     .build()
 
-                write_resp = self.client.docx.v1.document_block_children.create(batch_add_request)
+                client_obj: Any = self.client
+                write_resp = client_obj.docx.v1.document_block_children.create(batch_add_request)
 
                 if not write_resp.success():
                     logger.error(f"写入文档内容失败(批次{i}): {write_resp.code} - {write_resp.msg}")

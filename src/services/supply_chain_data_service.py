@@ -10,7 +10,7 @@
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import cast, Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +137,11 @@ class SupplyChainDataService:
                 result["serenity_factors"] = serenity_data.get("factors")
                 result["serenity_penalties"] = serenity_data.get("penalties")
 
+        upstream_raw: Any = result.get('upstream') or []
+        downstream_raw: Any = result.get('downstream') or []
         logger.info(
-            f"[SupplyChainDataService] {stock_code} supply chain: sources={result['data_sources']}, "
-            f"upstream={len(result['upstream'])}, downstream={len(result['downstream'])}"
+            f"[SupplyChainDataService] {stock_code} supply chain: sources={result.get('data_sources')}, "
+            f"upstream={len(upstream_raw)}, downstream={len(downstream_raw)}"
         )
 
         return result
@@ -198,23 +200,25 @@ class SupplyChainDataService:
                 max_tokens=800,
             )
 
-            content = response.choices[0].message.content
+            response_obj: Any = response
+            content_raw: Any = response_obj.choices[0].message.content
+            content: str = content_raw if content_raw is not None else ""
 
             try:
                 import json_repair
 
-                result = json_repair.loads(content)
+                parsed_result = json_repair.loads(content)
             except Exception:
                 json_match = re.search(
                     r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", content, re.DOTALL
                 )
                 if json_match:
-                    result = json_repair.loads(json_match.group(0))
+                    parsed_result = json_repair.loads(json_match.group(0))  # type: ignore[union-attr]
                 else:
                     logger.warning(f"[SupplyChainDataService] LLM parse failed")
                     return {}
 
-            normalized = self._normalize_llm_output(result)
+            normalized = self._normalize_llm_output(cast(Dict[str, Any], parsed_result))
             logger.info(f"[SupplyChainDataService] LLM extraction completed")
             return normalized
 

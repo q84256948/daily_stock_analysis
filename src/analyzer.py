@@ -1697,6 +1697,11 @@ class AnalysisResult:
     supply_chain: Optional[Dict[str, Any]] = None  # 产业链解读
     value_scenarios: Optional[Dict[str, Any]] = None  # 长期价值与情景
 
+    # ========== 运行时诊断快照（仅运行时，不持久化到 to_dict）==========
+    market_phase_summary: Optional[Dict[str, Any]] = None  # 大盘/市场阶段摘要
+    analysis_context_pack_overview: Optional[Dict[str, Any]] = None  # 上下文包概览
+    diagnostic_context_snapshot: Optional[Dict[str, Any]] = None  # 诊断上下文快照
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {

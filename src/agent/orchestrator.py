@@ -267,7 +267,7 @@ class AgentOrchestrator:
             and timeout_seconds > 0
             and self._agent_run_accepts_timeout(agent.run)
         ):
-            run_kwargs["timeout_seconds"] = timeout_seconds
+            run_kwargs["timeout_seconds"] = timeout_seconds  # type: ignore[reportArgumentType]
         return agent.run(ctx, **run_kwargs)
 
     # -----------------------------------------------------------------
@@ -425,7 +425,7 @@ class AgentOrchestrator:
                 logger.warning(
                     "[Orchestrator] pipeline insufficient budget before stage '%s' (%.1fs remaining, min %ds)",
                     agent.agent_name,
-                    remaining_budget,
+                    remaining_budget if remaining_budget is not None else 0.0,
                     stage_min_budget_s,
                 )
                 if progress_callback:
@@ -442,7 +442,7 @@ class AgentOrchestrator:
                     elapsed_s,
                     timeout_s,
                     agent.agent_name,
-                    remaining_budget,
+                    remaining_budget if remaining_budget is not None else 0.0,
                     stage_min_budget_s,
                     ctx=ctx,
                     parse_dashboard=parse_dashboard,
@@ -645,7 +645,7 @@ class AgentOrchestrator:
             for skill_id in selected[:3]:  # cap at 3 concurrent skills
                 agent = self._prepare_agent(SkillAgent(
                     skill_id=skill_id,
-                    **common_kwargs,
+                    **common_kwargs,  # type: ignore[reportArgumentType]
                 ))
                 agents.append(agent)
             return agents
@@ -848,7 +848,7 @@ class AgentOrchestrator:
         confidence = float(base_opinion.confidence if base_opinion is not None else 0.5)
         sentiment_score = payload.get("sentiment_score")
         try:
-            sentiment_score = int(sentiment_score)
+            sentiment_score = int(sentiment_score)  # type: ignore[reportArgumentType]
         except (TypeError, ValueError):
             sentiment_score = _estimate_sentiment_score(decision_type, confidence)
 
@@ -1289,7 +1289,7 @@ class AgentOrchestrator:
 
         sentiment_score = dashboard.get("sentiment_score")
         try:
-            score = int(sentiment_score)
+            score = int(sentiment_score)  # type: ignore[reportArgumentType]
         except (TypeError, ValueError):
             score = 50
         dashboard["sentiment_score"] = _adjust_sentiment_score(score, new_signal)

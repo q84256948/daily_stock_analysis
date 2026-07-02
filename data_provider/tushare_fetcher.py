@@ -100,11 +100,11 @@ class _TushareHttpClient:
         items = data.get("items") or []
         return pd.DataFrame(items, columns=columns)
 
-    def __getattr__(self, api_name: str):
+    def __getattr__(self, api_name: str) -> Any:
         if api_name.startswith("_"):
             raise AttributeError(api_name)
 
-        def caller(**kwargs) -> pd.DataFrame:
+        def caller(**kwargs: Any) -> pd.DataFrame:
             return self.query(api_name, **kwargs)
 
         return caller
@@ -140,7 +140,7 @@ class TushareFetcher(BaseFetcher):
         self.rate_limit_per_minute = rate_limit_per_minute
         self._call_count = 0  # 当前分钟内的调用次数
         self._minute_start: Optional[float] = None  # 当前计数周期开始时间
-        self._api: Optional[object] = None  # Tushare API 实例
+        self._api: Optional["_TushareHttpClient"] = None  # Tushare API 实例
         self.date_list: Optional[List[str]] = None  # 交易日列表缓存（倒序，最新日期在前）
         self._date_list_end: Optional[str] = None  # 缓存对应的截止日期，用于跨日刷新
 
@@ -755,6 +755,11 @@ class TushareFetcher(BaseFetcher):
                 change_amount = price - pre_close
                 change_pct = (change_amount / pre_close) * 100
 
+            _raw_volume: Optional[int] = safe_int(row['volume'])
+            volume_shares: int = 0 if _raw_volume is None else _raw_volume
+            _raw_amount: Optional[float] = safe_float(row['amount'])
+            amount_value: float = 0.0 if _raw_amount is None else _raw_amount
+
             # 构建统一对象
             return UnifiedRealtimeQuote(
                 code=normalized_code,
@@ -763,8 +768,8 @@ class TushareFetcher(BaseFetcher):
                 price=price,
                 change_pct=round(change_pct, 2),
                 change_amount=round(change_amount, 2),
-                volume=safe_int(row['volume']) // 100,  # 转换为手
-                amount=safe_float(row['amount']),
+                volume=volume_shares // 100,  # 转换为手
+                amount=amount_value,
                 high=safe_float(row['high']),
                 low=safe_float(row['low']),
                 open_price=safe_float(row['open']),
@@ -818,6 +823,9 @@ class TushareFetcher(BaseFetcher):
                         current = safe_float(row['close'])
                         prev_close = safe_float(row['pre_close'])
 
+                        _amt_yuan: Optional[float] = safe_float(row['amount'])
+                        amount_yuan: float = 0.0 if _amt_yuan is None else _amt_yuan
+
                         results.append({
                             'code': ts_code.split('.')[0], # 兼容 sh000001 格式需转换，这里保持纯数字
                             'name': name,
@@ -829,7 +837,7 @@ class TushareFetcher(BaseFetcher):
                             'low': safe_float(row['low']),
                             'prev_close': prev_close,
                             'volume': safe_float(row['vol']),
-                            'amount': safe_float(row['amount']) * 1000, # 千元转元
+                            'amount': amount_yuan * 1000, # 千元转元
                             'amplitude': 0.0 # Tushare index_daily 不直接返回振幅
                         })
                 except Exception as e:
@@ -1222,34 +1230,35 @@ class TushareFetcher(BaseFetcher):
         avg_cost = np.average(df_sorted['price'], weights=df_sorted['norm_percent'])
 
         # --- 辅助函数：求指定累积比例处的价格 ---
-        def get_percentile_price(target_pct):
+        def get_percentile_price(target_pct: float) -> float:
             # 寻找累积求和第一次大于等于目标百分比的行索引
             idx = df_sorted['cumsum'].searchsorted(target_pct)
-            idx = min(idx, len(df_sorted) - 1) # 防止越界
-            return df_sorted.loc[idx, 'price']
+            idx = min(int(idx), len(df_sorted) - 1) # 防止越界
+            raw_price: Any = df_sorted.loc[idx, 'price']
+            return float(raw_price)
 
         # --- 90% 成本区与集中度 ---
         # 去头去尾各 5%
-        cost_90_low = get_percentile_price(5)
-        cost_90_high = get_percentile_price(95)
+        cost_90_low: float = get_percentile_price(5)
+        cost_90_high: float = get_percentile_price(95)
         if (cost_90_high + cost_90_low) != 0:
-            concentration_90 = (cost_90_high - cost_90_low) / (cost_90_high + cost_90_low) * 100
+            concentration_90: float = (cost_90_high - cost_90_low) / (cost_90_high + cost_90_low) * 100
         else:
             concentration_90 = 0.0
             
         # --- 70% 成本区与集中度 ---
         # 去头去尾各 15%
-        cost_70_low = get_percentile_price(15)
-        cost_70_high = get_percentile_price(85)
+        cost_70_low: float = get_percentile_price(15)
+        cost_70_high: float = get_percentile_price(85)
         if (cost_70_high + cost_70_low) != 0:
-            concentration_70 = (cost_70_high - cost_70_low) / (cost_70_high + cost_70_low) * 100
+            concentration_70: float = (cost_70_high - cost_70_low) / (cost_70_high + cost_70_low) * 100
         else:
             concentration_70 = 0.0
 
         # 返回格式化结果
         return {
             "获利比例": round(winner_rate/100, 4), # /100 与akshare保持一致，返回小数格式
-            "平均成本": round(avg_cost, 4),
+            "平均成本": round(float(avg_cost), 4),
             "90成本-低": round(cost_90_low, 4),
             "90成本-高": round(cost_90_high, 4),
             "90集中度": round(concentration_90/100, 4),

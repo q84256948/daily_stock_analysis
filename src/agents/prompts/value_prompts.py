@@ -8,6 +8,8 @@ Prompts for long-term value analysis:
 3. Value anchor determination
 """
 
+from typing import Optional
+
 VALUE_SCENARIO_ANALYSIS_PROMPT = """## 长期价值情景分析
 
 你是一位专业的价值投资分析师。请根据以下信息分析标的的长期投资价值。
@@ -137,18 +139,18 @@ def build_value_scenario_prompt(
     stock_code: str,
     stock_name: str,
     industry: str = "",
-    pe: float = None,
-    pb: float = None,
-    roe: float = None,
-    revenue_growth: float = None,
-    profit_growth: float = None,
-    gross_margin: float = None,
-    sector_pe: float = None,
-    current_price: float = None,
-    market_cap: float = None,
-    float_market_cap: float = None,
-    high_52w: float = None,
-    low_52w: float = None,
+    pe: Optional[float] = None,
+    pb: Optional[float] = None,
+    roe: Optional[float] = None,
+    revenue_growth: Optional[float] = None,
+    profit_growth: Optional[float] = None,
+    gross_margin: Optional[float] = None,
+    sector_pe: Optional[float] = None,
+    current_price: Optional[float] = None,
+    market_cap: Optional[float] = None,
+    float_market_cap: Optional[float] = None,
+    high_52w: Optional[float] = None,
+    low_52w: Optional[float] = None,
     industry_space: str = "",
     competitive_landscape: str = "",
 ) -> str:

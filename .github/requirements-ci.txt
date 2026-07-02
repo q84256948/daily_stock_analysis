@@ -19,3 +19,4 @@ types-python-dateutil
 types-pytz
 types-PyYAML
 types-setuptools
+pandas-stubs
