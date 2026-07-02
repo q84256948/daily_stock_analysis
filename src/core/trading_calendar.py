@@ -148,7 +148,7 @@ def is_market_open(market: str, check_date: date) -> bool:
     if not ex:
         return True
     try:
-        cal = xcals.get_calendar(ex)
+        cal = xcals.get_calendar(ex)  # type: ignore[reportOptionalMemberAccess]
         session = datetime(check_date.year, check_date.month, check_date.day)
         return cal.is_session(session)
     except Exception as e:
@@ -205,7 +205,7 @@ def get_effective_trading_date(
         return fallback_date
 
     try:
-        cal = xcals.get_calendar(ex)
+        cal = xcals.get_calendar(ex)  # type: ignore[reportOptionalMemberAccess]
         local_date = market_now.date()
 
         if not cal.is_session(local_date):
@@ -290,7 +290,7 @@ def infer_market_phase(
     local_date = market_now.date()
 
     try:
-        cal = xcals.get_calendar(ex)
+        cal = xcals.get_calendar(ex)  # type: ignore[reportOptionalMemberAccess]
         if not cal.is_session(local_date):
             return MarketPhase.NON_TRADING
 
@@ -369,7 +369,7 @@ def _session_open_close_for_today(
     if not ex or not tz_name or not _XCALS_AVAILABLE:
         return None, None
 
-    cal = xcals.get_calendar(ex)
+    cal = xcals.get_calendar(ex)  # type: ignore[reportOptionalMemberAccess]
     local_date = market_now.date()
     if not cal.is_session(local_date):
         return None, None
