@@ -1284,7 +1284,7 @@ class Config:
         )
         stock_list = [
             (c or "").strip().upper()
-            for c in stock_list_str.split(",")
+            for c in (stock_list_str or "").split(",")
             if (c or "").strip()
         ]
 
@@ -2008,11 +2008,11 @@ class Config:
             config_validate_mode=os.getenv("CONFIG_VALIDATE_MODE", "warn").lower(),
             http_proxy=os.getenv("HTTP_PROXY"),
             https_proxy=os.getenv("HTTPS_PROXY"),
-            schedule_enabled=cls._resolve_env_value(
+            schedule_enabled=(cls._resolve_env_value(
                 "SCHEDULE_ENABLED",
                 default="false",
                 prefer_env_file=True,
-            ).lower()
+            ) or "false").lower()
             == "true",
             schedule_time=(schedule_time_value or "18:00").strip() or "18:00",
             schedule_run_immediately=schedule_run_immediately,
@@ -2034,15 +2034,19 @@ class Config:
             ).lower()
             != "false",
             # 多任务调度配置
-            watchlist_analysis_time=cls._resolve_env_value(
-                "WATCHLIST_ANALYSIS_TIME",
-                default="",
-                prefer_env_file=True,
+            watchlist_analysis_time=(
+                cls._resolve_env_value(
+                    "WATCHLIST_ANALYSIS_TIME",
+                    default="",
+                    prefer_env_file=True,
+                ) or ""
             ).strip(),
-            market_review_time=cls._resolve_env_value(
-                "MARKET_REVIEW_TIME",
-                default="",
-                prefer_env_file=True,
+            market_review_time=(
+                cls._resolve_env_value(
+                    "MARKET_REVIEW_TIME",
+                    default="",
+                    prefer_env_file=True,
+                ) or ""
             ).strip(),
             webui_enabled=os.getenv("WEBUI_ENABLED", "false").lower() == "true",
             webui_host=os.getenv("WEBUI_HOST", "127.0.0.1"),
@@ -2876,7 +2880,7 @@ class Config:
 
         stock_list = [
             (c or "").strip().upper()
-            for c in stock_list_str.split(",")
+            for c in (stock_list_str or "").split(",")
             if (c or "").strip()
         ]
 
