@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from sqlalchemy import and_, desc, func, or_, select
 
@@ -36,20 +36,22 @@ class DecisionSignalRepository:
     """DB access layer for persisted AI decision signals."""
 
     _RELAXED_MERGE_STATUSES = frozenset({"active", "expired"})
-    _IMMUTABLE_REFRESH_FIELDS = frozenset({
-        "id",
-        "created_at",
-        "source_report_id",
-        "source_type",
-        "source_agent",
-        "trace_id",
-        "trigger_source",
-        "market",
-        "stock_code",
-        "action",
-        "horizon",
-        "market_phase",
-    })
+    _IMMUTABLE_REFRESH_FIELDS = frozenset(
+        {
+            "id",
+            "created_at",
+            "source_report_id",
+            "source_type",
+            "source_agent",
+            "trace_id",
+            "trigger_source",
+            "market",
+            "stock_code",
+            "action",
+            "horizon",
+            "market_phase",
+        }
+    )
 
     def __init__(self, db_manager: Optional[DatabaseManager] = None):
         self.db = db_manager or DatabaseManager.get_instance()
@@ -82,13 +84,13 @@ class DecisionSignalRepository:
                         row=existing,
                         created=False,
                         refreshed=True,
-                        invalidation_reference_at=existing.updated_at,
+                        invalidation_reference_at=cast(Any, existing).updated_at,
                     )
                 return DecisionSignalCreateResult(
                     row=existing,
                     created=False,
                     duplicate=True,
-                    invalidation_reference_at=existing.created_at,
+                    invalidation_reference_at=cast(Any, existing).created_at,
                 )
 
             relaxed_existing = self._find_relaxed_existing_in_session(
@@ -110,9 +112,11 @@ class DecisionSignalRepository:
                         row=relaxed_existing,
                         created=False,
                         refreshed=True,
-                        invalidation_reference_at=relaxed_existing.updated_at,
+                        invalidation_reference_at=cast(
+                            Any, relaxed_existing
+                        ).updated_at,
                     )
-                if relaxed_existing.status == "active":
+                if cast(Any, relaxed_existing).status == "active":
                     changed = self._fill_relaxed_dimensions_in_session(
                         relaxed_existing,
                         fields,
@@ -125,13 +129,15 @@ class DecisionSignalRepository:
                             row=relaxed_existing,
                             created=False,
                             refreshed=True,
-                            invalidation_reference_at=relaxed_existing.created_at,
+                            invalidation_reference_at=cast(
+                                Any, relaxed_existing
+                            ).created_at,
                         )
                 return DecisionSignalCreateResult(
                     row=relaxed_existing,
                     created=False,
                     duplicate=True,
-                    invalidation_reference_at=relaxed_existing.created_at,
+                    invalidation_reference_at=cast(Any, relaxed_existing).created_at,
                 )
 
             row = DecisionSignalRecord(**fields)
@@ -141,14 +147,16 @@ class DecisionSignalRepository:
             return DecisionSignalCreateResult(
                 row=row,
                 created=True,
-                invalidation_reference_at=row.created_at,
+                invalidation_reference_at=cast(Any, row).created_at,
             )
 
     def get(self, signal_id: int) -> Optional[DecisionSignalRecord]:
         self.expire_due_signals()
         with self.db.get_session() as session:
             return session.execute(
-                select(DecisionSignalRecord).where(DecisionSignalRecord.id == signal_id).limit(1)
+                select(DecisionSignalRecord)
+                .where(DecisionSignalRecord.id == signal_id)
+                .limit(1)
             ).scalar_one_or_none()
 
     def list(
@@ -192,25 +200,35 @@ class DecisionSignalRepository:
             expires_from=expires_from,
             expires_to=expires_to,
         )
-        where_clause = and_(*conditions) if conditions else True
+        where_clause: Any = and_(*conditions) if conditions else True
         safe_page = max(1, int(page))
         safe_page_size = max(1, min(int(page_size), 100))
         offset = (safe_page - 1) * safe_page_size
 
         with self.db.get_session() as session:
-            total = session.execute(
-                select(func.count(DecisionSignalRecord.id))
-                .select_from(DecisionSignalRecord)
-                .where(where_clause)
-            ).scalar() or 0
-            rows = session.execute(
-                select(DecisionSignalRecord)
-                .where(where_clause)
-                .order_by(desc(DecisionSignalRecord.created_at), desc(DecisionSignalRecord.id))
-                .offset(offset)
-                .limit(safe_page_size)
-            ).scalars().all()
-            return list(rows), int(total)
+            total = (
+                session.execute(
+                    select(func.count(DecisionSignalRecord.id))
+                    .select_from(DecisionSignalRecord)
+                    .where(cast(Any, where_clause))
+                ).scalar()
+                or 0
+            )
+            rows = (
+                session.execute(
+                    select(DecisionSignalRecord)
+                    .where(cast(Any, where_clause))
+                    .order_by(
+                        desc(DecisionSignalRecord.created_at),
+                        desc(DecisionSignalRecord.id),
+                    )
+                    .offset(offset)
+                    .limit(safe_page_size)
+                )
+                .scalars()
+                .all()
+            )
+            return cast(Any, list(rows)), int(total)
 
     def get_latest_active(
         self,
@@ -228,13 +246,20 @@ class DecisionSignalRepository:
         if market:
             conditions.append(DecisionSignalRecord.market == market)
         with self.db.get_session() as session:
-            rows = session.execute(
-                select(DecisionSignalRecord)
-                .where(and_(*conditions))
-                .order_by(desc(DecisionSignalRecord.created_at), desc(DecisionSignalRecord.id))
-                .limit(safe_limit)
-            ).scalars().all()
-            return list(rows)
+            rows = (
+                session.execute(
+                    select(DecisionSignalRecord)
+                    .where(and_(*conditions))
+                    .order_by(
+                        desc(DecisionSignalRecord.created_at),
+                        desc(DecisionSignalRecord.id),
+                    )
+                    .limit(safe_limit)
+                )
+                .scalars()
+                .all()
+            )
+            return cast(Any, list(rows))
 
     def list_active_by_stock_actions(
         self,
@@ -256,12 +281,19 @@ class DecisionSignalRepository:
         if exclude_signal_id is not None:
             conditions.append(DecisionSignalRecord.id != exclude_signal_id)
         with self.db.get_session() as session:
-            rows = session.execute(
-                select(DecisionSignalRecord)
-                .where(and_(*conditions))
-                .order_by(desc(DecisionSignalRecord.created_at), desc(DecisionSignalRecord.id))
-            ).scalars().all()
-            return list(rows)
+            rows = (
+                session.execute(
+                    select(DecisionSignalRecord)
+                    .where(and_(*conditions))
+                    .order_by(
+                        desc(DecisionSignalRecord.created_at),
+                        desc(DecisionSignalRecord.id),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return cast(Any, list(rows))
 
     def update_status(
         self,
@@ -273,14 +305,16 @@ class DecisionSignalRepository:
     ) -> Optional[DecisionSignalRecord]:
         with self.db.get_session() as session:
             row = session.execute(
-                select(DecisionSignalRecord).where(DecisionSignalRecord.id == signal_id).limit(1)
+                select(DecisionSignalRecord)
+                .where(DecisionSignalRecord.id == signal_id)
+                .limit(1)
             ).scalar_one_or_none()
             if row is None:
                 return None
-            row.status = status
+            cast(Any, row).status = status
             if replace_metadata:
-                row.metadata_json = metadata_json
-            row.updated_at = utc_naive_now()
+                cast(Any, row).metadata_json = metadata_json
+            cast(Any, row).updated_at = utc_naive_now()
             session.commit()
             session.refresh(row)
             return row
@@ -288,16 +322,20 @@ class DecisionSignalRepository:
     def expire_due_signals(self, now: Optional[datetime] = None) -> int:
         now_value = to_utc_naive_datetime(now) if now is not None else utc_naive_now()
         with self.db.get_session() as session:
-            rows = session.execute(
-                select(DecisionSignalRecord).where(
-                    DecisionSignalRecord.status == "active",
-                    DecisionSignalRecord.expires_at.is_not(None),
-                    DecisionSignalRecord.expires_at <= now_value,
+            rows = (
+                session.execute(
+                    select(DecisionSignalRecord).where(
+                        DecisionSignalRecord.status == "active",
+                        DecisionSignalRecord.expires_at.is_not(None),
+                        DecisionSignalRecord.expires_at <= now_value,
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for row in rows:
-                row.status = "expired"
-                row.updated_at = now_value
+                cast(Any, row).status = "expired"
+                cast(Any, row).updated_at = now_value
             session.commit()
             return len(rows)
 
@@ -317,25 +355,31 @@ class DecisionSignalRepository:
         return to_utc_naive_datetime(value)
 
     @classmethod
-    def _should_refresh_existing(cls, existing: DecisionSignalRecord, fields: Dict[str, Any]) -> bool:
+    def _should_refresh_existing(
+        cls, existing: DecisionSignalRecord, fields: Dict[str, Any]
+    ) -> bool:
         expires_at = fields.get("expires_at")
         return (
-            existing.status == "expired"
+            cast(Any, existing).status == "expired"
             and fields.get("status") == "active"
             and expires_at is not None
             and expires_at > utc_naive_now()
         )
 
     @classmethod
-    def _refresh_existing_in_session(cls, existing: DecisionSignalRecord, fields: Dict[str, Any]) -> None:
+    def _refresh_existing_in_session(
+        cls, existing: DecisionSignalRecord, fields: Dict[str, Any]
+    ) -> None:
         for field_name, value in fields.items():
             if field_name in cls._IMMUTABLE_REFRESH_FIELDS:
                 continue
             setattr(existing, field_name, value)
-        existing.updated_at = utc_naive_now()
+        cast(Any, existing).updated_at = utc_naive_now()
 
     @staticmethod
-    def _find_existing_in_session(*, session: Any, fields: Dict[str, Any]) -> Optional[DecisionSignalRecord]:
+    def _find_existing_in_session(
+        *, session: Any, fields: Dict[str, Any]
+    ) -> Optional[DecisionSignalRecord]:
         source_report_id = fields.get("source_report_id")
         trace_id = fields.get("trace_id")
         source_type = fields.get("source_type")
@@ -397,11 +441,15 @@ class DecisionSignalRepository:
         else:
             conditions.append(DecisionSignalRecord.trace_id == trace_id)
 
-        candidates = session.execute(
-            select(DecisionSignalRecord)
-            .where(and_(*conditions))
-            .order_by(DecisionSignalRecord.id.asc())
-        ).scalars().all()
+        candidates = (
+            session.execute(
+                select(DecisionSignalRecord)
+                .where(and_(*conditions))
+                .order_by(DecisionSignalRecord.id.asc())
+            )
+            .scalars()
+            .all()
+        )
         for candidate in candidates:
             if candidate.status not in cls._RELAXED_MERGE_STATUSES:
                 continue
@@ -424,14 +472,20 @@ class DecisionSignalRepository:
         new_horizon = fields.get("horizon")
         new_phase = fields.get("market_phase")
 
-        horizon_fill = existing.horizon is None and new_horizon is not None
+        horizon_fill = cast(Any, existing).horizon is None and new_horizon is not None
         if horizon_fill and not allow_horizon_fill:
             return False
-        if existing.horizon is not None and existing.horizon != new_horizon:
+        if (
+            cast(Any, existing).horizon is not None
+            and cast(Any, existing).horizon != new_horizon
+        ):
             return False
 
-        phase_fill = existing.market_phase is None and new_phase is not None
-        if existing.market_phase is not None and existing.market_phase != new_phase:
+        phase_fill = cast(Any, existing).market_phase is None and new_phase is not None
+        if (
+            cast(Any, existing).market_phase is not None
+            and cast(Any, existing).market_phase != new_phase
+        ):
             return False
 
         return horizon_fill or phase_fill
@@ -447,14 +501,18 @@ class DecisionSignalRepository:
         changed = False
         new_horizon = fields.get("horizon")
         new_phase = fields.get("market_phase")
-        if existing.horizon is None and new_horizon is not None and allow_horizon_fill:
-            existing.horizon = new_horizon
+        if (
+            cast(Any, existing).horizon is None
+            and new_horizon is not None
+            and allow_horizon_fill
+        ):
+            cast(Any, existing).horizon = new_horizon
             changed = True
-        if existing.market_phase is None and new_phase is not None:
-            existing.market_phase = new_phase
+        if cast(Any, existing).market_phase is None and new_phase is not None:
+            cast(Any, existing).market_phase = new_phase
             changed = True
         if changed:
-            existing.updated_at = utc_naive_now()
+            cast(Any, existing).updated_at = utc_naive_now()
         return changed
 
     @staticmethod

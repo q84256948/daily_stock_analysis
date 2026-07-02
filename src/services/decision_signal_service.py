@@ -7,7 +7,7 @@ import json
 import logging
 import math
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, get_args
+from typing import Any, Dict, List, Optional, Tuple, cast, get_args
 
 from data_provider.base import canonical_stock_code, normalize_stock_code
 from src.core.trading_calendar import MarketPhase
@@ -22,7 +22,10 @@ from src.storage import (
     to_utc_naive_datetime,
     utc_naive_now,
 )
-from src.utils.sanitize import sanitize_decision_signal_payload, sanitize_decision_signal_text
+from src.utils.sanitize import (
+    sanitize_decision_signal_payload,
+    sanitize_decision_signal_text,
+)
 
 
 SOURCE_TYPES = frozenset({"analysis", "agent", "alert", "market_review", "manual"})
@@ -35,12 +38,14 @@ REDACTION_MARKERS = ("[REDACTED]", "[REDACTED_URL]")
 TERMINAL_STATUSES = frozenset({"expired", "invalidated", "closed", "archived"})
 BULLISH_ACTIONS = frozenset({"buy", "add"})
 DEFENSIVE_ACTIONS = frozenset({"reduce", "sell", "avoid"})
-INTRADAY_PHASES = frozenset({
-    MarketPhase.PREMARKET.value,
-    MarketPhase.INTRADAY.value,
-    MarketPhase.LUNCH_BREAK.value,
-    MarketPhase.CLOSING_AUCTION.value,
-})
+INTRADAY_PHASES = frozenset(
+    {
+        MarketPhase.PREMARKET.value,
+        MarketPhase.INTRADAY.value,
+        MarketPhase.LUNCH_BREAK.value,
+        MarketPhase.CLOSING_AUCTION.value,
+    }
+)
 DEFAULT_INTRADAY_TTL_HOURS = {
     "cn": 4.0,
     "hk": 5.5,
@@ -77,7 +82,8 @@ class DecisionSignalService:
             allow_relaxed_horizon_fill=lifecycle["horizon_defaulted"],
         )
         # Active duplicates can be retries after a prior partial create; rerun invalidation to repair old opposing signals.
-        if result.row.status == "active":
+        result_row_any = cast(Any, result.row)
+        if result_row_any.status == "active":
             self._invalidate_opposing_active_signals(
                 result.row,
                 reference_at=result.invalidation_reference_at,
@@ -115,10 +121,16 @@ class DecisionSignalService:
         safe_page_size = max(1, min(int(page_size), 100))
         market_norm = self._normalize_optional_market(market)
         action_norm = self._normalize_optional_action(action)
-        market_phase_norm = self._normalize_optional_enum(market_phase, MARKET_PHASES, "market_phase")
-        source_type_norm = self._normalize_optional_enum(source_type, SOURCE_TYPES, "source_type")
+        market_phase_norm = self._normalize_optional_enum(
+            market_phase, MARKET_PHASES, "market_phase"
+        )
+        source_type_norm = self._normalize_optional_enum(
+            source_type, SOURCE_TYPES, "source_type"
+        )
         source_report_id_norm = self._optional_int(source_report_id, "source_report_id")
-        trace_id_norm = self._optional_identity_text(trace_id, "trace_id", max_length=64)
+        trace_id_norm = self._optional_identity_text(
+            trace_id, "trace_id", max_length=64
+        )
         status_norm = self._normalize_optional_enum(status, SIGNAL_STATUSES, "status")
         trigger_source_norm = self._normalize_optional_trigger_source(trigger_source)
         created_from_dt = self._parse_datetime(created_from)
@@ -132,17 +144,26 @@ class DecisionSignalService:
             held_identities = self._cached_holding_identities(account_id=account_id)
             if market_norm:
                 held_identities = {
-                    identity for identity in held_identities if identity[0] == market_norm
+                    identity
+                    for identity in held_identities
+                    if identity[0] == market_norm
                 }
             if stock_codes:
                 requested_codes = set(stock_codes)
                 held_identities = {
-                    identity for identity in held_identities if identity[1] in requested_codes
+                    identity
+                    for identity in held_identities
+                    if identity[1] in requested_codes
                 }
             stock_identities = sorted(held_identities)
             stock_codes = None
             if not stock_identities:
-                return {"items": [], "total": 0, "page": safe_page, "page_size": safe_page_size}
+                return {
+                    "items": [],
+                    "total": 0,
+                    "page": safe_page,
+                    "page_size": safe_page_size,
+                }
 
         rows, total = self.repo.list(
             stock_codes=stock_codes,
@@ -178,9 +199,8 @@ class DecisionSignalService:
     ) -> Dict[str, Any]:
         market_norm = self._normalize_optional_market(market)
         rows = self.repo.get_latest_active(
-            stock_codes=self._stock_filter_codes(stock_code, market=market_norm) or [
-                self._normalize_stock_code(stock_code)
-            ],
+            stock_codes=self._stock_filter_codes(stock_code, market=market_norm)
+            or [self._normalize_stock_code(stock_code)],
             market=market_norm,
             limit=limit,
         )
@@ -204,10 +224,14 @@ class DecisionSignalService:
         existing = self.repo.get(signal_id)
         if existing is None:
             raise DecisionSignalNotFoundError(f"Decision signal not found: {signal_id}")
+        existing_any = cast(Any, existing)
         if status_norm == "active" and (
-            existing.status in TERMINAL_STATUSES or self._is_expired(existing.expires_at)
+            existing_any.status in TERMINAL_STATUSES
+            or self._is_expired(existing_any.expires_at)
         ):
-            raise ValueError("terminal decision signal cannot be reactivated through status update")
+            raise ValueError(
+                "terminal decision signal cannot be reactivated through status update"
+            )
         row = self.repo.update_status(
             signal_id,
             status=status_norm,
@@ -218,12 +242,18 @@ class DecisionSignalService:
             raise DecisionSignalNotFoundError(f"Decision signal not found: {signal_id}")
         return self._serialize(row)
 
-    def _normalize_payload(self, payload: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def _normalize_payload(
+        self, payload: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         market = self._normalize_market(payload.get("market"))
-        stock_code = self._normalize_stock_code(payload.get("stock_code"), market=market)
+        stock_code = self._normalize_stock_code(
+            payload.get("stock_code"), market=market
+        )
         action = self._normalize_action(payload.get("action"))
         report_language = normalize_report_language(payload.get("report_language"))
-        action_label = self._optional_public_text(payload.get("action_label"), "action_label", max_length=32)
+        action_label = self._optional_public_text(
+            payload.get("action_label"), "action_label", max_length=32
+        )
         if not action_label:
             action_label = localize_action_label(action, report_language)
 
@@ -234,9 +264,13 @@ class DecisionSignalService:
         if score is not None and not 0 <= score <= 100:
             raise ValueError("score must be between 0 and 100")
 
-        market_phase = self._normalize_optional_enum(payload.get("market_phase"), MARKET_PHASES, "market_phase")
+        market_phase = self._normalize_optional_enum(
+            payload.get("market_phase"), MARKET_PHASES, "market_phase"
+        )
         horizon_explicit = self._payload_has_value(payload, "horizon")
-        horizon = self._normalize_optional_enum(payload.get("horizon"), HORIZONS, "horizon")
+        horizon = self._normalize_optional_enum(
+            payload.get("horizon"), HORIZONS, "horizon"
+        )
         horizon_defaulted = False
         if horizon is None:
             horizon = self._default_horizon(action=action, market_phase=market_phase)
@@ -252,31 +286,60 @@ class DecisionSignalService:
 
         fields: Dict[str, Any] = {
             "stock_code": stock_code,
-            "stock_name": self._optional_public_text(payload.get("stock_name"), "stock_name", max_length=64),
+            "stock_name": self._optional_public_text(
+                payload.get("stock_name"), "stock_name", max_length=64
+            ),
             "market": market,
-            "source_type": self._normalize_enum(payload.get("source_type"), SOURCE_TYPES, "source_type"),
-            "source_agent": self._optional_public_text(payload.get("source_agent"), "source_agent", max_length=64),
-            "source_report_id": self._optional_int(payload.get("source_report_id"), "source_report_id"),
-            "trace_id": self._optional_identity_text(payload.get("trace_id"), "trace_id", max_length=64),
+            "source_type": self._normalize_enum(
+                payload.get("source_type"), SOURCE_TYPES, "source_type"
+            ),
+            "source_agent": self._optional_public_text(
+                payload.get("source_agent"), "source_agent", max_length=64
+            ),
+            "source_report_id": self._optional_int(
+                payload.get("source_report_id"), "source_report_id"
+            ),
+            "trace_id": self._optional_identity_text(
+                payload.get("trace_id"), "trace_id", max_length=64
+            ),
             "market_phase": market_phase,
-            "trigger_source": self._normalize_trigger_source(payload.get("trigger_source")),
+            "trigger_source": self._normalize_trigger_source(
+                payload.get("trigger_source")
+            ),
             "action": action,
             "action_label": action_label,
             "confidence": confidence,
             "score": score,
             "horizon": horizon,
-            "entry_low": self._optional_price_float(payload.get("entry_low"), "entry_low"),
-            "entry_high": self._optional_price_float(payload.get("entry_high"), "entry_high"),
-            "stop_loss": self._optional_price_float(payload.get("stop_loss"), "stop_loss"),
-            "target_price": self._optional_price_float(payload.get("target_price"), "target_price"),
+            "entry_low": self._optional_price_float(
+                payload.get("entry_low"), "entry_low"
+            ),
+            "entry_high": self._optional_price_float(
+                payload.get("entry_high"), "entry_high"
+            ),
+            "stop_loss": self._optional_price_float(
+                payload.get("stop_loss"), "stop_loss"
+            ),
+            "target_price": self._optional_price_float(
+                payload.get("target_price"), "target_price"
+            ),
             "invalidation": self._optional_signal_text(payload.get("invalidation")),
-            "watch_conditions": self._optional_signal_text(payload.get("watch_conditions")),
+            "watch_conditions": self._optional_signal_text(
+                payload.get("watch_conditions")
+            ),
             "reason": self._optional_signal_text(payload.get("reason")),
             "risk_summary": self._optional_signal_text(payload.get("risk_summary")),
-            "catalyst_summary": self._optional_signal_text(payload.get("catalyst_summary")),
+            "catalyst_summary": self._optional_signal_text(
+                payload.get("catalyst_summary")
+            ),
             "evidence_json": self._json_dumps(payload.get("evidence")),
-            "data_quality_summary_json": self._json_dumps(payload.get("data_quality_summary")),
-            "status": self._normalize_optional_enum(payload.get("status"), SIGNAL_STATUSES, "status") or "active",
+            "data_quality_summary_json": self._json_dumps(
+                payload.get("data_quality_summary")
+            ),
+            "status": self._normalize_optional_enum(
+                payload.get("status"), SIGNAL_STATUSES, "status"
+            )
+            or "active",
             "expires_at": expires_at,
             "metadata_json": self._json_dumps(payload.get("metadata")),
         }
@@ -355,21 +418,25 @@ class DecisionSignalService:
         *,
         reference_at: Optional[datetime],
     ) -> None:
-        opposing_actions = self._opposing_actions(row.action)
+        row_any = cast(Any, row)
+        opposing_actions = self._opposing_actions(row_any.action)
         if not opposing_actions:
             return
         old_rows = self.repo.list_active_by_stock_actions(
-            market=row.market,
-            stock_code=row.stock_code,
+            market=row_any.market,
+            stock_code=row_any.stock_code,
             actions=sorted(opposing_actions),
-            exclude_signal_id=row.id,
+            exclude_signal_id=row_any.id,
         )
         for old_row in old_rows:
+            old_row_any = cast(Any, old_row)
             if not self._is_prior_signal(old_row, row, reference_at=reference_at):
                 continue
-            metadata_json = self._invalidation_metadata_json(old_row, invalidated_by=row)
+            metadata_json = self._invalidation_metadata_json(
+                old_row, invalidated_by=row
+            )
             updated = self.repo.update_status(
-                old_row.id,
+                old_row_any.id,
                 status="invalidated",
                 metadata_json=metadata_json,
                 replace_metadata=True,
@@ -377,8 +444,8 @@ class DecisionSignalService:
             if updated is None:
                 logger.warning(
                     "Decision signal disappeared before invalidation: signal_id=%s invalidated_by=%s",
-                    old_row.id,
-                    row.id,
+                    old_row_any.id,
+                    row_any.id,
                 )
 
     @staticmethod
@@ -388,15 +455,17 @@ class DecisionSignalService:
         *,
         reference_at: Optional[datetime],
     ) -> bool:
-        candidate_created_at = candidate.created_at
+        candidate_any = cast(Any, candidate)
+        current_any = cast(Any, current)
+        candidate_created_at = candidate_any.created_at
         if candidate_created_at is not None and reference_at is not None:
             candidate_created_at = to_utc_naive_datetime(candidate_created_at)
             reference_at = to_utc_naive_datetime(reference_at)
             if candidate_created_at != reference_at:
                 return candidate_created_at < reference_at
 
-        if candidate.id is not None and current.id is not None:
-            return candidate.id < current.id
+        if candidate_any.id is not None and current_any.id is not None:
+            return candidate_any.id < current_any.id
         return False
 
     @staticmethod
@@ -414,24 +483,27 @@ class DecisionSignalService:
         invalidated_by: DecisionSignalRecord,
     ) -> Optional[str]:
         metadata = self._metadata_for_invalidation(row)
-        metadata.update({
-            "invalidated_by_signal_id": invalidated_by.id,
-            "invalidated_reason": f"opposite_active_signal:{row.action}->{invalidated_by.action}",
-            "invalidated_at": utc_naive_now().isoformat(),
-            "previous_status": row.status,
-        })
+        metadata.update(
+            {
+                "invalidated_by_signal_id": invalidated_by.id,
+                "invalidated_reason": f"opposite_active_signal:{row.action}->{invalidated_by.action}",
+                "invalidated_at": utc_naive_now().isoformat(),
+                "previous_status": row.status,
+            }
+        )
         return self._json_dumps(metadata)
 
     @staticmethod
     def _metadata_for_invalidation(row: DecisionSignalRecord) -> Dict[str, Any]:
-        if not row.metadata_json:
+        row_any = cast(Any, row)
+        if not row_any.metadata_json:
             return {}
         try:
-            value = json.loads(row.metadata_json)
+            value = json.loads(row_any.metadata_json)
         except json.JSONDecodeError as exc:
             logger.warning(
                 "Replacing invalid decision signal metadata during invalidation: id=%s error=%s",
-                row.id,
+                row_any.id,
                 exc,
             )
             return {"metadata_replaced_due_to_invalid_json": True}
@@ -457,14 +529,20 @@ class DecisionSignalService:
             return "partial"
         return "minimal"
 
-    def _cached_holding_identities(self, *, account_id: Optional[int]) -> set[Tuple[str, str]]:
-        identities = self.portfolio_repo.list_cached_position_identities(account_id=account_id)
+    def _cached_holding_identities(
+        self, *, account_id: Optional[int]
+    ) -> set[Tuple[str, str]]:
+        identities = self.portfolio_repo.list_cached_position_identities(
+            account_id=account_id
+        )
         normalized: set[Tuple[str, str]] = set()
         for market, symbol in identities:
             if not str(symbol or "").strip():
                 continue
             market_norm = self._normalize_market(market)
-            normalized.add((market_norm, self._normalize_stock_code(symbol, market=market_norm)))
+            normalized.add(
+                (market_norm, self._normalize_stock_code(symbol, market=market_norm))
+            )
         return normalized
 
     @classmethod
@@ -525,7 +603,9 @@ class DecisionSignalService:
     def _normalize_action(value: Any) -> str:
         action = str(value or "").strip().lower()
         if not action or action not in DECISION_ACTIONS:
-            raise ValueError("action must be one of buy/add/hold/reduce/sell/watch/avoid/alert")
+            raise ValueError(
+                "action must be one of buy/add/hold/reduce/sell/watch/avoid/alert"
+            )
         return action
 
     @classmethod
@@ -555,7 +635,9 @@ class DecisionSignalService:
 
     @staticmethod
     def _normalize_trigger_source(value: Any) -> str:
-        text = DecisionSignalService._public_text(value, "trigger_source", max_length=64, required=True)
+        text = DecisionSignalService._public_text(
+            value, "trigger_source", max_length=64, required=True
+        )
         if not text:
             raise ValueError("trigger_source is required")
         return text
@@ -567,7 +649,9 @@ class DecisionSignalService:
         return cls._normalize_trigger_source(value)
 
     @staticmethod
-    def _optional_text(value: Any, field_name: str, *, max_length: int) -> Optional[str]:
+    def _optional_text(
+        value: Any, field_name: str, *, max_length: int
+    ) -> Optional[str]:
         if value is None:
             return None
         text = str(value).strip()
@@ -578,11 +662,17 @@ class DecisionSignalService:
         return text
 
     @classmethod
-    def _optional_public_text(cls, value: Any, field_name: str, *, max_length: int) -> Optional[str]:
-        return cls._public_text(value, field_name, max_length=max_length, required=False)
+    def _optional_public_text(
+        cls, value: Any, field_name: str, *, max_length: int
+    ) -> Optional[str]:
+        return cls._public_text(
+            value, field_name, max_length=max_length, required=False
+        )
 
     @staticmethod
-    def _public_text(value: Any, field_name: str, *, max_length: int, required: bool) -> Optional[str]:
+    def _public_text(
+        value: Any, field_name: str, *, max_length: int, required: bool
+    ) -> Optional[str]:
         if value is None:
             if required:
                 raise ValueError(f"{field_name} is required")
@@ -597,7 +687,9 @@ class DecisionSignalService:
         return text
 
     @classmethod
-    def _optional_identity_text(cls, value: Any, field_name: str, *, max_length: int) -> Optional[str]:
+    def _optional_identity_text(
+        cls, value: Any, field_name: str, *, max_length: int
+    ) -> Optional[str]:
         text = cls._optional_text(value, field_name, max_length=max_length)
         if text is None:
             return None
@@ -611,7 +703,11 @@ class DecisionSignalService:
         if value is None:
             return None
         if isinstance(value, (dict, list)):
-            return json.dumps(sanitize_decision_signal_payload(value), ensure_ascii=False, sort_keys=True)
+            return json.dumps(
+                sanitize_decision_signal_payload(value),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         text = sanitize_decision_signal_text(value)
         return text or None
 
@@ -669,7 +765,10 @@ class DecisionSignalService:
     @classmethod
     def _is_expired(cls, expires_at: Optional[datetime]) -> bool:
         normalized_expires_at = cls._parse_datetime(expires_at)
-        return normalized_expires_at is not None and normalized_expires_at <= utc_naive_now()
+        return (
+            normalized_expires_at is not None
+            and normalized_expires_at <= utc_naive_now()
+        )
 
     @staticmethod
     def _json_dumps(value: Any) -> Optional[str]:
@@ -696,41 +795,52 @@ class DecisionSignalService:
             ) from exc
 
     def _serialize(self, row: DecisionSignalRecord) -> Dict[str, Any]:
+        row_any = cast(Any, row)
         return {
-            "id": row.id,
-            "stock_code": row.stock_code,
-            "stock_name": row.stock_name,
-            "market": row.market,
-            "source_type": row.source_type,
-            "source_agent": row.source_agent,
-            "source_report_id": row.source_report_id,
-            "trace_id": row.trace_id,
-            "market_phase": row.market_phase,
-            "trigger_source": row.trigger_source,
-            "action": row.action,
-            "action_label": row.action_label,
-            "confidence": row.confidence,
-            "score": row.score,
-            "horizon": row.horizon,
-            "entry_low": row.entry_low,
-            "entry_high": row.entry_high,
-            "stop_loss": row.stop_loss,
-            "target_price": row.target_price,
-            "invalidation": row.invalidation,
-            "watch_conditions": row.watch_conditions,
-            "reason": row.reason,
-            "risk_summary": row.risk_summary,
-            "catalyst_summary": row.catalyst_summary,
-            "evidence": self._json_loads(row.evidence_json, signal_id=row.id, field_name="evidence_json"),
+            "id": row_any.id,
+            "stock_code": row_any.stock_code,
+            "stock_name": row_any.stock_name,
+            "market": row_any.market,
+            "source_type": row_any.source_type,
+            "source_agent": row_any.source_agent,
+            "source_report_id": row_any.source_report_id,
+            "trace_id": row_any.trace_id,
+            "market_phase": row_any.market_phase,
+            "trigger_source": row_any.trigger_source,
+            "action": row_any.action,
+            "action_label": row_any.action_label,
+            "confidence": row_any.confidence,
+            "score": row_any.score,
+            "horizon": row_any.horizon,
+            "entry_low": row_any.entry_low,
+            "entry_high": row_any.entry_high,
+            "stop_loss": row_any.stop_loss,
+            "target_price": row_any.target_price,
+            "invalidation": row_any.invalidation,
+            "watch_conditions": row_any.watch_conditions,
+            "reason": row_any.reason,
+            "risk_summary": row_any.risk_summary,
+            "catalyst_summary": row_any.catalyst_summary,
+            "evidence": self._json_loads(
+                row_any.evidence_json, signal_id=row_any.id, field_name="evidence_json"
+            ),
             "data_quality_summary": self._json_loads(
-                row.data_quality_summary_json,
-                signal_id=row.id,
+                row_any.data_quality_summary_json,
+                signal_id=row_any.id,
                 field_name="data_quality_summary_json",
             ),
-            "plan_quality": row.plan_quality,
-            "status": row.status,
-            "expires_at": row.expires_at.isoformat() if row.expires_at else None,
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            "metadata": self._json_loads(row.metadata_json, signal_id=row.id, field_name="metadata_json"),
+            "plan_quality": row_any.plan_quality,
+            "status": row_any.status,
+            "expires_at": row_any.expires_at.isoformat()
+            if row_any.expires_at
+            else None,
+            "created_at": row_any.created_at.isoformat()
+            if row_any.created_at
+            else None,
+            "updated_at": row_any.updated_at.isoformat()
+            if row_any.updated_at
+            else None,
+            "metadata": self._json_loads(
+                row_any.metadata_json, signal_id=row_any.id, field_name="metadata_json"
+            ),
         }
