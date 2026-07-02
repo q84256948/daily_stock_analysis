@@ -23,9 +23,13 @@ import logging
 import inspect
 import threading
 from datetime import datetime
-from typing import Optional, Callable, Any
+from typing import TYPE_CHECKING, Optional, Callable, Any
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    import dingtalk_stream
+    from dingtalk_stream import AckMessage
 
 # 尝试导入钉钉 Stream SDK
 try:
@@ -85,7 +89,7 @@ class DingtalkStreamHandler:
                 self._parent = parent
                 self.logger = logger
 
-            async def process(self, callback: dingtalk_stream.CallbackMessage):
+            async def process(self, callback: dingtalk_stream.CallbackMessage):  # type: ignore[override]
                 """处理收到的消息"""
                 try:
                     # 解析消息
