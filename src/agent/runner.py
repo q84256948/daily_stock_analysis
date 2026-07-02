@@ -22,7 +22,7 @@ import time
 import contextvars
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from src.agent.llm_adapter import LLMToolAdapter
 from src.agent.tools.registry import ToolRegistry
@@ -481,15 +481,15 @@ def run_agent_loop(
                     provider_used=provider_used,
                     models_used=models_used,
                     messages=messages,
-                    remaining_timeout_s=remaining_timeout,
+                    remaining_timeout_s=(remaining_timeout if remaining_timeout is not None else 0.0),
                     min_step_budget_s=_MIN_STEP_BUDGET_S,
                 )
 
-            if remaining_timeout <= 0:
+            if remaining_timeout is not None and remaining_timeout <= 0:
                 logger.warning("Agent timed out before step %d", step + 1)
             return _build_timeout_result(
                 start_time=start_time,
-                max_wall_clock_seconds=float(max_wall_clock_seconds),
+                max_wall_clock_seconds=float(max_wall_clock_seconds) if max_wall_clock_seconds is not None else 0.0,
                 step=step,
                 tool_calls_log=tool_calls_log,
                 total_tokens=total_tokens,
@@ -530,7 +530,7 @@ def run_agent_loop(
             logger.warning("Agent timed out after LLM call at step %d", step + 1)
             return _build_timeout_result(
                 start_time=start_time,
-                max_wall_clock_seconds=float(max_wall_clock_seconds),
+                max_wall_clock_seconds=float(max_wall_clock_seconds) if max_wall_clock_seconds is not None else 0.0,
                 step=step + 1,
                 tool_calls_log=tool_calls_log,
                 total_tokens=total_tokens,
@@ -606,7 +606,7 @@ def run_agent_loop(
                 logger.warning("Agent timed out after tool execution at step %d", step + 1)
                 return _build_timeout_result(
                     start_time=start_time,
-                    max_wall_clock_seconds=float(max_wall_clock_seconds),
+                    max_wall_clock_seconds=float(max_wall_clock_seconds) if max_wall_clock_seconds is not None else 0.0,
                     step=step + 1,
                     tool_calls_log=tool_calls_log,
                     total_tokens=total_tokens,
@@ -775,6 +775,8 @@ def _execute_tools(
 
         pool = ThreadPoolExecutor(max_workers=min(len(tool_calls), 5))
         timeout_triggered = False
+        futures: Dict[Any, Any] = {}
+        pending: Set[Any] = set()
         try:
             futures = {pool.submit(contextvars.copy_context().run, _exec_single, tc): tc for tc in tool_calls}
             pending = set(futures)
