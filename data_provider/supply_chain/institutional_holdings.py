@@ -58,7 +58,7 @@ class InstitutionalHoldingsProvider:
                 return self._get_mock_shareholders(stock_code)
 
         try:
-            df = self._ak.stock_spot_top10_shareholder_em(symbol=stock_code)
+            df = self._ak.stock_spot_top10_shareholder_em(symbol=stock_code)  # type: ignore[reportAttributeAccessIssue]
 
             holders = []
             for _, row in df.iterrows():
@@ -110,7 +110,7 @@ class InstitutionalHoldingsProvider:
                 return []
 
         try:
-            df = self._ak.stock_fund_stock_spot(symbol=stock_code, indicator="公募基金")
+            df = self._ak.stock_fund_stock_spot(symbol=stock_code, indicator="公募基金")  # type: ignore[reportAttributeAccessIssue]
 
             holdings = []
             for _, row in df.iterrows():
@@ -154,7 +154,7 @@ class InstitutionalHoldingsProvider:
                 return {}
 
         try:
-            df = self._ak.stock_institute_hold_em(symbol=stock_code)
+            df = self._ak.stock_institute_hold_em(symbol=stock_code)  # type: ignore[reportAttributeAccessIssue]
 
             if df is None or df.empty:
                 return {}
@@ -299,5 +299,5 @@ class InstitutionalHoldingsProvider:
 def get_institutional_holdings_provider() -> InstitutionalHoldingsProvider:
     """Get singleton provider"""
     if not hasattr(get_institutional_holdings_provider, "_instance"):
-        get_institutional_holdings_provider._instance = InstitutionalHoldingsProvider()
-    return get_institutional_holdings_provider._instance
+        get_institutional_holdings_provider._instance = InstitutionalHoldingsProvider()  # type: ignore[reportFunctionMemberAccess]
+    return get_institutional_holdings_provider._instance  # type: ignore[reportFunctionMemberAccess]
