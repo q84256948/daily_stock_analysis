@@ -195,7 +195,7 @@ class AlertWorker:
 
         for row in self.service.repo.list_enabled_rules(limit=ALERT_WORKER_RULE_LIMIT):
             try:
-                cooldown_policy = self.service._load_json(row.cooldown_policy, default=None)
+                cooldown_policy = self.service._load_json(row.cooldown_policy, default=None)  # type: ignore[reportArgumentType]
                 for payload in self.service.build_runtime_payloads(row, config=config, include_overflow_payload=False):
                     if len(runtime_rules) >= ALERT_WORKER_RULE_LIMIT:
                         logger.warning(
@@ -208,7 +208,7 @@ class AlertWorker:
                             key=payload.key,
                             rule=payload.rule,
                             source="db",
-                            severity=row.severity,
+                            severity=row.severity,  # type: ignore[reportArgumentType]
                             cooldown_policy=cooldown_policy,
                             effective_target=payload.effective_target,
                             display_target=payload.display_target,
@@ -300,7 +300,7 @@ class AlertWorker:
         else:
             row = self.service.repo.create_trigger(fields)
             created = True
-        trigger_id = int(row.id) if row and row.id is not None else None
+        trigger_id = int(row.id) if row and row.id is not None else None  # type: ignore[reportArgumentType]
         return TriggerWriteResult(trigger_id=trigger_id, created=created)
 
     def _record_trigger_safely(
@@ -655,7 +655,7 @@ class AlertWorker:
                         retryable=False,
                         diagnostics=(
                             f"cooldown_until={cooldown.cooldown_until.isoformat()}"
-                            if cooldown.cooldown_until else "cooldown active"
+                            if bool(cooldown.cooldown_until) else "cooldown active"
                         ),
                     )
                 ],
