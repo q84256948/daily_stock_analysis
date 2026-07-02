@@ -540,13 +540,13 @@ def _persist_market_review_history(
             "report_language": report_language,
         }
         if market_light_snapshots:
-            context_snapshot["market_light_snapshots"] = market_light_snapshots
+            context_snapshot["market_light_snapshots"] = market_light_snapshots  # type: ignore[reportArgumentType]
         if market_review_payload:
-            context_snapshot["market_review_payload"] = market_review_payload
+            context_snapshot["market_review_payload"] = market_review_payload  # type: ignore[reportArgumentType]
         diagnostic_snapshot = current_diagnostic_snapshot()
         if diagnostic_snapshot is not None:
-            context_snapshot["diagnostics"] = diagnostic_snapshot
-        context_snapshot["analysis_context_pack_overview"] = _build_market_review_context_overview(
+            context_snapshot["diagnostics"] = diagnostic_snapshot  # type: ignore[reportArgumentType]
+        context_snapshot["analysis_context_pack_overview"] = _build_market_review_context_overview(  # type: ignore[reportArgumentType]
             region=region,
             report_language=report_language,
             diagnostic_snapshot=diagnostic_snapshot,
