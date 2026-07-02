@@ -84,7 +84,7 @@ def _read_quote_float(quote: Any, *field_names: str) -> Optional[float]:
 
         if raw_value is None and hasattr(quote, "to_dict"):
             try:
-                raw_value = quote.to_dict().get(field_name)
+                raw_value = quote.get(field_name)  # type: ignore[reportAttributeAccessIssue]
             except Exception:
                 raw_value = None
 
@@ -496,7 +496,7 @@ def validate_event_alert_rule(rule: Dict[str, Any]) -> None:
         if direction not in {"above", "below"}:
             raise ValueError(f"invalid direction: {direction}")
         try:
-            price = float(rule.get("price"))
+            price = float(rule.get("price"))  # type: ignore[reportArgumentType]
         except (TypeError, ValueError) as exc:
             raise ValueError(f"invalid price: {rule.get('price')}") from exc
         if price <= 0:
@@ -506,7 +506,7 @@ def validate_event_alert_rule(rule: Dict[str, Any]) -> None:
         if direction not in {"up", "down"}:
             raise ValueError(f"invalid direction: {direction}")
         try:
-            change_pct = float(rule.get("change_pct"))
+            change_pct = float(rule.get("change_pct"))  # type: ignore[reportArgumentType]
         except (TypeError, ValueError) as exc:
             raise ValueError(f"invalid change_pct: {rule.get('change_pct')}") from exc
         if change_pct <= 0:
