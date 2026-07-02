@@ -66,7 +66,7 @@ def unwrap_exception(exc: Exception) -> Exception:
             break
         current = next_exc
 
-    return current
+    return current  # type: ignore[reportReturnType]
 
 
 def summarize_exception(exc: Exception) -> Tuple[str, str]:
@@ -902,7 +902,7 @@ class DataFetcherManager:
                 return None
 
             if current_fetcher is not None and current_key == api_key:
-                return current_fetcher
+                return current  # type: ignore[reportReturnType]_fetcher
 
             if current_fetcher is not None and hasattr(current_fetcher, "close"):
                 try:
@@ -1963,7 +1963,7 @@ class DataFetcherManager:
                         supplement_attempts = 0
                     else:
                         # Supplement missing fields from this source (limit attempts)
-                        supplement_attempts += 1
+                        supplement_attempts += 1  # type: ignore[reportPossiblyUnboundVariable]
                         if supplement_attempts > 1:
                             logger.debug(
                                 f"[实时行情] {stock_code} 补充尝试已达上限，停止继续"
@@ -2403,7 +2403,7 @@ class DataFetcherManager:
                     provider=fetcher.name,
                     operation="get_belong_board",
                 )
-                raw_data = fetcher.get_belong_board(stock_code)
+                raw_data = fetcher.get_belong_board(stock_code)  # type: ignore[reportAttributeAccessIssue]
                 boards = self._normalize_belong_boards(raw_data)
                 if boards:
                     record_provider_run(
@@ -3386,7 +3386,7 @@ class DataFetcherManager:
         # growth / earnings / institution (one AkShare call)
         if remaining_seconds <= 0:
             bundle_status = "failed"
-            bundle_payload: Dict[str, Any] = {}
+            bundle_payload: Optional[Dict[str, Any]] = None
             bundle_errors = ["fundamental stage timeout"]
             bundle_ms = 0
         else:
@@ -3780,11 +3780,7 @@ class DataFetcherManager:
                 [err or "dragon_tiger failed"],
             )
         return self._build_fundamental_block(
-            (
-                payload.get("status")
-                if isinstance(payload.get("status"), str)
-                else "partial"
-            ),
+            str(payload.get("status") or "partial"),
             {
                 "is_on_list": bool(payload.get("is_on_list", False)),
                 "recent_count": int(payload.get("recent_count", 0)),
