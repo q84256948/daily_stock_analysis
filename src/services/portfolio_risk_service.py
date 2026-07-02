@@ -112,7 +112,7 @@ class PortfolioRiskService:
             lookback_days=lookback_days,
         )
         if account_id is not None:
-            existing_dates = {row.snapshot_date for row in existing_rows if int(row.account_id) == int(account_id)}
+            existing_dates = {row.snapshot_date for row in existing_rows if int(row.account_id) == int(account_id)}  # type: ignore[reportArgumentType]
             current_date = start_date
             while current_date <= as_of_date:
                 if current_date not in existing_dates:
@@ -121,14 +121,14 @@ class PortfolioRiskService:
                         as_of=current_date,
                         cost_method=cost_method,
                     )
-                    existing_dates.add(current_date)
+                    existing_dates.add(current_date)  # type: ignore[reportArgumentType]
                 current_date += timedelta(days=1)
             return
 
-        account_ids = [int(account.id) for account in self.repo.list_accounts(include_inactive=False)]
+        account_ids = [int(account.id) for account in self.repo.list_accounts(include_inactive=False)]  # type: ignore[reportArgumentType]
         if not account_ids:
             return
-        existing_pairs = {(int(row.account_id), row.snapshot_date) for row in existing_rows}
+        existing_pairs = {(int(row.account_id), row.snapshot_date) for row in existing_rows}  # type: ignore[reportArgumentType]
         current_date = start_date
         while current_date <= as_of_date:
             if not all((aid, current_date) in existing_pairs for aid in account_ids):
@@ -138,7 +138,7 @@ class PortfolioRiskService:
                     cost_method=cost_method,
                 )
                 for aid in account_ids:
-                    existing_pairs.add((aid, current_date))
+                    existing_pairs.add((aid, current_date))  # type: ignore[reportArgumentType]
             current_date += timedelta(days=1)
 
     def _resolve_backfill_start_date(
@@ -155,7 +155,7 @@ class PortfolioRiskService:
 
         first_activity_candidates: List[date] = []
         for account in self.repo.list_accounts(include_inactive=False):
-            first_activity = self.repo.get_first_activity_date(account_id=int(account.id), as_of=as_of_date)
+            first_activity = self.repo.get_first_activity_date(account_id=int(account.id), as_of=as_of_date)  # type: ignore[reportArgumentType]
             if first_activity is not None:
                 first_activity_candidates.append(first_activity)
         if not first_activity_candidates:
@@ -375,10 +375,10 @@ class PortfolioRiskService:
         for row in rows:
             key = row.snapshot_date.isoformat()
             converted, stale, _ = self.portfolio_service.convert_amount(
-                amount=float(row.total_equity or 0.0),
+                amount=float(row.total_equity or 0.0),  # type: ignore[reportArgumentType]
                 from_currency=str(row.base_currency or "CNY"),
                 to_currency="CNY",
-                as_of_date=row.snapshot_date,
+                as_of_date=row.snapshot_date,  # type: ignore[reportArgumentType]
             )
             grouped[key] = grouped.get(key, 0.0) + converted
             stale_flag = stale_flag or stale or bool(row.fx_stale)
