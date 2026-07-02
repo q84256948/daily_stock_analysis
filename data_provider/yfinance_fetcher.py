@@ -176,7 +176,7 @@ class YfinanceFetcher(BaseFetcher):
 
         try:
             # 使用 yfinance 下载数据
-            df = yf.download(
+            df_raw: Any = yf.download(
                 tickers=yf_code,
                 start=start_date,
                 end=end_date,
@@ -184,6 +184,9 @@ class YfinanceFetcher(BaseFetcher):
                 auto_adjust=True,  # 自动调整价格（复权）
                 multi_level_index=True
             )
+            if df_raw is None:
+                raise DataFetchError(f"Yahoo Finance 未返回 {stock_code} 数据")
+            df = df_raw
 
             # 筛选出 yf_code 的列, 避免多只股票数据混淆
             if isinstance(df.columns, pd.MultiIndex) and len(df.columns) > 1:
