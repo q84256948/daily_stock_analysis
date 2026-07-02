@@ -65,11 +65,15 @@ class PositionLedger(Base):
             "value_anchor_5y": self.value_anchor_5y,
             "status": self.status,
             "rationale": self.rationale,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "created_at": self.created_at.isoformat()
+            if bool(self.created_at)
+            else None,
+            "updated_at": self.updated_at.isoformat()
+            if bool(self.updated_at)
+            else None,
             "realized_pnl": self.realized_pnl,
             "evaluated_at": self.evaluated_at.isoformat()
-            if self.evaluated_at
+            if bool(self.evaluated_at)
             else None,
         }
 
@@ -120,10 +124,10 @@ class PositionLedgerRepo:
         if not record:
             return False
 
-        record.status = status
+        record.status = status  # type: ignore[reportAttributeAccessIssue]
         if realized_pnl is not None:
-            record.realized_pnl = realized_pnl
-        record.evaluated_at = datetime.now()
+            record.realized_pnl = realized_pnl  # type: ignore[reportAttributeAccessIssue]
+        record.evaluated_at = datetime.now()  # type: ignore[reportAttributeAccessIssue]
 
         self.db.commit()
         return True
