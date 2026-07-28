@@ -120,6 +120,39 @@ def _resolve_unique_report_id(ts: datetime) -> str:
 class SupplyChainReportService:
     """供应链分析表单式报告编排服务（无状态，方法可独立调用）。"""
 
+    # [v3 PR-C] 灰度开关：默认关闭，PR-C 上线后逐步开启
+    _DEEP_DIVE_ENABLED_ENV = "SERENITY_DEEP_DIVE_V3_ENABLED"
+
+    @classmethod
+    def _is_deep_dive_enabled(cls) -> bool:
+        """从环境变量读取灰度开关（默认 False）。"""
+        import os
+
+        val = os.environ.get(cls._DEEP_DIVE_ENABLED_ENV, "false").strip().lower()
+        return val in {"1", "true", "yes", "on"}
+
+    def _extract_deep_dive_section(self, markdown: str) -> "Optional[Dict[str, Any]]":
+        """[v3 PR-C] 从 LLM 输出的完整报告中提取 §6-§10 + 脚注 段。
+
+        灰度关闭 / 段不存在 → 返回 None。
+        """
+        if not self._is_deep_dive_enabled():
+            return None
+        try:
+            from src.services.supply_chain.deep_dive_renderer import (
+                extract_deep_dive_section_from_markdown,
+            )
+
+            section = extract_deep_dive_section_from_markdown(markdown or "")
+            if not section:
+                return None
+            # 浅解析：直接把 §6-§10 段原文存到 deep_dive_json 中作为 backup；
+            # 完整的 SupplyChainDeepDiveV3 构造由 executor 解析后传入（PR-C+ 增强预留）。
+            return {"_raw_markdown_section": section}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[SupplyChainReport v3] extract_deep_dive 失败: %s", exc)
+            return None
+
     # ------------------------------------------------------------------
     # 生成
     # ------------------------------------------------------------------
@@ -185,6 +218,15 @@ class SupplyChainReportService:
 
         markdown = getattr(result, "content", "") or ""
         status = _status_from_result(bool(getattr(result, "success", False)), markdown)
+        # [v3 PR-C] 从 LLM 输出中提取 §6-§10 深度小节段（灰度开关控制）
+        deep_dive_data = self._extract_deep_dive_section(markdown)
+        import json as _json
+
+        deep_dive_json: Optional[str] = (
+            _json.dumps(deep_dive_data, ensure_ascii=False)
+            if deep_dive_data is not None
+            else None
+        )
         write_ok = False
         if markdown:
             try:
@@ -208,6 +250,7 @@ class SupplyChainReportService:
                 provider=str(getattr(result, "provider", "") or ""),
                 model=getattr(result, "model", None),
                 error=result_error if status != "success" else None,
+                deep_dive_json=deep_dive_json,
             )
             self._prune_and_clean_files(_MAX_REPORTS)
 

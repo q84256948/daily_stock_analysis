@@ -114,6 +114,7 @@ module = [
     "src.services.research_scoring_service",
     "src.services.analysis_service",
     "src.services.supply_chain.scorecard",
+    "src.services.supply_chain.industry_dna_loader",
     "src.services.zhengxi.fund_data",
     "src.services.alert_indicators",
     "src.schemas.analysis_context_pack",

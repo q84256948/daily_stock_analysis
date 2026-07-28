@@ -419,3 +419,386 @@ class SerenityScoreResult(BaseModel):
         if key in {"factors", "penalties"}:
             return getattr(self, key)
         return getattr(self, key, default)
+
+
+# ============================================================
+# v3 新增：供应链深度小节（产品·客户·竞争·前景 五维补强）
+# ============================================================
+#
+# 设计原则（按 docs/type-contract-data-defense.md 三层防御）：
+# - 类型：所有公共字段加类型注解 + 不用裸 tuple/dict/list
+# - 数据：Pydantic v2 + ConfigDict(strict=True, frozen=True, validate_assignment=True, extra="forbid")
+# - 契约：@model_validator 守业务不变式（一致性校验、TAM 不崩、占比加和容忍）
+#
+# 与 v1/v2 兼容：6 个新模型全部追加在文件末尾，不删不改任何现有 schema。
+# 触发灰度开关：SERENITY_DEEP_DIVE_V3_ENABLED（默认 false）
+
+
+# ============================================================
+# §6 产品矩阵与定位
+# ============================================================
+
+
+ProductCategory = Literal[
+    "core",  # 核心（当前主业）
+    "growth",  # 增长（重点投入）
+    "legacy",  # 传统（持续但非重点）
+    "exploratory",  # 探索（新业务/未规模化）
+]
+
+
+class ProductLineV3(BaseModel):
+    """[v3 §6] 产品/产品线画像。
+
+    渲染为表格：产品/战略定位/营收占比/毛利率/目标市场/价格带/差异化卖点/证据强度。
+    工具来源：analyze_product_matrix
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    name: str = Field(..., min_length=1, max_length=80, description="产品/产品线名")
+    category: ProductCategory = Field(..., description="战略定位")
+    revenue_share_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    gross_margin_pct: Optional[float] = Field(default=None, ge=-100, le=100)
+    target_market: List[str] = Field(
+        default_factory=list, description="目标市场（行业/区域/客户群）"
+    )
+    price_band: Optional[str] = Field(
+        default=None, max_length=80, description="价格带（如『高端』/『30-50 元』）"
+    )
+    differentiators: List[str] = Field(default_factory=list, max_length=10)
+    evidence_strength: EvidenceStrength = Field(default="analysis")
+    source_url: Optional[str] = Field(default=None, max_length=2048)
+    kb_doc_id: Optional[str] = Field(default=None, max_length=128)
+
+
+# ============================================================
+# §7 市场地位与占有率
+# ============================================================
+
+
+ShareTrend = Literal["rising", "stable", "falling", "volatile", "unknown"]
+SubstitutionRisk = Literal["low", "medium", "high", "unknown"]
+
+
+class MarketPositionV3(BaseModel):
+    """[v3 §7] 市场地位与占有率画像。
+
+    渲染为表格：公司/子赛道/份额/排名/CR3/CR5/份额趋势/3 年变化/主要竞品/替代风险/证据。
+    工具来源：analyze_market_position
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    subsegment: str = Field(
+        ...,
+        min_length=1,
+        max_length=80,
+        description="子赛道（如『高端白酒 800 元以上』）",
+    )
+    market_share_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    market_rank: Optional[int] = Field(default=None, ge=1, le=1000)
+    cr3_pct: Optional[float] = Field(default=None, ge=0, le=100, description="行业 CR3")
+    cr5_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    cr10_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    share_trend: ShareTrend = Field(default="unknown")
+    share_change_3y_pct: Optional[float] = Field(
+        default=None, description="近 3 年份额变化（百分点）"
+    )
+    top_competitors: List[str] = Field(default_factory=list, max_length=10)
+    substitution_risk: SubstitutionRisk = Field(default="unknown")
+    evidence_strength: EvidenceStrength = Field(default="analysis")
+    source_url: Optional[str] = Field(default=None, max_length=2048)
+    kb_doc_id: Optional[str] = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def _check_consistency(self) -> "MarketPositionV3":
+        """契约：market_rank 非空时建议提供 market_share_pct（便于交叉验证）。"""
+        if self.market_rank is not None and self.market_share_pct is None:
+            raise ValueError(
+                "MarketPositionV3 契约违反：market_rank 非空时建议提供 "
+                "market_share_pct（便于交叉验证）。如确实缺失，请两者都置空。"
+            )
+        return self
+
+
+# ============================================================
+# §8 关键客户与供应商
+# ============================================================
+
+
+PartnerSide = Literal["customer", "supplier"]
+PartnerSource = Literal[
+    "annual_report",
+    "prospectus",
+    "inquiry_letter",
+    "convertible_bond",
+    "investor_relations",
+    "news",
+    "kb",
+]
+
+
+class KeyPartnerV3(BaseModel):
+    """[v3 §8] 关键客户/供应商画像。
+
+    渲染为两张表（customers / suppliers），列：名称/份额(%)/关联方/匿名/合作年限/披露来源/证据强度。
+    工具来源：extract_key_partners
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    side: PartnerSide = Field(...)
+    name: str = Field(..., min_length=1, max_length=120)
+    share_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    is_related_party: bool = Field(default=False)
+    is_anonymous: bool = Field(
+        default=False, description="年报披露为『客户A』/『供应商一』"
+    )
+    revenue_or_cost_share: Optional[str] = Field(
+        default=None,
+        max_length=40,
+        description="占总营收/采购的比例文字描述",
+    )
+    years_partnered: Optional[int] = Field(default=None, ge=0, le=50)
+    public_source: PartnerSource = Field(default="news")
+    evidence_strength: EvidenceStrength = Field(default="analysis")
+    source_url: Optional[str] = Field(default=None, max_length=2048)
+
+
+# ============================================================
+# §9 行业前景与需求驱动
+# ============================================================
+
+
+TimeWindow = Literal[
+    "near_term_3_6m",
+    "mid_term_6_12m",
+    "long_term_12_36m",
+]
+SubsegmentStatus = Literal["growing", "stable", "declining", "transforming"]
+
+
+class IndustryOutlookV3(BaseModel):
+    """[v3 §9] 行业前景与需求驱动画像。
+
+    渲染为表：子赛道/2024 TAM/2027E TAM/CAGR/中国份额/需求驱动/政策催化/替代风险/海外空间/时间窗。
+    工具来源：analyze_industry_outlook
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    subsegment: str = Field(..., min_length=1, max_length=80)
+    subsegment_status: SubsegmentStatus = Field(
+        default="stable",
+        description="子赛道状态（用于 TAM 校验豁免）",
+    )
+    tam_2024_usd_bn: Optional[float] = Field(
+        default=None, ge=0, description="全球 TAM（十亿美元）"
+    )
+    tam_2027e_usd_bn: Optional[float] = Field(default=None, ge=0)
+    cagr_2024_2027_pct: Optional[float] = Field(default=None, ge=-50, le=100)
+    china_share_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    demand_drivers: List[str] = Field(default_factory=list, max_length=10)
+    policy_catalysts: List[str] = Field(default_factory=list, max_length=10)
+    substitution_threats: List[str] = Field(default_factory=list, max_length=10)
+    overseas_addressable: Optional[str] = Field(
+        default=None, max_length=200, description="海外可触达空间"
+    )
+    time_window: TimeWindow = Field(default="mid_term_6_12m")
+    evidence_strength: EvidenceStrength = Field(default="analysis")
+    source_url: Optional[str] = Field(default=None, max_length=2048)
+    kb_doc_id: Optional[str] = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def _check_tam_consistency(self) -> "IndustryOutlookV3":
+        """契约：2027E TAM 不应小于 2024 TAM 的 50%。
+
+        衰退行业豁免：subsegment_status="declining" 时不强制校验；
+        转型行业（"transforming"）按 60% 阈值校验（避免误报但仍保持基本约束）。
+        """
+        if self.tam_2024_usd_bn is None or self.tam_2027e_usd_bn is None:
+            return self
+        if self.subsegment_status == "declining":
+            return self
+        threshold = 0.6 if self.subsegment_status == "transforming" else 0.5
+        if self.tam_2027e_usd_bn < self.tam_2024_usd_bn * threshold:
+            raise ValueError(
+                f"IndustryOutlookV3 契约违反：2027E TAM ({self.tam_2027e_usd_bn}) "
+                f"小于 2024 TAM ({self.tam_2024_usd_bn}) 的 {threshold * 100:.0f}%，"
+                f"且 subsegment_status={self.subsegment_status}。"
+                f"衰退行业请将 subsegment_status 设为 'declining'，"
+                f"转型行业设 'transforming'（按 60% 阈值校验）。"
+            )
+        return self
+
+
+# ============================================================
+# §10 财务质量与产能跟踪
+# ============================================================
+
+
+class FinancialQualityV3(BaseModel):
+    """[v3 §10] 财务质量与产能跟踪画像。
+
+    渲染为表：period/营收同比/毛利率/同比变化/经营现金流同比/应收/营收(%)/
+    存货天数/合同负债同比/capex 强度/产能利用率/分业务收入占比/red_flags。
+    工具来源：analyze_financial_quality
+
+    工具失败时返回空列表，渲染层展示"待核验（财务数据未获取）"。
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    period: str = Field(
+        ..., pattern=r"^\d{4}Q[1-4]$|^\d{4}$", description="2024Q3 / 2024"
+    )
+    revenue_yoy_pct: Optional[float] = Field(default=None, ge=-100, le=500)
+    gross_margin_pct: Optional[float] = Field(default=None, ge=-100, le=100)
+    gross_margin_change_yoy_pct: Optional[float] = Field(default=None)
+    operating_cash_flow_yoy_pct: Optional[float] = Field(default=None)
+    ar_to_revenue_pct: Optional[float] = Field(default=None, ge=0, le=200)
+    inventory_days: Optional[int] = Field(default=None, ge=0, le=730)
+    contract_liability_yoy_pct: Optional[float] = Field(
+        default=None, description="合同负债同比"
+    )
+    capex_intensity_pct: Optional[float] = Field(default=None, description="capex/营收")
+    capacity_utilization_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    revenue_segments: Dict[str, float] = Field(
+        default_factory=dict, description="分业务收入占比"
+    )
+    red_flags: List[str] = Field(default_factory=list, max_length=10)
+    evidence_strength: EvidenceStrength = Field(default="primary")
+    source_url: Optional[str] = Field(default=None, max_length=2048)
+
+    @model_validator(mode="after")
+    def _check_segment_consistency(self) -> "FinancialQualityV3":
+        """契约：revenue_segments 占比合计与 100% 偏差不超过 5%。
+
+        A 股公司分业务收入占比加和不严格等于 100%（含分部间抵消），
+        容忍偏差 5% 避免误报。
+        """
+        if not self.revenue_segments:
+            return self
+        total = sum(self.revenue_segments.values())
+        if total <= 0:
+            return self
+        if abs(total - 100.0) > 5.0:
+            raise ValueError(
+                f"FinancialQualityV3 契约违反：revenue_segments 占比合计 "
+                f"{total:.1f}%，与 100% 偏差超过 5%。"
+                f"请检查是否含分部间抵消项或单位错误。"
+            )
+        return self
+
+
+# ============================================================
+# 顶层容器 SupplyChainDeepDiveV3
+# ============================================================
+
+
+DeepDiveSection = Literal[
+    "product_matrix",
+    "market_position",
+    "key_partners",
+    "industry_outlook",
+    "financial_quality",
+]
+AggregateConfidence = Literal["high", "medium", "low"]
+
+
+class SupplyChainDeepDiveV3(BaseModel):
+    """[v3] 报告深度小节聚合（追加在 9 节骨架之后）。
+
+    由 SupplyChainReportService 解析 executor 输出后构造，存入 SQLite 深字段。
+    sections_executed / sections_skipped 用于"数据完整性披露"脚注渲染。
+    """
+
+    model_config = ConfigDict(
+        strict=True, frozen=True, validate_assignment=True, extra="forbid"
+    )
+
+    ticker: str = Field(..., pattern=r"^[\w\.\-]{1,16}$")
+    company: str = Field(..., min_length=1, max_length=80)
+    fetched_at: Optional[datetime] = Field(default=None, description="工具实际执行时间")
+
+    product_matrix: List[ProductLineV3] = Field(default_factory=list)
+    market_position: List[MarketPositionV3] = Field(default_factory=list)
+    key_customers: List[KeyPartnerV3] = Field(default_factory=list)
+    key_suppliers: List[KeyPartnerV3] = Field(default_factory=list)
+    industry_outlook: List[IndustryOutlookV3] = Field(default_factory=list)
+    financial_quality: List[FinancialQualityV3] = Field(default_factory=list)
+
+    sections_executed: List[DeepDiveSection] = Field(default_factory=list)
+    sections_skipped: List[str] = Field(default_factory=list)
+    aggregate_confidence: AggregateConfidence = Field(default="low")
+
+    def section_status(self) -> Dict[str, str]:
+        """供报告脚注使用的状态摘要：executed / skipped。"""
+        all_secs = [
+            "product_matrix",
+            "market_position",
+            "key_partners",
+            "industry_outlook",
+            "financial_quality",
+        ]
+        return {
+            sec: ("executed" if sec in self.sections_executed else "skipped")
+            for sec in all_secs
+        }
+
+    def compute_aggregate_confidence(self) -> AggregateConfidence:
+        """推导 aggregate_confidence（纯函数，不修改 self）。
+
+        因 Pydantic v2 frozen=True，本方法不能写回 self.aggregate_confidence；
+        返回新值，调用方按需通过 ``model_copy(update={...})`` 构造新实例。
+
+        规则：
+        - ≥4 节 executed 且 ≥3 节 evidence_strength∈{primary,media,analysis,kb_doc} → high
+        - ≥3 节 executed → medium
+        - 否则 → low
+        """
+        if len(self.sections_executed) < 3:
+            return "low"
+        strong_levels = {"primary", "media", "analysis", "kb_doc"}
+        analysis_count = 0
+        for sec in self.sections_executed:
+            if sec == "product_matrix":
+                if any(
+                    p.evidence_strength in strong_levels for p in self.product_matrix
+                ):
+                    analysis_count += 1
+            elif sec == "market_position":
+                if any(
+                    p.evidence_strength in strong_levels for p in self.market_position
+                ):
+                    analysis_count += 1
+            elif sec == "key_partners":
+                if any(
+                    p.evidence_strength in strong_levels
+                    for p in self.key_customers + self.key_suppliers
+                ):
+                    analysis_count += 1
+            elif sec == "industry_outlook":
+                if any(
+                    p.evidence_strength in strong_levels for p in self.industry_outlook
+                ):
+                    analysis_count += 1
+            elif sec == "financial_quality":
+                if any(
+                    p.evidence_strength in strong_levels for p in self.financial_quality
+                ):
+                    analysis_count += 1
+        if len(self.sections_executed) >= 4 and analysis_count >= 3:
+            return "high"
+        return "medium"

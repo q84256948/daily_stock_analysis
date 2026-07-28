@@ -1,0 +1,81 @@
+# 半导体行业 DNA（v3 静态兜底数据）
+# 覆盖子赛道：AI 算力/HBM/先进封装/设备/材料/设计
+# 数据来源：中国半导体行业协会、SEMI、SemiAnalysis 公开摘要
+# last_updated: 2026-01-15
+
+industry_name: 半导体
+slug: semiconductor
+keywords:
+  - 半导体
+  - 芯片
+  - 集成电路
+  - 晶圆
+  - IC设计
+  - HBM
+  - 先进封装
+  - CoWoS
+  - 光刻
+  - 刻蚀
+  - EDA
+  - SoC
+  - GPU
+  - AI芯片
+  - 存储
+  - 内存
+products:
+  - 算力芯片（GPU/ASIC/NPU）
+  - 存储芯片（HBM/DDR5/NAND）
+  - 模拟与射频
+  - 半导体设备（光刻/刻蚀/薄膜沉积）
+  - 半导体材料（硅片/光刻胶/电子特气）
+  - EDA/IP/设计服务
+  - 先进封装与封测
+key_players:
+  - NVIDIA（GPU 主导）
+  - TSMC（晶圆代工）
+  - Samsung（存储+HBM）
+  - Intel（IDM）
+  - SK Hynix（HBM）
+  - AMD（CPU/GPU）
+  - 中芯国际（国内代工）
+  - 寒武纪/海光信息（国产 AI 芯片）
+  - 澜起科技（内存接口）
+  - 中微公司/北方华创（设备）
+  - 沪硅产业/安集科技（材料）
+concentration: "全球 CR3: 60-70%（TSMC/Samsung/Intel）；HBM CR3: 95%+（SK Hynix/Samsung/Micron）；设备 CR5: 80%+"
+customer_types:
+  - 云厂商（AWS/Azure/GCP/阿里云/腾讯云）
+  - AI 算力客户（OpenAI/Anthropic/xAI/百度/字节）
+  - 系统集成商
+  - OEM（服务器/PC/手机）
+  - 汽车电子厂商
+  - 工业控制厂商
+supplier_types:
+  - EDA 工具（Synopsys/Cadence/Siemens EDA）
+  - IP 核（Arm/Synopsys）
+  - 半导体设备（ASML/AMAT/LAM/TEL/KLA）
+  - 硅片（信越/SUMCO/沪硅产业）
+  - 光刻胶/电子特气（日本厂商+国产替代）
+  - 封装基板/ABF
+demand_drivers:
+  - AI 算力需求爆发（LLM 训练/推理）
+  - HBM/CoWoS 供给瓶颈
+  - 数据中心扩建
+  - 国产替代政策驱动
+  - 汽车电子化
+  - 5G/6G 网络
+policy_catalysts:
+  - 美国出口管制（GPU/HBM/EDA）
+  - 中国大基金/科创板支持
+  - 国产替代清单
+  - 信创政策
+  - 美国 CHIPS Act
+substitution_threats:
+  - 先进封装（CoWoS → TGV/玻璃基板）
+  - HBM 替代 HBM3E/HBM4
+  - 硅光子/CPO 替代传统互连
+  - 量子计算（长期）
+  - 新型存储（MRAM/ReRAM）
+time_window: mid_term_6_12m
+source: 中国半导体行业协会 2025 报告、SEMI World Fab Forecast、SemiAnalysis 公开摘要
+last_updated: 2026-01-15

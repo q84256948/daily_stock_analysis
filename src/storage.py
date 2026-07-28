@@ -523,6 +523,10 @@ class SupplyChainReport(Base):
     md_path: Mapped[str] = mapped_column(Text, nullable=False)
     pdf_path: Mapped[Optional[str]] = mapped_column(Text)  # NULL = 尚未惰性生成
 
+    # [v3 PR-C] 深度小节结构化数据（SupplyChainDeepDiveV3.model_dump_json()）
+    # 默认 NULL 向后兼容历史报告；客户端按需消费
+    deep_dive_json: Mapped[Optional[str]] = mapped_column(Text)
+
     # 质量
     status: Mapped[Optional[str]] = mapped_column(
         String(16)
@@ -547,6 +551,7 @@ class SupplyChainReport(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "md_path": self.md_path,
             "pdf_path": self.pdf_path,
+            "deep_dive_json": self.deep_dive_json,
             "status": self.status,
             "total_steps": self.total_steps,
             "total_tokens": self.total_tokens,
@@ -1472,6 +1477,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
             Base.metadata.create_all(self._engine)
             self._ensure_llm_usage_telemetry_columns()
             self._ensure_supply_chain_stock_columns()
+            self._ensure_supply_chain_deep_dive_column()  # [v3 PR-C]
             self._ensure_news_intel_source_columns()  # P3
             self._ensure_schema_migration_record()
             self._ensure_knowledge_base_fts()
@@ -1617,6 +1623,42 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                     column,
                     exc,
                 )
+
+    def _ensure_supply_chain_deep_dive_column(self) -> None:
+        """[v3 PR-C] Add nullable deep_dive_json to existing supply_chain_reports DBs.
+
+        新装用户走 ``Base.metadata.create_all`` 自动建列；已有用户走 best-effort ALTER。
+        列存 :class:`SupplyChainDeepDiveV3` 的 JSON 字符串，供 API 详情返回 + 报告渲染复用。
+        """
+        if not self._is_sqlite_engine or self._engine is None:
+            return
+        try:
+            existing = {
+                column["name"]
+                for column in inspect(self._engine).get_columns("supply_chain_reports")
+            }
+        except Exception as exc:
+            logger.warning(
+                "[SupplyChainReport] failed to inspect deep_dive column; "
+                "skipping best-effort backfill: %s",
+                exc,
+            )
+            return
+
+        column = "deep_dive_json"
+        if column in existing:
+            return
+        try:
+            with self._engine.begin() as connection:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE supply_chain_reports ADD COLUMN {column} TEXT"
+                )
+        except Exception as exc:
+            logger.warning(
+                "[SupplyChainReport] best-effort ADD COLUMN %s failed: %s",
+                column,
+                exc,
+            )
 
     def _ensure_knowledge_base_fts(self) -> None:
         """Create FTS5 virtual table for knowledge base search if not exists."""
@@ -3042,11 +3084,13 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
         error: Optional[str] = None,
         stock_code: Optional[str] = None,
         stock_name: Optional[str] = None,
+        deep_dive_json: Optional[str] = None,
     ) -> bool:
         """保存/更新一条供应链报告元数据（report_id 重复则 merge 覆盖）。失败返回 False。
 
         ``stock_code`` / ``stock_name`` 为可选单股绑定（按 docs/pdf-download-filename-plan.md
         §供应链报告边界 阶段 1），用于 PDF 文件名走单股型命名。
+        ``deep_dive_json`` 为 [v3 PR-C] :class:`SupplyChainDeepDiveV3` 的 model_dump_json()。
         """
 
         def _write(session: Session) -> bool:
@@ -3059,6 +3103,7 @@ class DatabaseManager(metaclass=_DatabaseManagerMeta):
                 created_at=datetime.now(),
                 md_path=md_path,
                 pdf_path=None,
+                deep_dive_json=deep_dive_json,
                 status=status,
                 total_steps=total_steps,
                 total_tokens=total_tokens,

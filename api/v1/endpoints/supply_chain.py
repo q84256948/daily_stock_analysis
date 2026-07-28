@@ -35,6 +35,12 @@ SUPPLY_CHAIN_TOOL_DISPLAY_NAMES: Dict[str, str] = {
     "score_supply_chain_bottleneck": "瓶颈打分",
     "search_semianalysis": "SemiAnalysis 检索",
     "search_clue_hype": "线索炒作检索",
+    # [v3 PR-C] 深度小节工具中文显示名
+    "analyze_product_matrix": "产品矩阵",
+    "analyze_market_position": "市场地位",
+    "extract_key_partners": "客户供应商",
+    "analyze_industry_outlook": "行业前景",
+    "analyze_financial_quality": "财务质量",
 }
 
 # 会话命名空间前缀（与问股/郑希会话隔离）

@@ -180,8 +180,8 @@ class TestScoreTool:
 
 class TestToolMetadata:
     def test_supply_chain_tools(self):
-        # v2 增了 search_supply_chain_kb → 共 5 个工具
-        assert len(ALL_SUPPLY_CHAIN_TOOLS) == 5
+        # v3 增 5 个深度小节工具 → 共 10 个工具
+        assert len(ALL_SUPPLY_CHAIN_TOOLS) == 10
         names = {t.name for t in ALL_SUPPLY_CHAIN_TOOLS}
         assert names == {
             "score_supply_chain_bottleneck",
@@ -189,6 +189,12 @@ class TestToolMetadata:
             "search_clue_hype",
             "verify_supply_chain_evidence",
             "search_supply_chain_kb",
+            # [v3] 深度小节工具
+            "analyze_product_matrix",
+            "analyze_market_position",
+            "extract_key_partners",
+            "analyze_industry_outlook",
+            "analyze_financial_quality",
         }
         assert ALL_SUPPLY_CHAIN_TOOLS[0].name == "score_supply_chain_bottleneck"
         assert ALL_SUPPLY_CHAIN_TOOLS[0].category == "analysis"
